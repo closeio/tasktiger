@@ -14,6 +14,10 @@ conn.delete('t:error:default')
 def sample_task(a, b):
     print 'Task', a, b
 
+@task(queue='other')
+def task_on_other_queue():
+    print 'Other task'
+
 def sample_exception():
     raise StandardError('this failed')
 

@@ -79,10 +79,12 @@ def _func_from_serialized_name(serialized_name):
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
 
-def task(hard_timeout=None):
+def task(hard_timeout=None, queue=None):
     def _wrap(func):
         if hard_timeout:
             func._task_hard_timeout = hard_timeout
+        if queue:
+            func._task_queue = queue
         return func
     return _wrap
 
@@ -90,7 +92,7 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
     task_id = _gen_id()
 
     if queue is None:
-        queue = DEFAULT_QUEUE
+        queue = getattr(func, '_task_queue', DEFAULT_QUEUE)
 
     now = time.time()
     task = {
