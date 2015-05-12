@@ -2,7 +2,9 @@ import importlib
 import random
 import redis
 import json
+import os
 import select
+import signal
 import time
 import traceback
 
@@ -87,12 +89,8 @@ def delay(func, args=None, kwargs=None, queue=None):
     pipeline.publish(_key('activity'), queue)
     pipeline.execute()
 
-def execute(task_id):
-    """
-    Executes the task with the given ID. Returns a boolean indicating whether
-    the task was executed succesfully.
-    """
-
+def _execute_forked(task_id):
+    conn = redis.Redis()
     serialized_task = conn.get(_key('task', task_id))
     if not serialized_task:
         print 'ERROR: could not find task', task_id
@@ -124,6 +122,38 @@ def execute(task_id):
         conn.set(_key('task', task_id), serialized_task)
 
     return success
+
+def execute(task_id):
+    """
+    Executes the task with the given ID. Returns a boolean indicating whether
+    the task was executed succesfully.
+    """
+    # Adapted from rq Worker.execute_job / Worker.main_work_horse
+    child_pid = os.fork()
+    if child_pid == 0:
+
+        # We need to reinitialize Redis' connection pool, otherwise the parent
+        # socket will be disconnected by the Redis library.
+        pool = conn.connection_pool
+        pool.__init__(pool.connection_class, pool.max_connections,
+                      **pool.connection_kwargs)
+
+        random.seed()
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        success = _execute_forked(task_id)
+        os._exit(int(not success))
+    else:
+        # Main process
+        while True:
+            try:
+                _, return_code = os.waitpid(child_pid, 0)
+                break
+            except OSError as e:
+                if e.errno != errno.EINTR:
+                    raise
+        print 'RETURN CODE', return_code
+        status = not return_code
+        return status
 
 def process_from_queue(queue):
     now = time.time()
