@@ -7,6 +7,7 @@ import random
 import redis
 import json
 import time
+import traceback
 
 import gevent
 from gevent.queue import Queue, Full
@@ -104,14 +105,31 @@ def execute(task_id):
         return
     task = json.loads(serialized_task)
     print 'TASK', task
-    func = _func_from_serialized_name(task['func'])
-    args = task.get('args', [])
-    kwargs = task.get('kwargs', {})
+
+    success = False
+
     try:
-        func(*args, **kwargs)
-    except:
-        return False
-    return True
+        func = _func_from_serialized_name(task['func'])
+    except (ValueError, ImportError, AttributeError):
+        print 'ERROR', task, 'Could not import', task['func']
+    else:
+        args = task.get('args', [])
+        kwargs = task.get('kwargs', {})
+        now = time.time()
+        task['time_started'] = now
+        try:
+            func(*args, **kwargs)
+            success = True
+        except:
+            task['traceback'] = traceback.format_exc()
+
+    now = time.time()
+    if not success:
+        task['time_failed'] = now
+        serialized_task = json.dumps(task)
+        conn.set(_key('task', task_id), serialized_task)
+
+    return success
 
 def process_from_queue(queue):
     now = time.time()
@@ -133,14 +151,21 @@ def process_from_queue(queue):
         success = execute(task_id)
         if success:
             # Remove the task from active queue
-            conn.zrem(_key('active', queue), task_id)
+            pipeline = conn.pipeline()
+            pipeline.zrem(_key('active', queue), task_id)
+            pipeline.delete(_key('task', task_id))
+            pipeline.execute()
             print 'DONE WITH TASK', task_id
             pass
         else:
             # TODO: Move task to the scheduled queue for retry,
-            # or send email if we don't want to retry.
+            # or move to error queue if we don't want to retry.
             print 'ERROR WITH TASK', task_id
-            pass
+            now = time.time()
+            pipeline = conn.pipeline()
+            pipeline.zrem(_key('active', queue), task_id)
+            pipeline.zadd(_key('error', queue), task_id, now)
+            pipeline.execute()
 
         return task
 
