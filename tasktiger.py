@@ -2,6 +2,7 @@ if __name__ == '__main__':
     import gevent.monkey
     gevent.monkey.patch_all()
 
+import importlib
 import random
 import redis
 import json
@@ -27,21 +28,36 @@ SET <prefix>:<queues>
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
 
-Queued task IDs for a specific queue, scored by the time the task was queued.
+Task IDs waiting in the given queue to be processed, scored by the time the
+task was queued.
 ZSET <prefix>:queue:<queue>
+
+Task IDs being processed in the specific queue, scored by the time processing
+started.
+ZSET <prefix>:active:<queue>
 
 Channel that receives the queue name as a message whenever a task is queued.
 CHANNEL <prefix>:activity
 """
 
+# from rq
+def import_attribute(name):
+    """Return an attribute from a dotted path name (e.g. "path.to.func")."""
+    module_name, attribute = name.rsplit('.', 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, attribute)
+
 def _gen_id():
     return open('/dev/urandom').read(32).encode('hex')
 
 def _serialize_func_name(func):
-    return func.__name__
+    if func.__module__ == '__main__':
+        raise ValueError('Functions from the __main__ module cannot be '
+                         'processed by workers.')
+    return '.'.join([func.__module__, func.__name__])
 
-def _func_from_serialized_name(serialized_func):
-    raise NotImplementedError("TODO")
+def _func_from_serialized_name(serialized_name):
+    return import_attribute(serialized_name)
 
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
@@ -61,10 +77,12 @@ def delay(func, args=None, kwargs=None, queue=None):
     task = {
         'id': task_id,
         'func': _serialize_func_name(func),
-        'args': args,
-        'kwargs': kwargs,
         'time_queued': now,
     }
+    if args:
+        task['args'] = args
+    if kwargs:
+        task['kwargs'] = kwargs
     serialized_task = json.dumps(task)
 
     pipeline = conn.pipeline()
@@ -74,15 +92,32 @@ def delay(func, args=None, kwargs=None, queue=None):
     pipeline.publish(_key('activity'), queue)
     pipeline.execute()
 
-def process(task_id):
-    print 'PROCESSING', task_id
-    pass
+def execute(task_id):
+    """
+    Executes the task with the given ID. Returns a boolean indicating whether
+    the task was executed succesfully.
+    """
+
+    serialized_task = conn.get(_key('task', task_id))
+    if not serialized_task:
+        print 'ERROR: could not find task', task_id
+        return
+    task = json.loads(serialized_task)
+    print 'TASK', task
+    func = _func_from_serialized_name(task['func'])
+    args = task.get('args', [])
+    kwargs = task.get('kwargs', {})
+    try:
+        func(*args, **kwargs)
+    except:
+        return False
+    return True
 
 def process_from_queue(queue):
     now = time.time()
 
     # Move an item to the active queue, if available.
-    tasks = scripts.zpoppush(
+    task_ids = scripts.zpoppush(
         _key('queue', queue),
         _key('active', queue),
         1,
@@ -90,12 +125,22 @@ def process_from_queue(queue):
         now,
     )
 
-    assert len(tasks) < 2
+    assert len(task_ids) < 2
 
-    if tasks:
-        task = tasks[0]
+    if task_ids:
+        task_id = task_ids[0]
 
-        process(task)
+        success = execute(task_id)
+        if success:
+            # Remove the task from active queue
+            conn.zrem(_key('active', queue), task_id)
+            print 'DONE WITH TASK', task_id
+            pass
+        else:
+            # TODO: Move task to the scheduled queue for retry,
+            # or send email if we don't want to retry.
+            print 'ERROR WITH TASK', task_id
+            pass
 
         return task
 
@@ -134,17 +179,6 @@ def _worker_process_messages_run():
     _worker_queue_set |= queue_set
 
 
-    """
-
-    while _worker_queue_set:
-        queues = list(_worker_queue_set)
-        random.shuffle(queues)
-
-        for queue in queues:
-            if process_from_queue(queue) is None:
-                _worker_queue_set.remove(queue)
-    """
-
 def worker():
     """
     Main worker entry point method.
@@ -153,6 +187,7 @@ def worker():
     global _worker_queue_set
 
     # TODO: Filter queue names. Also support wildcards in filter
+    # TODO: Safe shutdown
 
     # First scan all the available queues for new items until they're empty.
     # Then, listen to the activity channel.
