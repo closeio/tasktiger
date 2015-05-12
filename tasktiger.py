@@ -9,20 +9,35 @@ import time
 import traceback
 
 from redis_scripts import RedisScripts
-from timeouts import UnixSignalDeathPenalty
+from timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 conn = redis.Redis()
 scripts = RedisScripts(conn)
 
+# Where to queue tasks that don't have an explicit queue
 DEFAULT_QUEUE = 'default'
-DEFAULT_HARD_TIMEOUT = 60
+
+# After how many seconds a long-running task is killed. This can be overridden
+# by the task or at queue time.
+DEFAULT_HARD_TIMEOUT = 300
+
+# The timer specifies how often the worker updates the task's timestamp in the
+# active queue. Tasks exceeding the timeout value are requeued. Note that no
+# delay is necessary before the retry since this condition happens when the
+# worker crashes, and not when there is an exception in the task itself.
+ACTIVE_TASK_UPDATE_TIMER = 10
+ACTIVE_TASK_UPDATE_TIMEOUT = 60
+ACTIVE_TASK_EXPIRED_BATCH_SIZE = 10
+
 REDIS_PREFIX = 't'
 
 """
 Redis keys:
 
-Set of any active queues
-SET <prefix>:queues
+Set of all queues that contain items in the given status.
+SET <prefix>:queued
+SET <prefix>:active
+SET <prefix>:error
 
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
@@ -89,7 +104,7 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
     serialized_task = json.dumps(task)
 
     pipeline = conn.pipeline()
-    pipeline.sadd(_key('queues'), queue)
+    pipeline.sadd(_key('queued'), queue)
     pipeline.set(_key('task', task_id), serialized_task)
     pipeline.zadd(_key('queued', queue), task_id, now)
     pipeline.publish(_key('activity'), queue)
@@ -133,7 +148,11 @@ def _execute_forked(task_id):
 
     return success
 
-def execute(task_id):
+def _heartbeat(queue, task_id):
+    now = time.time()
+    conn.zadd(_key('active', queue), task_id, now)
+
+def _execute(queue, task_id):
     """
     Executes the task with the given ID. Returns a boolean indicating whether
     the task was executed succesfully.
@@ -156,11 +175,15 @@ def execute(task_id):
         # Main process
         while True:
             try:
-                _, return_code = os.waitpid(child_pid, 0)
-                break
+                with UnixSignalDeathPenalty(ACTIVE_TASK_UPDATE_TIMER):
+                    _, return_code = os.waitpid(child_pid, 0)
+                    break
             except OSError as e:
                 if e.errno != errno.EINTR:
                     raise
+            except JobTimeoutException:
+                _heartbeat(queue, task_id)
+
         print 'RETURN CODE', return_code
         status = not return_code
         return status
@@ -175,6 +198,7 @@ def process_from_queue(queue):
         1,
         None,
         now,
+        on_success=('update_sets', _key('queued'), _key('active'), queue),
     )
 
     assert len(task_ids) < 2
@@ -182,15 +206,16 @@ def process_from_queue(queue):
     if task_ids:
         task_id = task_ids[0]
 
-        success = execute(task_id)
+        success = _execute(queue, task_id)
         if success:
             # Remove the task from active queue
             pipeline = conn.pipeline()
             pipeline.zrem(_key('active', queue), task_id)
             pipeline.delete(_key('task', task_id))
+            scripts.srem_if_not_exists(_key('active'), queue,
+                    _key('active', queue), client=pipeline)
             pipeline.execute()
             print 'DONE WITH TASK', task_id
-            pass
         else:
             # TODO: Move task to the scheduled queue for retry,
             # or move to error queue if we don't want to retry.
@@ -199,6 +224,8 @@ def process_from_queue(queue):
             pipeline = conn.pipeline()
             pipeline.zrem(_key('active', queue), task_id)
             pipeline.zadd(_key('error', queue), task_id, now)
+            scripts.srem_if_not_exists(_key('active'), queue,
+                    _key('active', queue), client=pipeline)
             pipeline.execute()
 
         return task
@@ -226,10 +253,29 @@ def _worker_update_queue_set(pubsub, queue_set):
             break
     return queue_set
 
-def _worker_process_messages_run(queue_set):
+def _worker_queue_expired_tasks():
+    active_queues = conn.smembers(_key('active'))
+    now = time.time()
+    for queue in active_queues:
+        result = scripts.zpoppush(
+            _key('active', queue),
+            _key('queued', queue),
+            ACTIVE_TASK_EXPIRED_BATCH_SIZE,
+            now - ACTIVE_TASK_UPDATE_TIMEOUT,
+            now,
+            on_success=('update_sets', _key('active'), _key('queued'), queue),
+        )
+        # XXX: Ideally this would be atomic with the operation above.
+        if result:
+            print 'QUEUING ERRORED TASKS:', result
+            conn.publish(_key('activity'), queue)
+
+def _worker_run(queue_set):
     """
-    Performs one worker run, i.e. processes a set of messages from each queue
-    and removes any empty queues from the working set.
+    Performs one worker run:
+    * Processes a set of messages from each queue and removes any empty queues
+      from the working set.
+    * Move any expired items from the active queue to the queued queue.
     """
 
     queues = list(queue_set)
@@ -238,6 +284,9 @@ def _worker_process_messages_run(queue_set):
     for queue in queues:
         if process_from_queue(queue) is None:
             queue_set.remove(queue)
+
+    # XXX: If no tasks are queued, we don't reach this code.
+    _worker_queue_expired_tasks()
 
     return queue_set
 
@@ -257,12 +306,12 @@ def worker():
     pubsub = conn.pubsub()
     pubsub.subscribe(_key('activity'))
 
-    queue_set = set(conn.smembers(_key('queues')))
+    queue_set = set(conn.smembers(_key('queued')))
 
     while True:
         if not queue_set:
             queue_set = _worker_update_queue_set(pubsub, queue_set)
-        queue_set = _worker_process_messages_run(queue_set)
+        queue_set = _worker_run(queue_set)
 
 if __name__ == '__main__':
     worker()

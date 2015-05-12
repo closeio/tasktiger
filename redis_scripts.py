@@ -8,10 +8,9 @@ ZADD_NOUPDATE = """
     end
 """
 
-# ARGV = { score, count, new_score }
-ZPOPPUSH = """
+_ZPOPPUSH_TEMPLATE = """
     local members = redis.call('zrangebyscore', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
-    local new_scoremembers = {}
+    local new_scoremembers = {{}}
     for i, member in ipairs(members) do
         new_scoremembers[2*i] = member
         new_scoremembers[2*i-1] = ARGV[3]
@@ -19,9 +18,22 @@ ZPOPPUSH = """
     if #members > 0 then
         redis.call('zremrangebyrank', KEYS[1], 0, #members-1)
         redis.call('zadd', KEYS[2], unpack(new_scoremembers))
+        {on_success}
     end
     return members
 """
+
+# ARGV = { score, count, new_score }
+ZPOPPUSH = _ZPOPPUSH_TEMPLATE.format(on_success='')
+
+# ARGV = { score, count, new_score, set_value }
+ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(on_success="""
+    local src_exists = redis.call('exists', KEYS[1])
+    if src_exists == 0 then
+        redis.call('srem', KEYS[3], ARGV[4])
+    end
+    redis.call('sadd', KEYS[4], ARGV[4])
+""")
 
 # ARGV = { score, count, new_score }
 ZPOPPUSH_WITHSCORES = """
@@ -41,6 +53,19 @@ ZPOPPUSH_WITHSCORES = """
         redis.call('zadd', KEYS[2], unpack(new_scoremembers))
     end
     return members_scores
+"""
+
+# KEYS = { key, other_key }
+# ARGV = { member }
+SREM_IF_NOT_EXISTS = """
+    local exists = redis.call('exists', KEYS[2])
+    local result
+    if exists == 0 then
+        result = redis.call('srem', KEYS[1], ARGV[1])
+    else
+        result = 0
+    end
+    return result
 """
 
 # ARGV = { unixtime, timeout_at }
@@ -96,7 +121,9 @@ class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
         self._zpoppush = redis.register_script(ZPOPPUSH)
+        self._zpoppush_update_sets = redis.register_script(ZPOPPUSH_UPDATE_SETS)
         self._zpoppush_withscores = redis.register_script(ZPOPPUSH_WITHSCORES)
+        self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
         self._multilock_acquire = redis.register_script(MULTILOCK_ACQUIRE)
         self._multilock_release = redis.register_script(MULTILOCK_RELEASE)
         self._multilock_renew = redis.register_script(MULTILOCK_RENEW)
@@ -108,20 +135,50 @@ class RedisScripts(object):
         """
         return self._zadd_noupdate(keys=[key], args=[score, member], client=client)
 
-    def zpoppush(self, source, destination, count, score, new_score, client=None, withscores=False):
+    def zpoppush(self, source, destination, count, score, new_score,
+                 client=None, withscores=False, on_success=None):
         """
         Pops the first ``count`` members from the ZSET ``source`` and adds them
         to the ZSET ``destination`` with a score of ``new_score``. If ``score``
         is not None, only members up to a score of ``score`` are used. Returns
         the members that were moved and, if ``withscores`` is True, their
-        original scores.
+        original scores. If items were moved, the action defined in
+        ``on_success`` is executed.
         """
         if score is None:
             score = '+inf' # Include all elements.
         if withscores:
-            return self._zpoppush_withscores(keys=[source, destination], args=[score, count, new_score], client=client)
+            if on_success:
+                raise NotImplementedError()
+            return self._zpoppush_withscores(
+                keys=[source, destination],
+                args=[score, count, new_score],
+                client=client)
         else:
-            return self._zpoppush(keys=[source, destination], args=[score, count, new_score], client=client)
+            if on_success:
+                if on_success[0] != 'update_sets':
+                    raise NotImplementedError()
+                else:
+                    return self._zpoppush_update_sets(
+                        keys=[source, destination, on_success[1],
+                              on_success[2]],
+                        args=[score, count, new_score, on_success[3]],
+                        client=client)
+            else:
+                return self._zpoppush(
+                    keys=[source, destination],
+                    args=[score, count, new_score],
+                    client=client)
+
+    def srem_if_not_exists(self, key, member, other_key, client=None):
+        """
+        Removes ``member`` from the set ``key`` if ``other_key`` does not
+        exist (i.e. is empty). Returns the number of removed elements (0 or 1).
+        """
+        return self._srem_if_not_exists(
+            keys=[key, other_key],
+            args=[member],
+            client=client)
 
     def multilock_acquire(self, now, timeout_at, keys, client=None):
         """
