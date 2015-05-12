@@ -16,3 +16,7 @@ def sample_task(a, b):
 
 def sample_exception():
     raise StandardError('this failed')
+
+def long_task():
+    import time
+    time.sleep(5)

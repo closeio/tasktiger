@@ -9,11 +9,13 @@ import time
 import traceback
 
 from redis_scripts import RedisScripts
+from timeouts import UnixSignalDeathPenalty
 
 conn = redis.Redis()
 scripts = RedisScripts(conn)
 
 DEFAULT_QUEUE = 'default'
+DEFAULT_HARD_TIMEOUT = 2
 REDIS_PREFIX = 't'
 
 """
@@ -110,7 +112,8 @@ def _execute_forked(task_id):
         now = time.time()
         task['time_started'] = now
         try:
-            func(*args, **kwargs)
+            with UnixSignalDeathPenalty(DEFAULT_HARD_TIMEOUT):
+                func(*args, **kwargs)
             success = True
         except:
             task['traceback'] = traceback.format_exc()
