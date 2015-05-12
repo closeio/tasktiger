@@ -1,3 +1,4 @@
+import errno
 import importlib
 import random
 import redis
@@ -13,6 +14,8 @@ from timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 conn = redis.Redis()
 scripts = RedisScripts(conn)
+
+_stop_requested = False
 
 # Where to queue tasks that don't have an explicit queue
 DEFAULT_QUEUE = 'default'
@@ -188,7 +191,7 @@ def _execute(queue, task_id):
         status = not return_code
         return status
 
-def process_from_queue(queue):
+def _process_from_queue(queue):
     now = time.time()
 
     # Move an item to the active queue, if available.
@@ -282,14 +285,28 @@ def _worker_run(queue_set):
     random.shuffle(queues)
 
     for queue in queues:
-        if process_from_queue(queue) is None:
+        if _process_from_queue(queue) is None:
             queue_set.remove(queue)
+        if _stop_requested:
+            break
 
     # XXX: If no tasks are queued, we don't reach this code.
-    _worker_queue_expired_tasks()
+    if not _stop_requested:
+        _worker_queue_expired_tasks()
 
     return queue_set
 
+def _install_signal_handlers():
+    def request_stop(signum, frame):
+        global _stop_requested
+        _stop_requested = True
+        print 'Task in progress. Stop requested.'
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
+def _uninstall_signal_handlers():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
 def worker():
     """
@@ -308,10 +325,17 @@ def worker():
 
     queue_set = set(conn.smembers(_key('queued')))
 
-    while True:
-        if not queue_set:
-            queue_set = _worker_update_queue_set(pubsub, queue_set)
-        queue_set = _worker_run(queue_set)
+    try:
+        while True:
+            if not queue_set:
+                queue_set = _worker_update_queue_set(pubsub, queue_set)
+            _install_signal_handlers()
+            queue_set = _worker_run(queue_set)
+            _uninstall_signal_handlers()
+            if _stop_requested:
+                raise KeyboardInterrupt()
+    except KeyboardInterrupt:
+        print 'Done'
 
 if __name__ == '__main__':
     worker()
