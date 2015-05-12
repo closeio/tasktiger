@@ -1,16 +1,10 @@
-if __name__ == '__main__':
-    import gevent.monkey
-    gevent.monkey.patch_all()
-
 import importlib
 import random
 import redis
 import json
+import select
 import time
 import traceback
-
-import gevent
-from gevent.queue import Queue, Full
 
 from redis_scripts import RedisScripts
 
@@ -24,14 +18,14 @@ REDIS_PREFIX = 't'
 Redis keys:
 
 Set of any active queues
-SET <prefix>:<queues>
+SET <prefix>:queues
 
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
 
 Task IDs waiting in the given queue to be processed, scored by the time the
 task was queued.
-ZSET <prefix>:queue:<queue>
+ZSET <prefix>:queued:<queue>
 
 Task IDs being processed in the specific queue, scored by the time processing
 started.
@@ -89,7 +83,7 @@ def delay(func, args=None, kwargs=None, queue=None):
     pipeline = conn.pipeline()
     pipeline.sadd(_key('queues'), queue)
     pipeline.set(_key('task', task_id), serialized_task)
-    pipeline.zadd(_key('queue', queue), task_id, now)
+    pipeline.zadd(_key('queued', queue), task_id, now)
     pipeline.publish(_key('activity'), queue)
     pipeline.execute()
 
@@ -136,7 +130,7 @@ def process_from_queue(queue):
 
     # Move an item to the active queue, if available.
     task_ids = scripts.zpoppush(
-        _key('queue', queue),
+        _key('queued', queue),
         _key('active', queue),
         1,
         None,
@@ -169,47 +163,49 @@ def process_from_queue(queue):
 
         return task
 
-_worker_queue_set = set()
-_worker_has_items = Queue(maxsize=1)
-_worker_queues_scanned = set()
+def _worker_update_queue_set(pubsub, queue_set):
+    """
+    This method checks the activity channel for any new queues that have
+    activities and updates the queue_set. If there are no queues in the
+    queue_set, this method blocks until there is activity. Otherwise, this
+    method returns as soon as all messages from the activity channel were read.
+    """
 
-def _worker_pubsub(pubsub):
-    global _worker_queue_set
+    # Pubsub messages generator
+    gen = pubsub.listen()
+    while True:
+        # Since Redis' listen method blocks, we use select to inspect the
+        # underlying socket to see if there is activity.
+        fileno = pubsub.connection._sock.fileno()
+        r, w, x = select.select([fileno], [], [], 0)
+        if fileno in r or not queue_set:
+            message = gen.next()
+            if message['type'] == 'message':
+                queue_set.add(message['data'])
+        else:
+            break
+    return queue_set
 
-    for msg in pubsub.listen():
-        print 'MSG', msg
-        if msg['type'] == 'message':
-            _worker_queue_set.add(msg['data'])
-
-            # Notify main greenlet that we have items.
-            try:
-                _worker_has_items.put(True, block=False)
-            except Full:
-                pass
-
-def _worker_process_messages_run():
-    global _worker_queue_set
-
-    queue_set = _worker_queue_set
-    _worker_queue_set = set()
+def _worker_process_messages_run(queue_set):
+    """
+    Performs one worker run, i.e. processes a set of messages from each queue
+    and removes any empty queues from the working set.
+    """
 
     queues = list(queue_set)
     random.shuffle(queues)
 
-    print 'QUEUES', queues
     for queue in queues:
         if process_from_queue(queue) is None:
             queue_set.remove(queue)
 
-    _worker_queue_set |= queue_set
+    return queue_set
 
 
 def worker():
     """
     Main worker entry point method.
     """
-
-    global _worker_queue_set
 
     # TODO: Filter queue names. Also support wildcards in filter
     # TODO: Safe shutdown
@@ -221,12 +217,12 @@ def worker():
     pubsub = conn.pubsub()
     pubsub.subscribe(_key('activity'))
 
-    _worker_queue_set = set(conn.smembers(_key('queues')))
+    queue_set = set(conn.smembers(_key('queues')))
 
-    gevent.spawn(_worker_pubsub, pubsub)
-
-    while _worker_queue_set or _worker_has_items.get():
-        _worker_process_messages_run()
+    while True:
+        if not queue_set:
+            queue_set = _worker_update_queue_set(pubsub, queue_set)
+        queue_set = _worker_process_messages_run(queue_set)
 
 if __name__ == '__main__':
     worker()
