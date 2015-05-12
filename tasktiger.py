@@ -15,7 +15,7 @@ conn = redis.Redis()
 scripts = RedisScripts(conn)
 
 DEFAULT_QUEUE = 'default'
-DEFAULT_HARD_TIMEOUT = 2
+DEFAULT_HARD_TIMEOUT = 60
 REDIS_PREFIX = 't'
 
 """
@@ -61,12 +61,14 @@ def _func_from_serialized_name(serialized_name):
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
 
-def task():
+def task(hard_timeout=None):
     def _wrap(func):
+        if hard_timeout:
+            func._task_hard_timeout = hard_timeout
         return func
     return _wrap
 
-def delay(func, args=None, kwargs=None, queue=None):
+def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
     task_id = _gen_id()
 
     if queue is None:
@@ -82,6 +84,8 @@ def delay(func, args=None, kwargs=None, queue=None):
         task['args'] = args
     if kwargs:
         task['kwargs'] = kwargs
+    if hard_timeout:
+        task['hard_timeout'] = hard_timeout
     serialized_task = json.dumps(task)
 
     pipeline = conn.pipeline()
@@ -112,7 +116,10 @@ def _execute_forked(task_id):
         now = time.time()
         task['time_started'] = now
         try:
-            with UnixSignalDeathPenalty(DEFAULT_HARD_TIMEOUT):
+            hard_timeout = task.get('hard_timeout', None) or \
+                           getattr(func, '_task_hard_timeout', None) or \
+                           DEFAULT_HARD_TIMEOUT
+            with UnixSignalDeathPenalty(hard_timeout):
                 func(*args, **kwargs)
             success = True
         except:

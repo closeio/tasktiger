@@ -20,3 +20,13 @@ def sample_exception():
 def long_task():
     import time
     time.sleep(5)
+
+@task(hard_timeout=1)
+def long_task_killed():
+    import time
+    time.sleep(2)
+
+@task(hard_timeout=3)
+def long_task_ok():
+    import time
+    time.sleep(2)
