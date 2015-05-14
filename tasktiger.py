@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import importlib
 import random
 import redis
@@ -67,6 +68,13 @@ def import_attribute(name):
 def _gen_id():
     return open('/dev/urandom').read(32).encode('hex')
 
+def _gen_unique_id(serialized_name, args, kwargs):
+    return hashlib.sha256(json.dumps({
+        'func': serialized_name,
+        'args': args,
+        'kwargs': kwargs,
+    }, sort_keys=True)).hexdigest()
+
 def _serialize_func_name(func):
     if func.__module__ == '__main__':
         raise ValueError('Functions from the __main__ module cannot be '
@@ -79,17 +87,29 @@ def _func_from_serialized_name(serialized_name):
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
 
-def task(hard_timeout=None, queue=None):
+def task(queue=None, hard_timeout=None, unique=False):
     def _wrap(func):
         if hard_timeout:
             func._task_hard_timeout = hard_timeout
         if queue:
             func._task_queue = queue
+        if unique:
+            func._task_unique = True
         return func
     return _wrap
 
-def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
-    task_id = _gen_id()
+def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
+          unique=None):
+
+    serialized_name = _serialize_func_name(func)
+
+    if unique is None:
+        unique = getattr(func, '_task_unique', False)
+
+    if unique:
+        task_id = _gen_unique_id(serialized_name, args, kwargs)
+    else:
+        task_id = _gen_id()
 
     if queue is None:
         queue = getattr(func, '_task_queue', DEFAULT_QUEUE)
@@ -97,9 +117,11 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
     now = time.time()
     task = {
         'id': task_id,
-        'func': _serialize_func_name(func),
+        'func': serialized_name,
         'time_queued': now,
     }
+    if unique:
+        task['unique'] = True
     if args:
         task['args'] = args
     if kwargs:
@@ -115,15 +137,7 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None):
     pipeline.publish(_key('activity'), queue)
     pipeline.execute()
 
-def _execute_forked(task_id):
-    conn = redis.Redis()
-    serialized_task = conn.get(_key('task', task_id))
-    if not serialized_task:
-        print 'ERROR: could not find task', task_id
-        return
-    task = json.loads(serialized_task)
-    print 'TASK', task
-
+def _execute_forked(task):
     success = False
 
     try:
@@ -149,7 +163,7 @@ def _execute_forked(task_id):
     if not success:
         task['time_failed'] = now
         serialized_task = json.dumps(task)
-        conn.set(_key('task', task_id), serialized_task)
+        conn.set(_key('task', task['id']), serialized_task)
 
     return success
 
@@ -157,7 +171,7 @@ def _heartbeat(queue, task_id):
     now = time.time()
     conn.zadd(_key('active', queue), task_id, now)
 
-def _execute(queue, task_id):
+def _execute(queue, task):
     """
     Executes the task with the given ID. Returns a boolean indicating whether
     the task was executed succesfully.
@@ -174,7 +188,7 @@ def _execute(queue, task_id):
 
         random.seed()
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        success = _execute_forked(task_id)
+        success = _execute_forked(task)
         os._exit(int(not success))
     else:
         # Main process
@@ -187,7 +201,7 @@ def _execute(queue, task_id):
                 if e.errno != errno.EINTR:
                     raise
             except JobTimeoutException:
-                _heartbeat(queue, task_id)
+                _heartbeat(queue, task['id'])
 
         print 'RETURN CODE', return_code
         status = not return_code
@@ -211,12 +225,28 @@ def _process_from_queue(queue):
     if task_ids:
         task_id = task_ids[0]
 
-        success = _execute(queue, task_id)
+        serialized_task = conn.get(_key('task', task_id))
+        if not serialized_task:
+            print 'ERROR: could not find task', task_id
+            # Return the task ID since there may be more tasks.
+            return task_id
+
+        task = json.loads(serialized_task)
+
+        print 'TASK', queue, task
+        success = _execute(queue, task)
         if success:
             # Remove the task from active queue
             pipeline = conn.pipeline()
             pipeline.zrem(_key('active', queue), task_id)
-            pipeline.delete(_key('task', task_id))
+            if task.get('unique', False):
+                # Only delete if it's not in the error or queued queue.
+                scripts.delete_if_not_in_zsets(_key('task', task_id), task_id, [
+                    _key('queued', queue), 
+                    _key('error', queue)
+                ], client=pipeline)
+            else:
+                pipeline.delete(_key('task', task_id))
             scripts.srem_if_not_exists(_key('active'), queue,
                     _key('active', queue), client=pipeline)
             pipeline.execute()
@@ -233,7 +263,7 @@ def _process_from_queue(queue):
                     _key('active', queue), client=pipeline)
             pipeline.execute()
 
-        return task
+        return task_id
 
 def _worker_update_queue_set(pubsub, queue_set):
     """
@@ -316,7 +346,6 @@ def worker():
     """
 
     # TODO: Filter queue names. Also support wildcards in filter
-    # TODO: Safe shutdown
 
     # First scan all the available queues for new items until they're empty.
     # Then, listen to the activity channel.

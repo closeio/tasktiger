@@ -11,3 +11,11 @@ delay(long_task)
 delay(long_task_ok)
 delay(long_task_killed, hard_timeout=3)
 delay(long_task_ok, hard_timeout=1)
+
+delay(unique_task)
+delay(unique_task)
+delay(unique_task)
+
+delay(unique_task, kwargs={'a': 1})
+delay(unique_task, kwargs={'a': 2})
+delay(unique_task, kwargs={'a': 2})

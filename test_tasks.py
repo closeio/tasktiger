@@ -34,3 +34,9 @@ def long_task_killed():
 def long_task_ok():
     import time
     time.sleep(2)
+
+@task(unique=True)
+def unique_task(a=None):
+    import time
+    time.sleep(1)
+    print 'UNIQUE TASK', a
