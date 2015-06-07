@@ -1,5 +1,4 @@
 import time
-from redis.client import Lock, LockError
 
 # ARGV = { score member }
 ZADD_NOUPDATE = """
@@ -225,83 +224,3 @@ class RedisScripts(object):
         Renews the lock for the given keys. Returns the keys that were renewed.
         """
         return self._multilock_renew(keys=keys, args=[original_timeout_at, timeout_at], client=client)
-
-
-class MultiLock(object):
-    """
-    Non-blocking Redis lock that efficiently creates locks for multiple keys
-    at a time.
-    """
-
-    # TODO: shouldn't depend on app
-
-    def __init__(self, redis, keys, timeout):
-        """
-        Create a new MultiLock instance for the given ``keys`` using the Redis
-        client supplied by ``redis``.
-
-        ``timeout`` indicates a maximum life for the lock.
-        By default, it will remain locked until release() is called.
-
-        Note: If using ``timeout``, you should make sure all the hosts
-        that are running clients are within the same timezone and are using
-        a network time service like ntp.
-        """
-
-        self.redis = redis
-        self.keys = keys
-        self.timeout = timeout
-
-        self.acquired_keys = []
-        self.acquired_until = None
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.release()
-
-    def acquire(self):
-        """
-        Returns the list of keys for which a lock was acquired.
-        """
-        from closeio.main import app
-        now = int(time.time())
-        if self.timeout:
-            timeout_at = now + self.timeout
-        else:
-            timeout_at = Lock.LOCK_FOREVER
-        self.acquired_keys = app.redis_scripts.multilock_acquire(now, timeout_at, self.keys, client=self.redis)
-        self.acquired_until = timeout_at
-        return self.acquired_keys
-
-    def release(self):
-        "Releases the already acquired lock"
-        from closeio.main import app
-        if self.acquired_until and self.acquired_keys:
-            app.redis_scripts.multilock_release(self.acquired_until, self.acquired_keys, client=self.redis)
-            self.acquired_until = None
-            self.acquired_keys = []
-
-    def renew(self):
-        "Renews the already acquired lock"
-        from closeio.main import app
-        now = int(time.time())
-        if self.timeout:
-            timeout_at = now + self.timeout
-        else:
-            return # no need to renew
-        if self.acquired_until and self.acquired_keys:
-            acquired_keys = app.redis_scripts.multilock_renew(self.acquired_until, timeout_at, self.acquired_keys, client=self.redis)
-
-            if acquired_keys != self.acquired_keys:
-                exc = LockError("Could not fully renew MultiLock")
-            else:
-                exc = None
-
-            self.acquired_until = timeout_at
-            self.acquired_keys = acquired_keys
-
-            if exc:
-                raise exc
