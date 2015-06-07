@@ -72,7 +72,7 @@ def import_attribute(name):
     return getattr(module, attribute)
 
 def _gen_id():
-    return open('/dev/urandom').read(32).encode('hex')
+    return os.urandom(32).encode('hex')
 
 def _gen_unique_id(serialized_name, args, kwargs):
     return hashlib.sha256(json.dumps({
