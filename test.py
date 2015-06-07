@@ -19,3 +19,7 @@ delay(unique_task)
 delay(unique_task, kwargs={'a': 1})
 delay(unique_task, kwargs={'a': 2})
 delay(unique_task, kwargs={'a': 2})
+
+delay(unique_task_failure)
+delay(unique_task_failure)
+delay(unique_task_failure)

@@ -46,6 +46,9 @@ SET <prefix>:error
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
 
+List of (failed) task executions
+LIST <prefix>:task:<task_id>:executions
+
 Task IDs waiting in the given queue to be processed, scored by the time the
 task was queued.
 ZSET <prefix>:queued:<queue>
@@ -53,6 +56,9 @@ ZSET <prefix>:queued:<queue>
 Task IDs being processed in the specific queue, scored by the time processing
 started.
 ZSET <prefix>:active:<queue>
+
+Task IDs that failed, scored by the time processing failed.
+ZSET <prefix>:error:<queue>
 
 Channel that receives the queue name as a message whenever a task is queued.
 CHANNEL <prefix>:activity
@@ -118,7 +124,7 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
     task = {
         'id': task_id,
         'func': serialized_name,
-        'time_queued': now,
+        'time_last_queued': now,
     }
     if unique:
         task['unique'] = True
@@ -140,6 +146,8 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
 def _execute_forked(task):
     success = False
 
+    execution = {}
+
     try:
         func = _func_from_serialized_name(task['func'])
     except (ValueError, ImportError, AttributeError):
@@ -147,23 +155,24 @@ def _execute_forked(task):
     else:
         args = task.get('args', [])
         kwargs = task.get('kwargs', {})
-        now = time.time()
-        task['time_started'] = now
+        execution['time_started'] = time.time()
         try:
             hard_timeout = task.get('hard_timeout', None) or \
                            getattr(func, '_task_hard_timeout', None) or \
                            DEFAULT_HARD_TIMEOUT
             with UnixSignalDeathPenalty(hard_timeout):
                 func(*args, **kwargs)
-            success = True
         except:
-            task['traceback'] = traceback.format_exc()
+            execution['traceback'] = traceback.format_exc()
+            execution['time_failed'] = time.time()
+        else:
+            success = True
 
-    now = time.time()
+    # Currently we only log failed task executions.
     if not success:
-        task['time_failed'] = now
-        serialized_task = json.dumps(task)
-        conn.set(_key('task', task['id']), serialized_task)
+        execution['success'] = success
+        serialized_execution = json.dumps(execution)
+        conn.rpush(_key('task', task['id'], 'executions'), serialized_execution)
 
     return success
 
@@ -182,6 +191,7 @@ def _execute(queue, task):
 
         # We need to reinitialize Redis' connection pool, otherwise the parent
         # socket will be disconnected by the Redis library.
+        # TODO: We might only need this if the task fails.
         pool = conn.connection_pool
         pool.__init__(pool.connection_class, pool.max_connections,
                       **pool.connection_kwargs)

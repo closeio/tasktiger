@@ -40,3 +40,9 @@ def unique_task(a=None):
     import time
     time.sleep(1)
     print 'UNIQUE TASK', a
+
+@task(unique=True)
+def unique_task_failure():
+    import time
+    time.sleep(2)
+    raise StandardError('failed')
