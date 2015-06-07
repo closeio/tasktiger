@@ -1,3 +1,4 @@
+import click
 import errno
 import hashlib
 import importlib
@@ -275,7 +276,7 @@ def _process_from_queue(queue):
 
         return task_id
 
-def _worker_update_queue_set(pubsub, queue_set):
+def _worker_update_queue_set(pubsub, queue_set, queue_filter):
     """
     This method checks the activity channel for any new queues that have
     activities and updates the queue_set. If there are no queues in the
@@ -293,7 +294,8 @@ def _worker_update_queue_set(pubsub, queue_set):
         if fileno in r or not queue_set:
             message = gen.next()
             if message['type'] == 'message':
-                queue_set.add(message['data'])
+                for queue in _filter_queues([message['data']], queue_filter):
+                    queue_set.add(queue)
         else:
             break
     return queue_set
@@ -350,10 +352,23 @@ def _uninstall_signal_handlers():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-def worker():
+def _filter_queues(queues, queue_filter):
+    if queue_filter:
+        return [q for q in queues if q in queue_filter]
+    else:
+        return queues
+
+@click.command()
+@click.option('-q', '--queues', help='If specified, only the given queue(s) are processed. Multiple queues can be separated by comma.')
+def worker(queues):
     """
     Main worker entry point method.
     """
+
+    if queues:
+        queue_filter = queues.split(',')
+    else:
+        queue_filter = None
 
     # TODO: Filter queue names. Also support wildcards in filter
 
@@ -364,12 +379,13 @@ def worker():
     pubsub = conn.pubsub()
     pubsub.subscribe(_key('activity'))
 
-    queue_set = set(conn.smembers(_key('queued')))
+    queue_set = set(_filter_queues(conn.smembers(_key('queued')), queue_filter))
 
     try:
         while True:
             if not queue_set:
-                queue_set = _worker_update_queue_set(pubsub, queue_set)
+                queue_set = _worker_update_queue_set(pubsub, queue_set,
+                                                     queue_filter)
             _install_signal_handlers()
             queue_set = _worker_run(queue_set)
             _uninstall_signal_handlers()
