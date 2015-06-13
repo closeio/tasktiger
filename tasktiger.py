@@ -19,8 +19,6 @@ from timeouts import UnixSignalDeathPenalty, JobTimeoutException
 conn = redis.Redis()
 scripts = RedisScripts(conn)
 
-_stop_requested = False
-
 LOGGER_NAME = 'tasktiger'
 
 # Where to queue tasks that don't have an explicit queue
@@ -158,10 +156,11 @@ class Worker(object):
         else:
             self.queue_filter = None
 
+        self._stop_requested = False
+
     def _install_signal_handlers(self):
         def request_stop(signum, frame):
-            global _stop_requested
-            _stop_requested = True
+            self._stop_requested = True
             self.log.info('stop requested, waiting for task to finish')
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
@@ -369,11 +368,11 @@ class Worker(object):
         for queue in queues:
             if self._process_from_queue(queue) is None:
                 self._queue_set.remove(queue)
-            if _stop_requested:
+            if self._stop_requested:
                 break
 
         # XXX: If no tasks are queued, we don't reach this code.
-        if not _stop_requested:
+        if not self._stop_requested:
             self._worker_queue_expired_tasks()
 
     def run(self):
@@ -398,7 +397,7 @@ class Worker(object):
                 self._uninstall_signal_handlers()
                 #if not queue_set:
                 #    break
-                if _stop_requested:
+                if self._stop_requested:
                     raise KeyboardInterrupt()
         except KeyboardInterrupt:
             pass
