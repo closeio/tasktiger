@@ -407,6 +407,12 @@ class Worker(object):
 @click.option('-q', '--queues', help='If specified, only the given queue(s) '
                                      'are processed. Multiple queues can be '
                                      'separated by comma.')
+@click.option('-m', '--module', help="Module(s) to import when launching the "
+                                     "worker. This improves task performance "
+                                     "since the module doesn't have to be "
+                                     "reimported every time a task is forked. "
+                                     "Multiple modules can be separated by "
+                                     "comma.")
 def run_worker(**kwargs):
     """
     Main worker entry point method.
@@ -417,6 +423,13 @@ def run_worker(**kwargs):
     )
     logger.setLevel(logging.DEBUG)
     logging.basicConfig(format='%(message)s')
+
+    module_names = kwargs.pop('module', '')
+    for module_name in module_names.split(','):
+        module_name = module_name.strip()
+        if module_name:
+            importlib.import_module(module_name)
+            logger.debug('imported module', module_name=module_name)
 
     worker = Worker(logger=logger, **kwargs)
     worker.run()
