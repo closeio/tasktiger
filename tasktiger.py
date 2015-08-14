@@ -1,4 +1,6 @@
+import calendar
 import click
+import datetime
 import errno
 import hashlib
 import importlib
@@ -36,6 +38,13 @@ ACTIVE_TASK_UPDATE_TIMER = 10
 ACTIVE_TASK_UPDATE_TIMEOUT = 60
 ACTIVE_TASK_EXPIRED_BATCH_SIZE = 10
 
+# How many items to move at most from the scheduled queue to the active queue.
+SCHEDULED_TASK_BATCH_SIZE = 1000
+
+# After how many seconds time out on listening on the activity channel and
+# check for scheduled or expired items.
+SELECT_TIMEOUT = 1
+
 REDIS_PREFIX = 't'
 
 """
@@ -45,6 +54,7 @@ Set of all queues that contain items in the given status.
 SET <prefix>:queued
 SET <prefix>:active
 SET <prefix>:error
+SET <prefix>:scheduled
 
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
@@ -62,6 +72,10 @@ ZSET <prefix>:active:<queue>
 
 Task IDs that failed, scored by the time processing failed.
 ZSET <prefix>:error:<queue>
+
+Task IDs that are scheduled to be executed at a specific time, scored by the
+time they should be executed.
+ZSET <prefix>:scheduled:<queue>
 
 Channel that receives the queue name as a message whenever a task is queued.
 CHANNEL <prefix>:activity
@@ -108,7 +122,36 @@ def task(queue=None, hard_timeout=None, unique=False):
     return _wrap
 
 def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
-          unique=None):
+          unique=None, when=None):
+    """
+    Queues a task.
+    * func
+      Dotted path to the function that will be queued (e.g. module.func)
+
+    * args
+      List of arguments that will be passed to the function.
+
+    * kwargs
+      List of keyword arguments that will be passed to the function.
+
+    * queue
+      Name of the queue where the task will be queued.
+
+    * hard_timeout
+      If the task runs longer than the given number of seconds, it will be
+      killed and marked as failed.
+
+    * unique
+      The task will only be queued if there is no similar task with the same
+      function, arguments and keyword arguments in the queue. Note that
+      multiple similar tasks may still be executed at the same time since the
+      task will still be inserted into the queue if another one is being
+      processed.
+
+    * when
+      Takes either a datetime (for an absolute date) or a timedelta (relative
+      to now). If given, the task will be scheduled for the given time.
+    """
 
     serialized_name = _serialize_func_name(func)
 
@@ -122,6 +165,14 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
 
     if queue is None:
         queue = getattr(func, '_task_queue', DEFAULT_QUEUE)
+
+    # convert timedelta to datetime
+    if isinstance(when, datetime.timedelta):
+        when = datetime.datetime.utcnow() + when
+
+    # convert to unixtime
+    if isinstance(when, datetime.datetime):
+        when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
 
     now = time.time()
     task = {
@@ -139,11 +190,17 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
         task['hard_timeout'] = hard_timeout
     serialized_task = json.dumps(task)
 
+    if when:
+        queue_type = 'scheduled'
+    else:
+        queue_type = 'queued'
+
     pipeline = conn.pipeline()
-    pipeline.sadd(_key('queued'), queue)
+    pipeline.sadd(_key(queue_type), queue)
     pipeline.set(_key('task', task_id), serialized_task)
-    pipeline.zadd(_key('queued', queue), task_id, now)
-    pipeline.publish(_key('activity'), queue)
+    pipeline.zadd(_key(queue_type, queue), task_id, when or now)
+    if queue_type == 'queued':
+        pipeline.publish(_key('activity'), queue)
     pipeline.execute()
 
 class Worker(object):
@@ -175,13 +232,35 @@ class Worker(object):
         else:
             return queues
 
-    def _update_queue_set(self):
+    def _worker_queue_scheduled_tasks(self):
+        queues = set(self._filter_queues(conn.smembers(_key('scheduled'))))
+        now = time.time()
+        for queue in queues:
+            # Move due items from scheduled queue to active queue. If items
+            # were moved, remove the queue from the scheduled set if it is
+            # empty, and add it to the active set so the task gets picked up.
+
+            result = scripts.zpoppush(
+                _key('scheduled', queue),
+                _key('queued', queue),
+                SCHEDULED_TASK_BATCH_SIZE,
+                now,
+                now,
+                on_success=('update_sets', _key('scheduled'), _key('active'), queue),
+            )
+
+            # XXX: ideally this would be in the same pipeline, but we only want
+            # to announce if there was a result.
+            if result:
+                conn.publish(_key('activity'), queue)
+
+    def _update_queue_set(self, timeout=None):
         """
         This method checks the activity channel for any new queues that have
         activities and updates the queue_set. If there are no queues in the
-        queue_set, this method blocks until there is activity. Otherwise, this
-        method returns as soon as all messages from the activity channel were
-        read.
+        queue_set, this method blocks until there is activity or the timeout
+        elapses. Otherwise, this method returns as soon as all messages from
+        the activity channel were read.
         """
 
         # Pubsub messages generator
@@ -190,8 +269,9 @@ class Worker(object):
             # Since Redis' listen method blocks, we use select to inspect the
             # underlying socket to see if there is activity.
             fileno = self._pubsub.connection._sock.fileno()
-            r, w, x = select.select([fileno], [], [], 0)
-            if fileno in r or not self._queue_set:
+            r, w, x = select.select([fileno], [], [],
+                                    0 if self._queue_set else timeout)
+            if fileno in r: # or not self._queue_set:
                 message = gen.next()
                 if message['type'] == 'message':
                     for queue in self._filter_queues([message['data']]):
@@ -360,6 +440,7 @@ class Worker(object):
         * Processes a set of messages from each queue and removes any empty queues
           from the working set.
         * Move any expired items from the active queue to the queued queue.
+        * Move any scheduled items from the scheduled queue to the queued queue.
         """
 
         queues = list(self._queue_set)
@@ -371,8 +452,8 @@ class Worker(object):
             if self._stop_requested:
                 break
 
-        # XXX: If no tasks are queued, we don't reach this code.
         if not self._stop_requested:
+            self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
 
     def run(self):
@@ -390,7 +471,7 @@ class Worker(object):
         try:
             while True:
                 if not self._queue_set:
-                    self._update_queue_set()
+                    self._update_queue_set(timeout=SELECT_TIMEOUT)
 
                 self._install_signal_handlers()
                 queue_set = self._worker_run()
@@ -424,7 +505,7 @@ def run_worker(**kwargs):
     logger.setLevel(logging.DEBUG)
     logging.basicConfig(format='%(message)s')
 
-    module_names = kwargs.pop('module', '')
+    module_names = kwargs.pop('module') or ''
     for module_name in module_names.split(','):
         module_name = module_name.strip()
         if module_name:

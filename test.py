@@ -1,7 +1,11 @@
+import datetime
+
 from tasktiger import delay
 
 from test_tasks import *
 
+delay(sample_task, args=(5, 6), when=datetime.timedelta(seconds=2))
+delay(sample_task, args=(5, 6), when=datetime.timedelta(seconds=4))
 delay(sample_task, args=(1, 2))
 delay(sample_task, args=(1, 3), queue='a')
 delay(sample_task, args=(1, 4), queue='b')
