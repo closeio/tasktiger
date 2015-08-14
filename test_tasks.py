@@ -46,3 +46,10 @@ def unique_task_failure():
     import time
     time.sleep(2)
     raise StandardError('failed')
+
+@task(lock=True)
+def locked_task(n):
+    print 'Locked task start', n
+    import time
+    time.sleep(2)
+    print 'Locked task end', n

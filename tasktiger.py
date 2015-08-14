@@ -16,6 +16,7 @@ import time
 import traceback
 
 from redis_scripts import RedisScripts
+from redis_lock import Lock
 from timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 conn = redis.Redis()
@@ -44,6 +45,9 @@ SCHEDULED_TASK_BATCH_SIZE = 1000
 # After how many seconds time out on listening on the activity channel and
 # check for scheduled or expired items.
 SELECT_TIMEOUT = 1
+
+# After how many seconds a task that can't require a lock is retried.
+LOCK_RETRY = 1
 
 REDIS_PREFIX = 't'
 
@@ -79,6 +83,9 @@ ZSET <prefix>:scheduled:<queue>
 
 Channel that receives the queue name as a message whenever a task is queued.
 CHANNEL <prefix>:activity
+
+Locks
+STRING <prefix>:lock:<lock_hash>
 """
 
 # from rq
@@ -110,7 +117,7 @@ def _func_from_serialized_name(serialized_name):
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
 
-def task(queue=None, hard_timeout=None, unique=False):
+def task(queue=None, hard_timeout=None, unique=False, lock=False):
     def _wrap(func):
         if hard_timeout:
             func._task_hard_timeout = hard_timeout
@@ -118,11 +125,13 @@ def task(queue=None, hard_timeout=None, unique=False):
             func._task_queue = queue
         if unique:
             func._task_unique = True
+        if lock:
+            func._task_lock = True
         return func
     return _wrap
 
 def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
-          unique=None, when=None):
+          unique=None, lock=None, when=None):
     """
     Queues a task.
     * func
@@ -148,6 +157,11 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
       task will still be inserted into the queue if another one is being
       processed.
 
+    * lock
+      Hold a lock while the task is being executed (with the given args and
+      kwargs). If a task with similar args/kwargs is queued and tries to
+      acquire the lock, it will be retried later.
+
     * when
       Takes either a datetime (for an absolute date) or a timedelta (relative
       to now). If given, the task will be scheduled for the given time.
@@ -157,6 +171,9 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
 
     if unique is None:
         unique = getattr(func, '_task_unique', False)
+
+    if lock is None:
+        lock = getattr(func, '_task_lock', False)
 
     if unique:
         task_id = _gen_unique_id(serialized_name, args, kwargs)
@@ -182,6 +199,8 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
     }
     if unique:
         task['unique'] = True
+    if lock:
+        task['lock'] = True
     if args:
         task['args'] = args
     if kwargs:
@@ -334,7 +353,7 @@ class Worker(object):
         now = time.time()
         conn.zadd(_key('active', queue), task_id, now)
 
-    def _execute(self, queue, task, log):
+    def _execute(self, queue, task, log, lock):
         """
         Executes the task with the given ID. Returns a boolean indicating whether
         the task was executed succesfully.
@@ -369,6 +388,8 @@ class Worker(object):
                         raise
                 except JobTimeoutException:
                     self._heartbeat(queue, task['id'])
+                    if lock:
+                        lock.renew(ACTIVE_TASK_UPDATE_TIMEOUT)
 
             status = not return_code
             return status
@@ -403,7 +424,36 @@ class Worker(object):
 
             task = json.loads(serialized_task)
 
-            success = self._execute(queue, task, log)
+            if task.get('lock', False):
+                lock = Lock(conn, _key('lock', _gen_unique_id(
+                    task['func'],
+                    task.get('args', []),
+                    task.get('kwargs', []),
+                )), timeout=ACTIVE_TASK_UPDATE_TIMEOUT, blocking=False)
+            else:
+                lock = None
+
+            if lock and not lock.acquire():
+                log.info('could not acquire lock')
+
+                # Reschedule the task
+                now = time.time()
+                when = now + LOCK_RETRY
+                pipeline = conn.pipeline()
+                pipeline.zrem(_key('active', queue), task_id)
+                scripts.srem_if_not_exists(_key('active'), queue,
+                        _key('active', queue), client=pipeline)
+                pipeline.sadd(_key('scheduled'), queue)
+                pipeline.zadd(_key('scheduled', queue), task_id, when)
+                pipeline.execute()
+
+                return task_id
+
+            success = self._execute(queue, task, log, lock)
+
+            if lock:
+                lock.release()
+
             if success:
                 # Remove the task from active queue
                 pipeline = conn.pipeline()
