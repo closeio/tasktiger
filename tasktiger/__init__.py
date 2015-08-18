@@ -88,6 +88,13 @@ Locks
 STRING <prefix>:lock:<lock_hash>
 """
 
+# TODO: migrate other config options to this (where it makes sense)
+_config = {
+    # If this is True, all tasks will be executed locally by blocking until the
+    # task returns. This is useful for testing purposes.
+    'ALWAYS_EAGER': False,
+}
+
 # from rq
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
@@ -166,6 +173,15 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
       Takes either a datetime (for an absolute date) or a timedelta (relative
       to now). If given, the task will be scheduled for the given time.
     """
+
+    global _config
+
+    if _config['ALWAYS_EAGER']:
+        if not args:
+            args = []
+        if not kwargs:
+            kwargs = {}
+        return func(*args, **kwargs)
 
     serialized_name = _serialize_func_name(func)
 
@@ -564,6 +580,16 @@ def run_worker(**kwargs):
 
     worker = Worker(logger=logger, **kwargs)
     worker.run()
+
+def configure(**kwargs):
+    """
+    Configures tasktiger and returns the current (updated) configuration.
+    """
+
+    global _config
+    _config.update(**kwargs)
+    return _config
+
 
 if __name__ == '__main__':
     structlog.configure(
