@@ -17,7 +17,17 @@ import traceback
 
 from redis_scripts import RedisScripts
 from redis_lock import Lock
-from timeouts import UnixSignalDeathPenalty, JobTimeoutException
+
+from tasktiger.retry import *
+from tasktiger.timeouts import UnixSignalDeathPenalty, JobTimeoutException
+
+__all__ = ['configure', 'run_worker', 'task', 'delay',
+
+           # Exceptions
+           'JobTimeoutException', 'StopRetry',
+
+           # Retry methods
+           'fixed', 'linear', 'exponential']
 
 conn = redis.Redis()
 scripts = RedisScripts(conn)
@@ -93,6 +103,10 @@ _config = {
     # If this is True, all tasks will be executed locally by blocking until the
     # task returns. This is useful for testing purposes.
     'ALWAYS_EAGER': False,
+
+    # If retry is True but no retry_method is specified for a given task, use
+    # the following default method.
+    'DEFAULT_RETRY_METHOD': fixed(60, 3),
 }
 
 # from rq
@@ -124,23 +138,32 @@ def _func_from_serialized_name(serialized_name):
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
 
-def task(queue=None, hard_timeout=None, unique=False, lock=False):
+def task(queue=None, hard_timeout=None, unique=None, lock=None, retry=None,
+         retry_on=None, retry_method=None):
     def _wrap(func):
-        if hard_timeout:
+        if hard_timeout is not None:
             func._task_hard_timeout = hard_timeout
-        if queue:
+        if queue is not None:
             func._task_queue = queue
-        if unique:
+        if unique is not None:
             func._task_unique = True
-        if lock:
+        if lock is not None:
             func._task_lock = True
+        if retry is not None:
+            func._task_retry = retry
+        if retry_on is not None:
+            func._task_retry_on = retry_on
+        if retry_method is not None:
+            func._task_retry_method = retry_method
         return func
     return _wrap
 
 def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
-          unique=None, lock=None, when=None):
+          unique=None, lock=None, when=None, retry=None, retry_on=None,
+          retry_method=None):
     """
     Queues a task.
+
     * func
       Dotted path to the function that will be queued (e.g. module.func)
 
@@ -172,6 +195,40 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
     * when
       Takes either a datetime (for an absolute date) or a timedelta (relative
       to now). If given, the task will be scheduled for the given time.
+
+    * retry
+      Whether to retry a task when it fails (either because of an exception or
+      because of a timeout). To restrict the list of failures, use retry_on.
+      Unless retry_method is given, the configured DEFAULT_RETRY_METHOD is
+      used.
+
+    * retry_on
+      If a list is given, it implies retry=True. Task will be only retried on
+      the given exceptions. To retry the task when a hard timeout occurs, use
+      JobTimeoutException.
+
+    * retry_method
+      If given, implies retry=True. Pass either:
+
+      * a function that takes the retry number as an argument, or,
+      * a tuple (f, args), where f takes the retry number as the first
+        argument, followed by the additional args.
+
+      The function needs to return the desired retry interval in seconds, or
+      raise StopRetry to stop retrying. The following built-in functions can be
+      passed for common scenarios and return the appropriate tuple:
+
+      * fixed(delay, max_retries)
+        Returns a method that returns the given delay or raises StopRetry
+        if the number of retries exceeds max_retries.
+
+      * linear(delay, increment, max_retries)
+        Like fixed, but starts off with the given delay and increments it by
+        the given increment after every retry.
+
+      * exponential(delay, factor, max_retries)
+        Like fixed, but starts off with the given delay and multiplies it by
+        the given factor after every retry.
     """
 
     global _config
@@ -190,6 +247,15 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
 
     if lock is None:
         lock = getattr(func, '_task_lock', False)
+
+    if retry is None:
+        retry = getattr(func, '_task_retry', False)
+
+    if retry_on is None:
+        retry_on = getattr(func, '_task_retry_on', None)
+
+    if retry_method is None:
+        retry_method = getattr(func, '_task_retry_method', None)
 
     if unique:
         task_id = _gen_unique_id(serialized_name, args, kwargs)
@@ -223,6 +289,20 @@ def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
         task['kwargs'] = kwargs
     if hard_timeout:
         task['hard_timeout'] = hard_timeout
+    if retry or retry_on or retry_method:
+        if not retry_method:
+            retry_method = _config['DEFAULT_RETRY_METHOD']
+
+        if callable(retry_method):
+            retry_method = (_serialize_func_name(retry_method), ())
+        else:
+            retry_method = (_serialize_func_name(retry_method[0]),
+                            retry_method[1])
+
+        task['retry_method'] = retry_method
+        if retry_on:
+            task['retry_on'] = [_serialize_func_name(cls) for cls in retry_on]
+
     serialized_task = json.dumps(task)
 
     if when:
@@ -350,8 +430,9 @@ class Worker(object):
                                DEFAULT_HARD_TIMEOUT
                 with UnixSignalDeathPenalty(hard_timeout):
                     func(*args, **kwargs)
-            except:
+            except Exception, exc:
                 execution['traceback'] = traceback.format_exc()
+                execution['exception_name'] = _serialize_func_name(exc.__class__)
                 log.error(traceback=execution['traceback'])
                 execution['time_failed'] = time.time()
             else:
@@ -487,12 +568,46 @@ class Worker(object):
                 pipeline.execute()
                 log.debug('done')
             else:
-                # TODO: Move task to the scheduled queue for retry,
-                # or move to error queue if we don't want to retry.
-                now = time.time()
+                should_retry = False
+                # Get execution info
+                if 'retry_method' in task:
+                    if 'retry_on' in task:
+                        execution = conn.lindex(
+                            _key('task', task['id'], 'executions'), -1)
+                        if execution:
+                            execution = json.loads(execution)
+                            exception_name = execution.get('exception_name')
+                            if exception_name in task['retry_on']:
+                                should_retry = True
+                    else:
+                        should_retry = True
+
+                queue_type = 'error'
+
+                when = time.time()
+
+                if should_retry:
+                    retry_func, retry_args = task['retry_method']
+                    retry_num = conn.llen(_key('task', task['id'], 'executions'))
+                    try:
+                        func = _func_from_serialized_name(retry_func)
+                    except (ValueError, ImportError, AttributeError):
+                        log.error('could not import retry function',
+                                  func=retry_func)
+                    else:
+                        try:
+                            when += func(retry_num, *retry_args)
+                        except StopRetry:
+                            pass
+                        else:
+                            queue_type = 'scheduled'
+
+                # Move task to the scheduled queue for retry, or move to error
+                # queue if we don't want to retry.
                 pipeline = conn.pipeline()
+                pipeline.zadd(_key(queue_type, queue), task_id, when)
+                pipeline.sadd(_key(queue_type), queue)
                 pipeline.zrem(_key('active', queue), task_id)
-                pipeline.zadd(_key('error', queue), task_id, now)
                 scripts.srem_if_not_exists(_key('active'), queue,
                         _key('active', queue), client=pipeline)
                 pipeline.execute()
