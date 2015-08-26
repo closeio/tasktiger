@@ -21,7 +21,7 @@ from redis_lock import Lock
 from tasktiger.retry import *
 from tasktiger.timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
-__all__ = ['configure', 'run_worker', 'task', 'delay',
+__all__ = ['task', 'TaskTiger', 'Worker',
 
            # Exceptions
            'JobTimeoutException', 'StopRetry',
@@ -51,13 +51,6 @@ ACTIVE_TASK_EXPIRED_BATCH_SIZE = 10
 
 # How many items to move at most from the scheduled queue to the active queue.
 SCHEDULED_TASK_BATCH_SIZE = 1000
-
-# After how many seconds time out on listening on the activity channel and
-# check for scheduled or expired items.
-SELECT_TIMEOUT = 1
-
-# After how many seconds a task that can't require a lock is retried.
-LOCK_RETRY = 1
 
 REDIS_PREFIX = 't'
 
@@ -97,17 +90,6 @@ CHANNEL <prefix>:activity
 Locks
 STRING <prefix>:lock:<lock_hash>
 """
-
-# TODO: migrate other config options to this (where it makes sense)
-_config = {
-    # If this is True, all tasks will be executed locally by blocking until the
-    # task returns. This is useful for testing purposes.
-    'ALWAYS_EAGER': False,
-
-    # If retry is True but no retry_method is specified for a given task, use
-    # the following default method.
-    'DEFAULT_RETRY_METHOD': fixed(60, 3),
-}
 
 # from rq
 def import_attribute(name):
@@ -158,169 +140,13 @@ def task(queue=None, hard_timeout=None, unique=None, lock=None, retry=None,
         return func
     return _wrap
 
-def delay(func, args=None, kwargs=None, queue=None, hard_timeout=None,
-          unique=None, lock=None, when=None, retry=None, retry_on=None,
-          retry_method=None):
-    """
-    Queues a task.
-
-    * func
-      Dotted path to the function that will be queued (e.g. module.func)
-
-    * args
-      List of arguments that will be passed to the function.
-
-    * kwargs
-      List of keyword arguments that will be passed to the function.
-
-    * queue
-      Name of the queue where the task will be queued.
-
-    * hard_timeout
-      If the task runs longer than the given number of seconds, it will be
-      killed and marked as failed.
-
-    * unique
-      The task will only be queued if there is no similar task with the same
-      function, arguments and keyword arguments in the queue. Note that
-      multiple similar tasks may still be executed at the same time since the
-      task will still be inserted into the queue if another one is being
-      processed.
-
-    * lock
-      Hold a lock while the task is being executed (with the given args and
-      kwargs). If a task with similar args/kwargs is queued and tries to
-      acquire the lock, it will be retried later.
-
-    * when
-      Takes either a datetime (for an absolute date) or a timedelta (relative
-      to now). If given, the task will be scheduled for the given time.
-
-    * retry
-      Whether to retry a task when it fails (either because of an exception or
-      because of a timeout). To restrict the list of failures, use retry_on.
-      Unless retry_method is given, the configured DEFAULT_RETRY_METHOD is
-      used.
-
-    * retry_on
-      If a list is given, it implies retry=True. Task will be only retried on
-      the given exceptions. To retry the task when a hard timeout occurs, use
-      JobTimeoutException.
-
-    * retry_method
-      If given, implies retry=True. Pass either:
-
-      * a function that takes the retry number as an argument, or,
-      * a tuple (f, args), where f takes the retry number as the first
-        argument, followed by the additional args.
-
-      The function needs to return the desired retry interval in seconds, or
-      raise StopRetry to stop retrying. The following built-in functions can be
-      passed for common scenarios and return the appropriate tuple:
-
-      * fixed(delay, max_retries)
-        Returns a method that returns the given delay or raises StopRetry
-        if the number of retries exceeds max_retries.
-
-      * linear(delay, increment, max_retries)
-        Like fixed, but starts off with the given delay and increments it by
-        the given increment after every retry.
-
-      * exponential(delay, factor, max_retries)
-        Like fixed, but starts off with the given delay and multiplies it by
-        the given factor after every retry.
-    """
-
-    global _config
-
-    if _config['ALWAYS_EAGER']:
-        if not args:
-            args = []
-        if not kwargs:
-            kwargs = {}
-        return func(*args, **kwargs)
-
-    serialized_name = _serialize_func_name(func)
-
-    if unique is None:
-        unique = getattr(func, '_task_unique', False)
-
-    if lock is None:
-        lock = getattr(func, '_task_lock', False)
-
-    if retry is None:
-        retry = getattr(func, '_task_retry', False)
-
-    if retry_on is None:
-        retry_on = getattr(func, '_task_retry_on', None)
-
-    if retry_method is None:
-        retry_method = getattr(func, '_task_retry_method', None)
-
-    if unique:
-        task_id = _gen_unique_id(serialized_name, args, kwargs)
-    else:
-        task_id = _gen_id()
-
-    if queue is None:
-        queue = getattr(func, '_task_queue', DEFAULT_QUEUE)
-
-    # convert timedelta to datetime
-    if isinstance(when, datetime.timedelta):
-        when = datetime.datetime.utcnow() + when
-
-    # convert to unixtime
-    if isinstance(when, datetime.datetime):
-        when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
-
-    now = time.time()
-    task = {
-        'id': task_id,
-        'func': serialized_name,
-        'time_last_queued': now,
-    }
-    if unique:
-        task['unique'] = True
-    if lock:
-        task['lock'] = True
-    if args:
-        task['args'] = args
-    if kwargs:
-        task['kwargs'] = kwargs
-    if hard_timeout:
-        task['hard_timeout'] = hard_timeout
-    if retry or retry_on or retry_method:
-        if not retry_method:
-            retry_method = _config['DEFAULT_RETRY_METHOD']
-
-        if callable(retry_method):
-            retry_method = (_serialize_func_name(retry_method), ())
-        else:
-            retry_method = (_serialize_func_name(retry_method[0]),
-                            retry_method[1])
-
-        task['retry_method'] = retry_method
-        if retry_on:
-            task['retry_on'] = [_serialize_func_name(cls) for cls in retry_on]
-
-    serialized_task = json.dumps(task)
-
-    if when:
-        queue_type = 'scheduled'
-    else:
-        queue_type = 'queued'
-
-    pipeline = conn.pipeline()
-    pipeline.sadd(_key(queue_type), queue)
-    pipeline.set(_key('task', task_id), serialized_task)
-    pipeline.zadd(_key(queue_type, queue), task_id, when or now)
-    if queue_type == 'queued':
-        pipeline.publish(_key('activity'), queue)
-    pipeline.execute()
 
 class Worker(object):
-    def __init__(self, logger, queues):
-        self.log = logger.bind(pid=os.getpid())
+    def __init__(self, tiger, queues=None):
+        self.log = tiger.log.bind(pid=os.getpid())
+        self.connection = tiger.connection
+        self.scripts = tiger.scripts
+        self.config = tiger.config
 
         # TODO: Also support wildcards in filter
         if queues:
@@ -348,26 +174,27 @@ class Worker(object):
             return queues
 
     def _worker_queue_scheduled_tasks(self):
-        queues = set(self._filter_queues(conn.smembers(_key('scheduled'))))
+        queues = set(self._filter_queues(self.connection.smembers(
+                _key('scheduled'))))
         now = time.time()
         for queue in queues:
             # Move due items from scheduled queue to active queue. If items
             # were moved, remove the queue from the scheduled set if it is
             # empty, and add it to the active set so the task gets picked up.
 
-            result = scripts.zpoppush(
+            result = self.scripts.zpoppush(
                 _key('scheduled', queue),
                 _key('queued', queue),
                 SCHEDULED_TASK_BATCH_SIZE,
                 now,
                 now,
-                on_success=('update_sets', _key('scheduled'), _key('active'), queue),
+                on_success=('update_sets', _key('scheduled'), _key('queued'), queue),
             )
 
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
-                conn.publish(_key('activity'), queue)
+                self.connection.publish(_key('activity'), queue)
 
     def _update_queue_set(self, timeout=None):
         """
@@ -395,10 +222,10 @@ class Worker(object):
                 break
 
     def _worker_queue_expired_tasks(self):
-        active_queues = conn.smembers(_key('active'))
+        active_queues = self.connection.smembers(_key('active'))
         now = time.time()
         for queue in active_queues:
-            result = scripts.zpoppush(
+            result = self.scripts.zpoppush(
                 _key('active', queue),
                 _key('queued', queue),
                 ACTIVE_TASK_EXPIRED_BATCH_SIZE,
@@ -409,7 +236,7 @@ class Worker(object):
             # XXX: Ideally this would be atomic with the operation above.
             if result:
                 self.log.info('queueing expired tasks', task_ids=result)
-                conn.publish(_key('activity'), queue)
+                self.connection.publish(_key('activity'), queue)
 
     def _execute_forked(self, task, log):
         success = False
@@ -442,13 +269,14 @@ class Worker(object):
             # Currently we only log failed task executions to Redis.
             execution['success'] = success
             serialized_execution = json.dumps(execution)
-            conn.rpush(_key('task', task['id'], 'executions'), serialized_execution)
+            self.connection.rpush(_key('task', task['id'], 'executions'),
+                                  serialized_execution)
 
         return success
 
     def _heartbeat(self, queue, task_id):
         now = time.time()
-        conn.zadd(_key('active', queue), task_id, now)
+        self.connection.zadd(_key('active', queue), task_id, now)
 
     def _execute(self, queue, task, log, lock):
         """
@@ -463,7 +291,7 @@ class Worker(object):
             # We need to reinitialize Redis' connection pool, otherwise the parent
             # socket will be disconnected by the Redis library.
             # TODO: We might only need this if the task fails.
-            pool = conn.connection_pool
+            pool = self.connection.connection_pool
             pool.__init__(pool.connection_class, pool.max_connections,
                           **pool.connection_kwargs)
 
@@ -497,7 +325,7 @@ class Worker(object):
         log = self.log.bind(queue=queue)
 
         # Move an item to the active queue, if available.
-        task_ids = scripts.zpoppush(
+        task_ids = self.scripts.zpoppush(
             _key('queued', queue),
             _key('active', queue),
             1,
@@ -513,7 +341,7 @@ class Worker(object):
 
             log = log.bind(task_id=task_id)
 
-            serialized_task = conn.get(_key('task', task_id))
+            serialized_task = self.connection.get(_key('task', task_id))
             if not serialized_task:
                 log.error('not found')
                 # Return the task ID since there may be more tasks.
@@ -535,10 +363,10 @@ class Worker(object):
 
                 # Reschedule the task
                 now = time.time()
-                when = now + LOCK_RETRY
-                pipeline = conn.pipeline()
+                when = now + self.config['LOCK_RETRY']
+                pipeline = self.connection.pipeline()
                 pipeline.zrem(_key('active', queue), task_id)
-                scripts.srem_if_not_exists(_key('active'), queue,
+                self.scripts.srem_if_not_exists(_key('active'), queue,
                         _key('active', queue), client=pipeline)
                 pipeline.sadd(_key('scheduled'), queue)
                 pipeline.zadd(_key('scheduled', queue), task_id, when)
@@ -553,17 +381,17 @@ class Worker(object):
 
             if success:
                 # Remove the task from active queue
-                pipeline = conn.pipeline()
+                pipeline = self.connection.pipeline()
                 pipeline.zrem(_key('active', queue), task_id)
                 if task.get('unique', False):
                     # Only delete if it's not in the error or queued queue.
-                    scripts.delete_if_not_in_zsets(_key('task', task_id), task_id, [
+                    self.scripts.delete_if_not_in_zsets(_key('task', task_id), task_id, [
                         _key('queued', queue),
                         _key('error', queue)
                     ], client=pipeline)
                 else:
                     pipeline.delete(_key('task', task_id))
-                scripts.srem_if_not_exists(_key('active'), queue,
+                self.scripts.srem_if_not_exists(_key('active'), queue,
                         _key('active', queue), client=pipeline)
                 pipeline.execute()
                 log.debug('done')
@@ -572,7 +400,7 @@ class Worker(object):
                 # Get execution info
                 if 'retry_method' in task:
                     if 'retry_on' in task:
-                        execution = conn.lindex(
+                        execution = self.connection.lindex(
                             _key('task', task['id'], 'executions'), -1)
                         if execution:
                             execution = json.loads(execution)
@@ -588,7 +416,7 @@ class Worker(object):
 
                 if should_retry:
                     retry_func, retry_args = task['retry_method']
-                    retry_num = conn.llen(_key('task', task['id'], 'executions'))
+                    retry_num = self.connection.llen(_key('task', task['id'], 'executions'))
                     try:
                         func = _func_from_serialized_name(retry_func)
                     except (ValueError, ImportError, AttributeError):
@@ -604,11 +432,11 @@ class Worker(object):
 
                 # Move task to the scheduled queue for retry, or move to error
                 # queue if we don't want to retry.
-                pipeline = conn.pipeline()
+                pipeline = self.connection.pipeline()
                 pipeline.zadd(_key(queue_type, queue), task_id, when)
                 pipeline.sadd(_key(queue_type), queue)
                 pipeline.zrem(_key('active', queue), task_id)
-                scripts.srem_if_not_exists(_key('active'), queue,
+                self.scripts.srem_if_not_exists(_key('active'), queue,
                         _key('active', queue), client=pipeline)
                 pipeline.execute()
                 log.error('error')
@@ -637,33 +465,249 @@ class Worker(object):
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
 
-    def run(self):
+    def run(self, once=False):
+        """
+        Main loop of the worker. Use once=True to execute any queued tasks and
+        then exit.
+        """
+
         self.log.info('ready', queues=self.queue_filter)
 
         # First scan all the available queues for new items until they're empty.
         # Then, listen to the activity channel.
         # XXX: This can get inefficient when having lots of queues.
 
-        self._pubsub = conn.pubsub()
+        self._pubsub = self.connection.pubsub()
         self._pubsub.subscribe(_key('activity'))
 
-        self._queue_set = set(self._filter_queues(conn.smembers(_key('queued'))))
+        self._queue_set = set(self._filter_queues(
+                self.connection.smembers(_key('queued'))))
 
         try:
             while True:
                 if not self._queue_set:
-                    self._update_queue_set(timeout=SELECT_TIMEOUT)
+                    self._update_queue_set(
+                            timeout=self.config['SELECT_TIMEOUT'])
 
                 self._install_signal_handlers()
                 queue_set = self._worker_run()
                 self._uninstall_signal_handlers()
-                #if not queue_set:
-                #    break
+                if once and not queue_set:
+                    break
                 if self._stop_requested:
                     raise KeyboardInterrupt()
         except KeyboardInterrupt:
             pass
         self.log.info('done')
+
+class TaskTiger(object):
+    def __init__(self, connection=None, config=None):
+        # TODO: migrate other config options to this (where it makes sense)
+        self.config = {
+
+            # After how many seconds time out on listening on the activity
+            # channel and check for scheduled or expired items.
+            'SELECT_TIMEOUT': 1,
+
+            # If this is True, all tasks will be executed locally by blocking
+            # until the task returns. This is useful for testing purposes.
+            'ALWAYS_EAGER': False,
+
+            # If retry is True but no retry_method is specified for a given
+            # task, use the following default method.
+            'DEFAULT_RETRY_METHOD': fixed(60, 3),
+
+            # After how many seconds a task that can't require a lock is
+            # retried.
+            'LOCK_RETRY': 1,
+        }
+        if config:
+            self.config.update(config)
+
+        self.connection = connection or redis.Redis()
+        self.scripts = RedisScripts(self.connection)
+        self.log = structlog.get_logger(
+            LOGGER_NAME,
+        ).bind()
+
+    def run_worker(self, **kwargs):
+        """
+        Main worker entry point method.
+        """
+
+        self.log.setLevel(logging.DEBUG)
+        logging.basicConfig(format='%(message)s')
+
+        module_names = kwargs.pop('module') or ''
+        for module_name in module_names.split(','):
+            module_name = module_name.strip()
+            if module_name:
+                importlib.import_module(module_name)
+                self.log.debug('imported module', module_name=module_name)
+
+        worker = Worker(self, **kwargs)
+        worker.run()
+
+    def delay(self, func, args=None, kwargs=None, queue=None,
+              hard_timeout=None, unique=None, lock=None, when=None,
+              retry=None, retry_on=None, retry_method=None):
+        """
+        Queues a task.
+
+        * func
+          Dotted path to the function that will be queued (e.g. module.func)
+
+        * args
+          List of arguments that will be passed to the function.
+
+        * kwargs
+          List of keyword arguments that will be passed to the function.
+
+        * queue
+          Name of the queue where the task will be queued.
+
+        * hard_timeout
+          If the task runs longer than the given number of seconds, it will be
+          killed and marked as failed.
+
+        * unique
+          The task will only be queued if there is no similar task with the
+          same function, arguments and keyword arguments in the queue. Note
+          that multiple similar tasks may still be executed at the same time
+          since the task will still be inserted into the queue if another one
+          is being processed.
+
+        * lock
+          Hold a lock while the task is being executed (with the given args and
+          kwargs). If a task with similar args/kwargs is queued and tries to
+          acquire the lock, it will be retried later.
+
+        * when
+          Takes either a datetime (for an absolute date) or a timedelta
+          (relative to now). If given, the task will be scheduled for the given
+          time.
+
+        * retry
+          Whether to retry a task when it fails (either because of an exception
+          or because of a timeout). To restrict the list of failures, use
+          retry_on. Unless retry_method is given, the configured
+          DEFAULT_RETRY_METHOD is used.
+
+        * retry_on
+          If a list is given, it implies retry=True. Task will be only retried
+          on the given exceptions. To retry the task when a hard timeout
+          occurs, use JobTimeoutException.
+
+        * retry_method
+          If given, implies retry=True. Pass either:
+
+          * a function that takes the retry number as an argument, or,
+          * a tuple (f, args), where f takes the retry number as the first
+            argument, followed by the additional args.
+
+          The function needs to return the desired retry interval in seconds,
+          or raise StopRetry to stop retrying. The following built-in functions
+          can be passed for common scenarios and return the appropriate tuple:
+
+          * fixed(delay, max_retries)
+            Returns a method that returns the given delay or raises StopRetry
+            if the number of retries exceeds max_retries.
+
+          * linear(delay, increment, max_retries)
+            Like fixed, but starts off with the given delay and increments it
+            by the given increment after every retry.
+
+          * exponential(delay, factor, max_retries)
+            Like fixed, but starts off with the given delay and multiplies it
+            by the given factor after every retry.
+        """
+
+        if self.config['ALWAYS_EAGER']:
+            if not args:
+                args = []
+            if not kwargs:
+                kwargs = {}
+            return func(*args, **kwargs)
+
+        serialized_name = _serialize_func_name(func)
+
+        if unique is None:
+            unique = getattr(func, '_task_unique', False)
+
+        if lock is None:
+            lock = getattr(func, '_task_lock', False)
+
+        if retry is None:
+            retry = getattr(func, '_task_retry', False)
+
+        if retry_on is None:
+            retry_on = getattr(func, '_task_retry_on', None)
+
+        if retry_method is None:
+            retry_method = getattr(func, '_task_retry_method', None)
+
+        if unique:
+            task_id = _gen_unique_id(serialized_name, args, kwargs)
+        else:
+            task_id = _gen_id()
+
+        if queue is None:
+            queue = getattr(func, '_task_queue', DEFAULT_QUEUE)
+
+        # convert timedelta to datetime
+        if isinstance(when, datetime.timedelta):
+            when = datetime.datetime.utcnow() + when
+
+        # convert to unixtime
+        if isinstance(when, datetime.datetime):
+            when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+
+        now = time.time()
+        task = {
+            'id': task_id,
+            'func': serialized_name,
+            'time_last_queued': now,
+        }
+        if unique:
+            task['unique'] = True
+        if lock:
+            task['lock'] = True
+        if args:
+            task['args'] = args
+        if kwargs:
+            task['kwargs'] = kwargs
+        if hard_timeout:
+            task['hard_timeout'] = hard_timeout
+        if retry or retry_on or retry_method:
+            if not retry_method:
+                retry_method = self.config['DEFAULT_RETRY_METHOD']
+
+            if callable(retry_method):
+                retry_method = (_serialize_func_name(retry_method), ())
+            else:
+                retry_method = (_serialize_func_name(retry_method[0]),
+                                retry_method[1])
+
+            task['retry_method'] = retry_method
+            if retry_on:
+                task['retry_on'] = [_serialize_func_name(cls)
+                                    for cls in retry_on]
+
+        serialized_task = json.dumps(task)
+
+        if when:
+            queue_type = 'scheduled'
+        else:
+            queue_type = 'queued'
+
+        pipeline = self.connection.pipeline()
+        pipeline.sadd(_key(queue_type), queue)
+        pipeline.set(_key('task', task_id), serialized_task)
+        pipeline.zadd(_key(queue_type, queue), task_id, when or now)
+        if queue_type == 'queued':
+            pipeline.publish(_key('activity'), queue)
+        pipeline.execute()
+
 
 @click.command()
 @click.option('-q', '--queues', help='If specified, only the given queue(s) '
@@ -676,35 +720,8 @@ class Worker(object):
                                      "Multiple modules can be separated by "
                                      "comma.")
 def run_worker(**kwargs):
-    """
-    Main worker entry point method.
-    """
-
-    logger = structlog.get_logger(
-        LOGGER_NAME,
-    )
-    logger.setLevel(logging.DEBUG)
-    logging.basicConfig(format='%(message)s')
-
-    module_names = kwargs.pop('module') or ''
-    for module_name in module_names.split(','):
-        module_name = module_name.strip()
-        if module_name:
-            importlib.import_module(module_name)
-            logger.debug('imported module', module_name=module_name)
-
-    worker = Worker(logger=logger, **kwargs)
-    worker.run()
-
-def configure(**kwargs):
-    """
-    Configures tasktiger and returns the current (updated) configuration.
-    """
-
-    global _config
-    _config.update(**kwargs)
-    return _config
-
+    # TODO: figure out a better way for this.
+    TaskTiger().run_worker(**kwargs)
 
 if __name__ == '__main__':
     structlog.configure(

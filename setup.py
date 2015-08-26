@@ -6,8 +6,8 @@ setup(
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
-    #test_suite='tests',
-    #tests_require=['redis'],
+    test_suite='tests',
+    tests_require=['redis'],
     platforms='any',
     classifiers=[
         'Intended Audience :: Developers',

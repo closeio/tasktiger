@@ -56,7 +56,7 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         seconds).
         """
         signal.signal(signal.SIGALRM, self.handle_death_penalty)
-        signal.alarm(self._timeout)
+        signal.setitimer(signal.ITIMER_REAL, self._timeout)
 
     def cancel_death_penalty(self):
         """Removes the death penalty alarm and puts back the system into
