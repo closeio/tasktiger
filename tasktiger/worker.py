@@ -50,7 +50,7 @@ class Worker(object):
 
     def _worker_queue_scheduled_tasks(self):
         queues = set(self._filter_queues(self.connection.smembers(
-                self._key('scheduled'))))
+                self._key(SCHEDULED))))
         now = time.time()
         for queue in queues:
             # Move due items from scheduled queue to active queue. If items
@@ -58,12 +58,12 @@ class Worker(object):
             # empty, and add it to the active set so the task gets picked up.
 
             result = self.scripts.zpoppush(
-                self._key('scheduled', queue),
-                self._key('queued', queue),
+                self._key(SCHEDULED, queue),
+                self._key(QUEUED, queue),
                 self.config['SCHEDULED_TASK_BATCH_SIZE'],
                 now,
                 now,
-                on_success=('update_sets', self._key('scheduled'), self._key('queued'), queue),
+                on_success=('update_sets', self._key(SCHEDULED), self._key(QUEUED), queue),
             )
 
             # XXX: ideally this would be in the same pipeline, but we only want
@@ -97,16 +97,16 @@ class Worker(object):
                 break
 
     def _worker_queue_expired_tasks(self):
-        active_queues = self.connection.smembers(self._key('active'))
+        active_queues = self.connection.smembers(self._key(ACTIVE))
         now = time.time()
         for queue in active_queues:
             result = self.scripts.zpoppush(
-                self._key('active', queue),
-                self._key('queued', queue),
+                self._key(ACTIVE, queue),
+                self._key(QUEUED, queue),
                 self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
                 now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
                 now,
-                on_success=('update_sets', self._key('active'), self._key('queued'), queue),
+                on_success=('update_sets', self._key(ACTIVE), self._key(QUEUED), queue),
             )
             # XXX: Ideally this would be atomic with the operation above.
             if result:
@@ -151,7 +151,7 @@ class Worker(object):
 
     def _heartbeat(self, queue, task_id):
         now = time.time()
-        self.connection.zadd(self._key('active', queue), task_id, now)
+        self.connection.zadd(self._key(ACTIVE, queue), task_id, now)
 
     def _execute(self, queue, task, log, lock):
         """
@@ -201,12 +201,12 @@ class Worker(object):
 
         # Move an item to the active queue, if available.
         task_ids = self.scripts.zpoppush(
-            self._key('queued', queue),
-            self._key('active', queue),
+            self._key(QUEUED, queue),
+            self._key(ACTIVE, queue),
             1,
             None,
             now,
-            on_success=('update_sets', self._key('queued'), self._key('active'), queue),
+            on_success=('update_sets', self._key(QUEUED), self._key(ACTIVE), queue),
         )
 
         assert len(task_ids) < 2
@@ -240,11 +240,11 @@ class Worker(object):
                 now = time.time()
                 when = now + self.config['LOCK_RETRY']
                 pipeline = self.connection.pipeline()
-                pipeline.zrem(self._key('active', queue), task_id)
-                self.scripts.srem_if_not_exists(self._key('active'), queue,
-                        self._key('active', queue), client=pipeline)
-                pipeline.sadd(self._key('scheduled'), queue)
-                pipeline.zadd(self._key('scheduled', queue), task_id, when)
+                pipeline.zrem(self._key(ACTIVE, queue), task_id)
+                self.scripts.srem_if_not_exists(self._key(ACTIVE), queue,
+                        self._key(ACTIVE, queue), client=pipeline)
+                pipeline.sadd(self._key(SCHEDULED), queue)
+                pipeline.zadd(self._key(SCHEDULED, queue), task_id, when)
                 pipeline.execute()
 
                 return task_id
@@ -257,17 +257,17 @@ class Worker(object):
             if success:
                 # Remove the task from active queue
                 pipeline = self.connection.pipeline()
-                pipeline.zrem(self._key('active', queue), task_id)
+                pipeline.zrem(self._key(ACTIVE, queue), task_id)
                 if task.get('unique', False):
                     # Only delete if it's not in the error or queued queue.
                     self.scripts.delete_if_not_in_zsets(self._key('task', task_id), task_id, [
-                        self._key('queued', queue),
-                        self._key('error', queue)
+                        self._key(QUEUED, queue),
+                        self._key(ERROR, queue)
                     ], client=pipeline)
                 else:
                     pipeline.delete(self._key('task', task_id))
-                self.scripts.srem_if_not_exists(self._key('active'), queue,
-                        self._key('active', queue), client=pipeline)
+                self.scripts.srem_if_not_exists(self._key(ACTIVE), queue,
+                        self._key(ACTIVE, queue), client=pipeline)
                 pipeline.execute()
                 log.debug('done')
             else:
@@ -288,7 +288,7 @@ class Worker(object):
                     else:
                         should_retry = True
 
-                queue_type = 'error'
+                queue_type = ERROR
 
                 when = time.time()
 
@@ -306,16 +306,16 @@ class Worker(object):
                         except StopRetry:
                             pass
                         else:
-                            queue_type = 'scheduled'
+                            queue_type = SCHEDULED
 
                 # Move task to the scheduled queue for retry, or move to error
                 # queue if we don't want to retry.
                 pipeline = self.connection.pipeline()
                 pipeline.zadd(self._key(queue_type, queue), task_id, when)
                 pipeline.sadd(self._key(queue_type), queue)
-                pipeline.zrem(self._key('active', queue), task_id)
-                self.scripts.srem_if_not_exists(self._key('active'), queue,
-                        self._key('active', queue), client=pipeline)
+                pipeline.zrem(self._key(ACTIVE, queue), task_id)
+                self.scripts.srem_if_not_exists(self._key(ACTIVE), queue,
+                        self._key(ACTIVE, queue), client=pipeline)
                 pipeline.execute()
                 log.error('error')
 
@@ -359,7 +359,7 @@ class Worker(object):
         self._pubsub.subscribe(self._key('activity'))
 
         self._queue_set = set(self._filter_queues(
-                self.connection.smembers(self._key('queued'))))
+                self.connection.smembers(self._key(QUEUED))))
 
         try:
             while True:

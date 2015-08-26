@@ -317,15 +317,15 @@ class TaskTiger(object):
         serialized_task = json.dumps(task)
 
         if when:
-            queue_type = 'scheduled'
+            queue_type = SCHEDULED
         else:
-            queue_type = 'queued'
+            queue_type = QUEUED
 
         pipeline = self.connection.pipeline()
         pipeline.sadd(self._key(queue_type), queue)
         pipeline.set(self._key('task', task_id), serialized_task)
         pipeline.zadd(self._key(queue_type, queue), task_id, when or now)
-        if queue_type == 'queued':
+        if queue_type == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
 

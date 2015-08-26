@@ -3,6 +3,12 @@ import hashlib
 import json
 import os
 
+# Queue types
+QUEUED = 'queued'
+ACTIVE = 'active'
+SCHEDULED = 'scheduled'
+ERROR = 'error'
+
 # from rq
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
