@@ -32,8 +32,6 @@ __all__ = ['task', 'TaskTiger', 'Worker',
 conn = redis.Redis()
 scripts = RedisScripts(conn)
 
-LOGGER_NAME = 'tasktiger'
-
 # Where to queue tasks that don't have an explicit queue
 DEFAULT_QUEUE = 'default'
 
@@ -119,27 +117,6 @@ def _func_from_serialized_name(serialized_name):
 
 def _key(*parts):
     return ':'.join([REDIS_PREFIX] + list(parts))
-
-def task(queue=None, hard_timeout=None, unique=None, lock=None, retry=None,
-         retry_on=None, retry_method=None):
-    def _wrap(func):
-        if hard_timeout is not None:
-            func._task_hard_timeout = hard_timeout
-        if queue is not None:
-            func._task_queue = queue
-        if unique is not None:
-            func._task_unique = True
-        if lock is not None:
-            func._task_lock = True
-        if retry is not None:
-            func._task_retry = retry
-        if retry_on is not None:
-            func._task_retry_on = retry_on
-        if retry_method is not None:
-            func._task_retry_method = retry_method
-        return func
-    return _wrap
-
 
 class Worker(object):
     def __init__(self, tiger, queues=None):
@@ -505,8 +482,15 @@ class Worker(object):
 
 class TaskTiger(object):
     def __init__(self, connection=None, config=None):
+        """
+        Initializes TaskTiger with the given Redis connection and config
+        options.
+        """
+
         # TODO: migrate other config options to this (where it makes sense)
         self.config = {
+            # Name of the Python (structlog) logger
+            'LOGGER_NAME': 'tasktiger',
 
             # After how many seconds time out on listening on the activity
             # channel and check for scheduled or expired items.
@@ -530,8 +514,35 @@ class TaskTiger(object):
         self.connection = connection or redis.Redis()
         self.scripts = RedisScripts(self.connection)
         self.log = structlog.get_logger(
-            LOGGER_NAME,
+            self.config['LOGGER_NAME'],
         ).bind()
+
+    def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
+             retry=None, retry_on=None, retry_method=None):
+        """
+        Function decorator that defines the behavior of the function when it is
+        used as a task. To use the default behavior, tasks don't need to be
+        decorated. All the arguments are described in the delay() method.
+        """
+
+        def _wrap(func):
+            if hard_timeout is not None:
+                func._task_hard_timeout = hard_timeout
+            if queue is not None:
+                func._task_queue = queue
+            if unique is not None:
+                func._task_unique = True
+            if lock is not None:
+                func._task_lock = True
+            if retry is not None:
+                func._task_retry = retry
+            if retry_on is not None:
+                func._task_retry_on = retry_on
+            if retry_method is not None:
+                func._task_retry_method = retry_method
+            return func
+        return _wrap
+
 
     def run_worker(self, **kwargs):
         """
