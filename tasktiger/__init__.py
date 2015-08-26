@@ -405,8 +405,11 @@ class Worker(object):
                         if execution:
                             execution = json.loads(execution)
                             exception_name = execution.get('exception_name')
-                            if exception_name in task['retry_on']:
-                                should_retry = True
+                            exception_class = _func_from_serialized_name(exception_name)
+                            for n in task['retry_on']:
+                                if issubclass(exception_class, _func_from_serialized_name(n)):
+                                    should_retry = True
+                                    break
                     else:
                         should_retry = True
 
@@ -595,8 +598,8 @@ class TaskTiger(object):
 
         * retry_on
           If a list is given, it implies retry=True. Task will be only retried
-          on the given exceptions. To retry the task when a hard timeout
-          occurs, use JobTimeoutException.
+          on the given exceptions (or its subclasses). To retry the task when a
+          hard timeout occurs, use JobTimeoutException.
 
         * retry_method
           If given, implies retry=True. Pass either:

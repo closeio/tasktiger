@@ -24,6 +24,8 @@ def get_tiger():
         'SELECT_TIMEOUT': 0,
 
         'LOCK_RETRY': DELAY*2.,
+
+        'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger
@@ -251,6 +253,129 @@ class TestCase(unittest.TestCase):
         self._ensure_queues(queued={'default': 0},
                             scheduled={'default': 0},
                             error={'default': 0})
+
+    def test_retry(self):
+        # Use the default retry method we configured.
+        self.tiger.delay(exception_task, retry=True)
+        queues = self._ensure_queues(queued={'default': 1},
+                                     scheduled={'default': 0},
+                                     error={'default': 0})
+        task = queues['queued']['default'][0]
+
+        # First run
+        Worker(self.tiger).run(once=True)
+        self.assertEqual(self.conn.llen('t:task:%s:executions' % task['id']), 1)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+        # The task is scheduled, so nothing happens here.
+        Worker(self.tiger).run(once=True)
+        self.assertEqual(self.conn.llen('t:task:%s:executions' % task['id']), 1)
+
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+        time.sleep(DELAY)
+
+        # Second run (run twice to move from scheduled to queued)
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self.assertEqual(self.conn.llen('t:task:%s:executions' % task['id']), 2)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+        time.sleep(DELAY)
+
+        # Third run will fail permanently.
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self.assertEqual(self.conn.llen('t:task:%s:executions' % task['id']), 3)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 0},
+                            error={'default': 1})
+
+    def test_retry_on_1(self):
+        # Fails immediately
+        self.tiger.delay(exception_task, retry_on=[ValueError, IndexError])
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 0},
+                            error={'default': 1})
+
+    def test_retry_on_2(self):
+        # Will be retried
+        self.tiger.delay(exception_task, retry_on=[ValueError, StandardError])
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+    def test_retry_on_3(self):
+        # Make sure we catch superclasses.
+        self.tiger.delay(exception_task, retry_on=[Exception])
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+    def test_retry_method(self):
+        self.tiger.delay(exception_task, retry_method=linear(DELAY, DELAY, 3))
+
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+
+        def _run(n_executions):
+            Worker(self.tiger).run(once=True)
+            Worker(self.tiger).run(once=True)
+            self.assertEqual(self.conn.llen('t:task:%s:executions'%task['id']),
+                    n_executions)
+
+        _run(1)
+
+        # Retry in 1*DELAY
+        time.sleep(DELAY)
+        _run(2)
+
+        # Retry in 2*DELAY
+        time.sleep(DELAY)
+        _run(2)
+        time.sleep(DELAY)
+        _run(3)
+
+        # Retry in 3*DELAY
+        time.sleep(DELAY)
+        _run(3)
+        time.sleep(DELAY)
+        _run(3)
+        time.sleep(DELAY)
+        _run(4)
+
+        self._ensure_queues(error={'default': 1})
+
+    def test_retry_method_fixed(self):
+        f = fixed(2, 3)
+        self.assertEqual(f[0](1, *f[1]), 2)
+        self.assertEqual(f[0](2, *f[1]), 2)
+        self.assertEqual(f[0](3, *f[1]), 2)
+        self.assertRaises(StopRetry, f[0], 4, *f[1])
+
+    def test_retry_method_linear(self):
+        f = linear(1, 2, 3)
+        self.assertEqual(f[0](1, *f[1]), 1)
+        self.assertEqual(f[0](2, *f[1]), 3)
+        self.assertEqual(f[0](3, *f[1]), 5)
+        self.assertRaises(StopRetry, f[0], 4, *f[1])
+
+    def test_retry_method_exponential(self):
+        f = exponential(1, 2, 4)
+        self.assertEqual(f[0](1, *f[1]), 1)
+        self.assertEqual(f[0](2, *f[1]), 2)
+        self.assertEqual(f[0](3, *f[1]), 4)
+        self.assertEqual(f[0](4, *f[1]), 8)
+        self.assertRaises(StopRetry, f[0], 5, *f[1])
 
 if __name__ == '__main__':
     unittest.main()
