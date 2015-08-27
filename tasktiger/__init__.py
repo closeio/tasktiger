@@ -67,7 +67,6 @@ class TaskTiger(object):
         options.
         """
 
-        # TODO: migrate other config options to this (where it makes sense)
         self.config = {
             # String that is used to prefix all Redis keys
             'REDIS_PREFIX': 't',
