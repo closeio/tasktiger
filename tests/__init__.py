@@ -1,39 +1,14 @@
 import datetime
 import json
-import logging
 from multiprocessing import Pool
-import structlog
-import redis
 from tasktiger import *
 import tempfile
 import time
 import unittest
+
 from .config import *
 from .tasks import *
-
-def get_tiger():
-    structlog.configure(
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-    )
-    logging.basicConfig(format='%(message)s')
-    conn = redis.Redis(db=TEST_DB)
-    tiger = TaskTiger(connection=conn, config={
-        # We need this 0 here so we don't pick up scheduled tasks when
-        # doing a single worker run.
-        'SELECT_TIMEOUT': 0,
-
-        'LOCK_RETRY': DELAY*2.,
-
-        'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
-    })
-    tiger.log.setLevel(logging.CRITICAL)
-    return tiger
-
-def external_worker(n=None):
-    tiger = get_tiger()
-    worker = Worker(tiger)
-    worker.run(once=True)
+from .utils import *
 
 class TestCase(unittest.TestCase):
     """
@@ -86,13 +61,23 @@ class TestCase(unittest.TestCase):
         self._ensure_queues(queued={'default': 0})
         self.assertFalse(self.conn.exists('t:task:%s' % task['id']))
 
+    def test_task_delay(self):
+        decorated_task.delay(1, 2, a=3, b=4)
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        self.assertEqual(task['func'], 'tests.tasks.decorated_task')
+        self.assertEqual(task['args'], [1, 2])
+        self.assertEqual(task['kwargs'], {'a': 3, 'b': 4})
+
     def test_file_args_task(self):
         # Use a temp file to communicate since we're forking.
         tmpfile = tempfile.NamedTemporaryFile()
         worker = Worker(self.tiger)
 
         self.tiger.delay(file_args_task, args=(tmpfile.name,))
-        self._ensure_queues(queued={'default': 1})
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        self.assertEqual(task['func'], 'tests.tasks.file_args_task')
 
         worker.run(once=True)
         self._ensure_queues(queued={'default': 0})

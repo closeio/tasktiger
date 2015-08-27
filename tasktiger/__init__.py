@@ -122,7 +122,6 @@ class TaskTiger(object):
     def _key(self, *parts):
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
-    @classmethod
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
              retry=None, retry_on=None, retry_method=None):
         """
@@ -130,6 +129,11 @@ class TaskTiger(object):
         used as a task. To use the default behavior, tasks don't need to be
         decorated. All the arguments are described in the delay() method.
         """
+
+        def _delay(func):
+            def _delay_inner(*args, **kwargs):
+                self.delay(func, args=args, kwargs=kwargs)
+            return _delay_inner
 
         def _wrap(func):
             if hard_timeout is not None:
@@ -146,7 +150,11 @@ class TaskTiger(object):
                 func._task_retry_on = retry_on
             if retry_method is not None:
                 func._task_retry_method = retry_method
+
+            func.delay = _delay(func)
+
             return func
+
         return _wrap
 
     def run_worker_with_args(self, args):
@@ -326,9 +334,6 @@ class TaskTiger(object):
         if queue_type == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
-
-# Currently it's not necessary to have a TaskTiger instance to define a task.
-task = TaskTiger.task
 
 @click.command()
 @click.option('-q', '--queues', help='If specified, only the given queue(s) '
