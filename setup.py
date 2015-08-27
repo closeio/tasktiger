@@ -17,4 +17,12 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
     ],
+    packages=[
+        'tasktiger',
+    ],
+    entry_points={
+        'console_scripts': [
+            'tasktiger = tasktiger:run_worker',
+        ],
+    },
 )

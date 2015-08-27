@@ -150,23 +150,22 @@ class TaskTiger(object):
             return func
         return _wrap
 
+    def run_worker_with_args(self, args):
+        run_worker(args=args, obj=self)
 
-    def run_worker(self, **kwargs):
+    def run_worker(self, queues=None, module=None):
         """
         Main worker entry point method.
         """
 
-        self.log.setLevel(logging.DEBUG)
-        logging.basicConfig(format='%(message)s')
-
-        module_names = kwargs.pop('module') or ''
+        module_names = module or ''
         for module_name in module_names.split(','):
             module_name = module_name.strip()
             if module_name:
                 importlib.import_module(module_name)
                 self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self, **kwargs)
+        worker = Worker(self, queues)
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,
@@ -329,6 +328,8 @@ class TaskTiger(object):
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
 
+# Currently it's not necessary to have a TaskTiger instance to define a task.
+task = TaskTiger.task
 
 @click.command()
 @click.option('-q', '--queues', help='If specified, only the given queue(s) '
@@ -340,14 +341,9 @@ class TaskTiger(object):
                                      "reimported every time a task is forked. "
                                      "Multiple modules can be separated by "
                                      "comma.")
-def run_worker(**kwargs):
-    # TODO: figure out a better way for this.
-    TaskTiger().run_worker(**kwargs)
-
-# Currently it's not necessary to have a TaskTiger instance to define a task.
-task = TaskTiger.task
-
-if __name__ == '__main__':
+@click.pass_context
+def run_worker(context, **kwargs):
+    # TODO: Make Redis settings configurable via click.
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
@@ -362,5 +358,7 @@ if __name__ == '__main__':
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
-
-    run_worker()
+    tiger = context.obj or TaskTiger()
+    tiger.log.setLevel(logging.DEBUG)
+    logging.basicConfig(format='%(message)s')
+    tiger.run_worker(**kwargs)
