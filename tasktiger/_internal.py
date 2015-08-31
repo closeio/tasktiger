@@ -4,6 +4,7 @@ import json
 import os
 
 # Queue types
+# Note some client code may rely on the string values (e.g. get_queue_stats).
 QUEUED = 'queued'
 ACTIVE = 'active'
 SCHEDULED = 'scheduled'

@@ -1,5 +1,6 @@
 import calendar
 import click
+from collections import defaultdict
 import datetime
 import importlib
 import json
@@ -334,6 +335,36 @@ class TaskTiger(object):
         if queue_type == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
+
+    def get_queue_stats(self):
+        """
+        Returns a dict with stats about all the queues. The keys are the queue
+        names, the values are dicts representing how many tasks are in a given
+        status ("queued", "active", "error" or "scheduled").
+
+        Example return value:
+        { "default": { "queued": 1, "error": 2 } }
+        """
+
+        types = (QUEUED, ACTIVE, SCHEDULED, ERROR)
+
+        pipeline = self.connection.pipeline()
+        for typ in types:
+            pipeline.smembers(self._key(typ))
+        queue_results = pipeline.execute()
+
+        pipeline = self.connection.pipeline()
+        for typ, result in zip(types, queue_results):
+            for queue in result:
+                pipeline.zcard(self._key(typ, queue))
+        card_results = pipeline.execute()
+
+        queue_stats = defaultdict(dict)
+        for typ, result in zip(types, queue_results):
+            for queue in result:
+                queue_stats[queue][typ] = card_results.pop(0)
+
+        return queue_stats
 
 @click.command()
 @click.option('-q', '--queues', help='If specified, only the given queue(s) '
