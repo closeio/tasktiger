@@ -177,7 +177,8 @@ class Worker(object):
         else:
             # Main process
             log = log.bind(child_pid=child_pid)
-            log.debug('processing')
+            log.debug('processing', func=task['func'],
+                      args=task.get('args', []), kwargs=task.get('kwargs', {}))
             while True:
                 try:
                     with UnixSignalDeathPenalty(self.config['ACTIVE_TASK_UPDATE_TIMER']):
