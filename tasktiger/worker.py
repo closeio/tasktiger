@@ -135,7 +135,6 @@ class Worker(object):
             except Exception, exc:
                 execution['traceback'] = traceback.format_exc()
                 execution['exception_name'] = serialize_func_name(exc.__class__)
-                log.error(traceback=execution['traceback'])
                 execution['time_failed'] = time.time()
             else:
                 success = True
@@ -161,6 +160,7 @@ class Worker(object):
         # Adapted from rq Worker.execute_job / Worker.main_work_horse
         child_pid = os.fork()
         if child_pid == 0:
+            # Child process
             log = log.bind(child_pid=os.getpid())
 
             # We need to reinitialize Redis' connection pool, otherwise the parent
@@ -175,9 +175,9 @@ class Worker(object):
             success = self._execute_forked(task, log)
             os._exit(int(not success))
         else:
+            # Main process
             log = log.bind(child_pid=child_pid)
             log.debug('processing')
-            # Main process
             while True:
                 try:
                     with UnixSignalDeathPenalty(self.config['ACTIVE_TASK_UPDATE_TIMER']):
@@ -272,13 +272,14 @@ class Worker(object):
                 log.debug('done')
             else:
                 should_retry = False
-                # Get execution info
+                # Get execution info (for logging and retry purposes)
+                execution = self.connection.lindex(
+                    self._key('task', task['id'], 'executions'), -1)
+                if execution:
+                    execution = json.loads(execution)
                 if 'retry_method' in task:
                     if 'retry_on' in task:
-                        execution = self.connection.lindex(
-                            self._key('task', task['id'], 'executions'), -1)
                         if execution:
-                            execution = json.loads(execution)
                             exception_name = execution.get('exception_name')
                             exception_class = import_attribute(exception_name)
                             for n in task['retry_on']:
@@ -292,9 +293,14 @@ class Worker(object):
 
                 when = time.time()
 
+                log_context = {}
+
                 if should_retry:
                     retry_func, retry_args = task['retry_method']
                     retry_num = self.connection.llen(self._key('task', task['id'], 'executions'))
+                    log_context['retry_func'] = retry_func
+                    log_context['retry_num'] = retry_num
+
                     try:
                         func = import_attribute(retry_func)
                     except (ValueError, ImportError, AttributeError):
@@ -302,11 +308,24 @@ class Worker(object):
                                   func=retry_func)
                     else:
                         try:
-                            when += func(retry_num, *retry_args)
+                            retry_delay = func(retry_num, *retry_args)
+                            log_context['retry_delay'] = retry_delay
+                            when += retry_delay
                         except StopRetry:
                             pass
                         else:
                             queue_type = SCHEDULED
+
+                if queue_type == ERROR:
+                    log_func = log.error
+                else:
+                    log_func = log.warning
+
+                log_func(func=task['func'],
+                         time_failed=execution['time_failed'],
+                         traceback=execution['traceback'],
+                         exception_name=execution['exception_name'],
+                         **log_context)
 
                 # Move task to the scheduled queue for retry, or move to error
                 # queue if we don't want to retry.
@@ -317,7 +336,6 @@ class Worker(object):
                 self.scripts.srem_if_not_exists(self._key(ACTIVE), queue,
                         self._key(ACTIVE, queue), client=pipeline)
                 pipeline.execute()
-                log.error('error')
 
             return task_id
 
