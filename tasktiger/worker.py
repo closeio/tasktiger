@@ -230,11 +230,11 @@ class Worker(object):
                     task['func'],
                     task.get('args', []),
                     task.get('kwargs', []),
-                )), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'], blocking=False)
+                )), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
             else:
                 lock = None
 
-            if lock and not lock.acquire():
+            if lock and not lock.acquire(blocking=False):
                 log.info('could not acquire lock')
 
                 # Reschedule the task
