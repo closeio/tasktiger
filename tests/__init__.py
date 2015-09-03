@@ -362,5 +362,95 @@ class TestCase(unittest.TestCase):
         self.assertEqual(f[0](4, *f[1]), 8)
         self.assertRaises(StopRetry, f[0], 5, *f[1])
 
+    def test_batch_1(self):
+        self.tiger.delay(batch_task, args=[1])
+        self.tiger.delay(batch_task, args=[2])
+        self.tiger.delay(batch_task, args=[3])
+        self.tiger.delay(batch_task, args=[4])
+        self._ensure_queues(queued={'batch': 4})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0})
+        data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
+        self.assertEqual(data, [
+            [
+                {'args': [1], 'kwargs': {}},
+                {'args': [2], 'kwargs': {}},
+                {'args': [3], 'kwargs': {}},
+            ], [
+                {'args': [4], 'kwargs': {}},
+            ]
+        ])
+
+    def test_batch_2(self):
+        self.tiger.delay(batch_task, args=[1])
+        self.tiger.delay(non_batch_task, args=[5])
+        self.tiger.delay(batch_task, args=[2])
+        self.tiger.delay(batch_task, args=[3])
+        self.tiger.delay(batch_task, args=[4])
+        self.tiger.delay(non_batch_task, args=[6])
+        self.tiger.delay(non_batch_task, args=[7])
+        self._ensure_queues(queued={'batch': 7})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0})
+        data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
+        self.assertEqual(data, [
+            [
+                {'args': [1], 'kwargs': {}},
+                {'args': [2], 'kwargs': {}},
+            ], 5, [
+                {'args': [3], 'kwargs': {}},
+                {'args': [4], 'kwargs': {}},
+            ], 6, 7
+        ])
+
+    def test_batch_3(self):
+        self.tiger.delay(batch_task, queue='default', args=[1])
+        self.tiger.delay(batch_task, queue='default', args=[2])
+        self.tiger.delay(batch_task, queue='default', args=[3])
+        self.tiger.delay(batch_task, queue='default', args=[4])
+        self._ensure_queues(queued={'default': 4})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0})
+        data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
+        self.assertEqual(data, [
+            [
+                {'args': [1], 'kwargs': {}},
+            ], [
+                {'args': [2], 'kwargs': {}},
+            ], [
+                {'args': [3], 'kwargs': {}},
+            ], [
+                {'args': [4], 'kwargs': {}},
+            ]
+        ])
+
+    def test_batch_exception_1(self):
+        self.tiger.delay(batch_task, args=[1])
+        self.tiger.delay(batch_task, args=[10])
+        self.tiger.delay(batch_task, args=[2])
+        self.tiger.delay(batch_task, args=[3])
+        self._ensure_queues(queued={'batch': 4})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0}, error={'batch': 3})
+
+    def test_batch_exception_2(self):
+        # If we queue non-batch tasks into a batch queue, we currently fail
+        # the entire batch for a specific task.
+        self.tiger.delay(non_batch_task, args=[1])
+        self.tiger.delay(non_batch_task, args=[10])
+        self.tiger.delay(non_batch_task, args=[2])
+        self.tiger.delay(non_batch_task, args=[3])
+        self._ensure_queues(queued={'batch': 4})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0}, error={'batch': 3})
+
+    def test_batch_exception_3(self):
+        self.tiger.delay(batch_task, args=[1])
+        self.tiger.delay(non_batch_task, args=[2])
+        self.tiger.delay(batch_task, args=[10])
+        self._ensure_queues(queued={'batch': 3})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0}, error={'batch': 2})
+
 if __name__ == '__main__':
     unittest.main()

@@ -23,6 +23,10 @@ def get_tiger():
         'LOCK_RETRY': DELAY*2.,
 
         'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
+
+        'BATCH_QUEUES': {
+            'batch': 3,
+        }
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger

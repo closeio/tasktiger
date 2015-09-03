@@ -110,6 +110,13 @@ class TaskTiger(object):
             'ACTIVE_TASK_UPDATE_TIMER': 10,
             'ACTIVE_TASK_UPDATE_TIMEOUT': 60,
             'ACTIVE_TASK_EXPIRED_BATCH_SIZE': 10,
+
+            # Set up queues that will be processed in batch, i.e. multiple jobs
+            # are taken out of the queue at the same time and passed as a list
+            # to the worker method. Takes a dict where the key represents the
+            # queue name and the value represents the batch size. Note that the
+            # task needs to be declared as batch=True.
+            'BATCH_QUEUES': {},
         }
         if config:
             self.config.update(config)
@@ -124,11 +131,19 @@ class TaskTiger(object):
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
-             retry=None, retry_on=None, retry_method=None):
+             retry=None, retry_on=None, retry_method=None, batch=False):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
-        decorated. All the arguments are described in the delay() method.
+        decorated. Arguments not listed below are described in the delay()
+        method.
+
+        * batch
+          If set to True, the task will receive a list of dicts with args and
+          kwargs and can process multiple tasks of the same type at once.
+          Example: [{"args": [1], "kwargs": {}}, {"args": [2], "kwargs": {}}]
+          Note that the list will only contain multiple items if the worker
+          has set up BATCH_QUEUES for the specific queue.
         """
 
         def _delay(func):
@@ -151,6 +166,8 @@ class TaskTiger(object):
                 func._task_retry_on = retry_on
             if retry_method is not None:
                 func._task_retry_method = retry_method
+            if batch is not None:
+                func._task_batch = batch
 
             func.delay = _delay(func)
 
