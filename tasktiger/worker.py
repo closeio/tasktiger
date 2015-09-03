@@ -282,11 +282,16 @@ class Worker(object):
                     if 'retry_on' in task:
                         if execution:
                             exception_name = execution.get('exception_name')
-                            exception_class = import_attribute(exception_name)
-                            for n in task['retry_on']:
-                                if issubclass(exception_class, import_attribute(n)):
-                                    should_retry = True
-                                    break
+                            try:
+                                exception_class = import_attribute(exception_name)
+                            except (ValueError, ImportError, AttributeError):
+                                log.error('could not import exception',
+                                          exception_name=exception_name)
+                            else:
+                                for n in task['retry_on']:
+                                    if issubclass(exception_class, import_attribute(n)):
+                                        should_retry = True
+                                        break
                     else:
                         should_retry = True
 
@@ -323,9 +328,9 @@ class Worker(object):
                     log_func = log.warning
 
                 log_func(func=task['func'],
-                         time_failed=execution['time_failed'],
-                         traceback=execution['traceback'],
-                         exception_name=execution['exception_name'],
+                         time_failed=execution.get('time_failed'),
+                         traceback=execution.get('traceback'),
+                         exception_name=execution.get('exception_name'),
                          **log_context)
 
                 # Move task to the scheduled queue for retry, or move to error
