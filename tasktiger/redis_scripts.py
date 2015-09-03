@@ -1,5 +1,3 @@
-import time
-
 # ARGV = { score member }
 ZADD_NOUPDATE = """
     if not redis.call('zscore', KEYS[1], ARGV[2]) then

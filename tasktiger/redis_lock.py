@@ -116,6 +116,7 @@ class Lock(object):
 # For now unused:
 # New-style Lock with renew() method (andymccurdy/redis-py#629)
 # XXX: when upgrading to the new-style class, take old-style locks into account
+from redis import WatchError
 from redis.lock import Lock as RedisLock
 class NewStyleLock(RedisLock):
     def renew(self, new_timeout):
