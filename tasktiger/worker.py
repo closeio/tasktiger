@@ -132,7 +132,7 @@ class Worker(object):
         try:
             func = import_attribute(task_func)
         except (ValueError, ImportError, AttributeError):
-            log.error('could not import', func=task['func'])
+            log.error('could not import', func=task_func)
         else:
             execution['time_started'] = time.time()
 
