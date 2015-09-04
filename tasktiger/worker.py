@@ -18,6 +18,10 @@ __all__ = ['Worker']
 
 class Worker(object):
     def __init__(self, tiger, queues=None):
+        """
+        Internal method to initialize a worker.
+        """
+
         self.log = tiger.log.bind(pid=os.getpid())
         self.connection = tiger.connection
         self.scripts = tiger.scripts
@@ -34,6 +38,9 @@ class Worker(object):
         self._stop_requested = False
 
     def _install_signal_handlers(self):
+        """
+        Sets up signal handlers for safely stopping the worker.
+        """
         def request_stop(signum, frame):
             self._stop_requested = True
             self.log.info('stop requested, waiting for task to finish')
@@ -41,16 +48,28 @@ class Worker(object):
         signal.signal(signal.SIGTERM, request_stop)
 
     def _uninstall_signal_handlers(self):
+        """
+        Restores default signal handlers.
+        """
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
     def _filter_queues(self, queues):
+        """
+        Applies the queue filter to the given list of queues and returns the
+        queues that match.
+        """
         if self.queue_filter:
             return [q for q in queues if q in self.queue_filter]
         else:
             return queues
 
     def _worker_queue_scheduled_tasks(self):
+        """
+        Helper method that takes due tasks from the SCHEDULED queue and puts
+        them in the QUEUED queue for execution. This should be called
+        periodically.
+        """
         queues = set(self._filter_queues(self.connection.smembers(
                 self._key(SCHEDULED))))
         now = time.time()
@@ -65,7 +84,8 @@ class Worker(object):
                 self.config['SCHEDULED_TASK_BATCH_SIZE'],
                 now,
                 now,
-                on_success=('update_sets', self._key(SCHEDULED), self._key(QUEUED), queue),
+                on_success=('update_sets', self._key(SCHEDULED),
+                                           self._key(QUEUED), queue),
             )
 
             # XXX: ideally this would be in the same pipeline, but we only want
@@ -99,6 +119,11 @@ class Worker(object):
                 break
 
     def _worker_queue_expired_tasks(self):
+        """
+        Helper method that takes expired tasks (where we didn't get a
+        heartbeat until we reached a timeout) and puts them back into the
+        QUEUED queue for re-execution.
+        """
         active_queues = self.connection.smembers(self._key(ACTIVE))
         now = time.time()
         for queue in active_queues:
@@ -108,7 +133,8 @@ class Worker(object):
                 self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
                 now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
                 now,
-                on_success=('update_sets', self._key(ACTIVE), self._key(QUEUED), queue),
+                on_success=('update_sets', self._key(ACTIVE),
+                                           self._key(QUEUED), queue),
             )
             # XXX: Ideally this would be atomic with the operation above.
             if result:
@@ -180,6 +206,10 @@ class Worker(object):
         return success
 
     def _heartbeat(self, queue, task_ids):
+        """
+        Updates the heartbeat for the given task IDs to prevent them from
+        timing out and being requeued.
+        """
         now = time.time()
         self.connection.zadd(self._key(ACTIVE, queue),
                              **{task_id: now for task_id in task_ids})
@@ -201,8 +231,8 @@ class Worker(object):
             # Child process
             log = log.bind(child_pid=os.getpid())
 
-            # We need to reinitialize Redis' connection pool, otherwise the parent
-            # socket will be disconnected by the Redis library.
+            # We need to reinitialize Redis' connection pool, otherwise the
+            # parent socket will be disconnected by the Redis library.
             # TODO: We might only need this if the task fails.
             pool = self.connection.connection_pool
             pool.__init__(pool.connection_class, pool.max_connections,
@@ -256,7 +286,8 @@ class Worker(object):
             batch_size,
             None,
             now,
-            on_success=('update_sets', self._key(QUEUED), self._key(ACTIVE), queue),
+            on_success=('update_sets', self._key(QUEUED), self._key(ACTIVE),
+                        queue),
         )
 
         if task_ids:
@@ -281,7 +312,8 @@ class Worker(object):
                     # Remove task
                     self._redis_move_task(queue, task_id, ACTIVE)
 
-            all_task_ids = [task['id'] for task in tasks]
+            # List of task IDs that exist and we will update the heartbeat on.
+            valid_task_ids = set(task['id'] for task in tasks)
 
             # Group by task func
             tasks_by_func = OrderedDict()
@@ -293,13 +325,19 @@ class Worker(object):
 
             # Execute tasks for each task func
             for tasks in tasks_by_func.values():
-                success, processed_tasks = self._process_task_group(queue, tasks, all_task_ids)
+                success, processed_tasks = self._execute_task_group(queue,
+                        tasks, valid_task_ids)
                 for task in processed_tasks:
                     self._finish_task_processing(queue, task, success)
 
         return task_ids
 
-    def _process_task_group(self, queue, tasks, all_task_ids):
+    def _execute_task_group(self, queue, tasks, all_task_ids):
+        """
+        Executes the given tasks in the queue. Updates the heartbeat for task
+        IDs passed in all_task_ids. This internal method is only meant to be
+        called from within _process_from_queue.
+        """
         log = self.log.bind(queue=queue)
 
         locks = []
@@ -319,6 +357,9 @@ class Worker(object):
                     # Reschedule the task
                     when = time.time() + self.config['LOCK_RETRY']
                     self._redis_move_task(queue, task['id'], ACTIVE, SCHEDULED, when)
+                    # Make sure to remove it from this list so we don't re-add
+                    # to the ACTIVE queue by updating the heartbeat.
+                    all_task_ids.remove(task['id'])
                     continue
             else:
                 lock = None
@@ -339,6 +380,11 @@ class Worker(object):
         return success, ready_tasks
 
     def _finish_task_processing(self, queue, task, success):
+        """
+        After a task is executed, this method is calling and ensures that
+        the task gets properly removed from the ACTIVE queue and, in case of an
+        error, retried or marked as failed.
+        """
         log = self.log.bind(queue=queue, task_id=task['id'])
 
         if success:
@@ -376,7 +422,7 @@ class Worker(object):
                 else:
                     should_retry = True
 
-            queue_type = ERROR
+            state = ERROR
 
             when = time.time()
 
@@ -401,9 +447,9 @@ class Worker(object):
                     except StopRetry:
                         pass
                     else:
-                        queue_type = SCHEDULED
+                        state = SCHEDULED
 
-            if queue_type == ERROR:
+            if state == ERROR:
                 log_func = log.error
             else:
                 log_func = log.warning
@@ -416,7 +462,7 @@ class Worker(object):
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
-            self._redis_move_task(queue, task['id'], ACTIVE, queue_type, when)
+            self._redis_move_task(queue, task['id'], ACTIVE, state, when)
 
     def _worker_run(self):
         """

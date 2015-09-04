@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 
-# Queue types
+# Task states (represented by different queues)
 # Note some client code may rely on the string values (e.g. get_queue_stats).
 QUEUED = 'queued'
 ACTIVE = 'active'
@@ -18,9 +18,16 @@ def import_attribute(name):
     return getattr(module, attribute)
 
 def gen_id():
+    """
+    Generates and returns a random hex-encoded 256-bit unique ID.
+    """
     return os.urandom(32).encode('hex')
 
 def gen_unique_id(serialized_name, args, kwargs):
+    """
+    Generates and returns a hex-encoded 256-bit ID for the given task name and
+    args. Used to generate IDs for unique tasks or for task locks.
+    """
     return hashlib.sha256(json.dumps({
         'func': serialized_name,
         'args': args,
@@ -28,6 +35,9 @@ def gen_unique_id(serialized_name, args, kwargs):
     }, sort_keys=True)).hexdigest()
 
 def serialize_func_name(func):
+    """
+    Returns the dotted serialized path to the passed function.
+    """
     if func.__module__ == '__main__':
         raise ValueError('Functions from the __main__ module cannot be '
                          'processed by workers.')
