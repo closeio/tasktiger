@@ -27,7 +27,7 @@ __all__ = ['TaskTiger', 'Worker',
 """
 Redis keys:
 
-Set of all queues that contain items in the given status.
+Set of all queues that contain items in the given state.
 SET <prefix>:queued
 SET <prefix>:active
 SET <prefix>:error
@@ -110,6 +110,13 @@ class TaskTiger(object):
             'ACTIVE_TASK_UPDATE_TIMER': 10,
             'ACTIVE_TASK_UPDATE_TIMEOUT': 60,
             'ACTIVE_TASK_EXPIRED_BATCH_SIZE': 10,
+
+            # Set up queues that will be processed in batch, i.e. multiple jobs
+            # are taken out of the queue at the same time and passed as a list
+            # to the worker method. Takes a dict where the key represents the
+            # queue name and the value represents the batch size. Note that the
+            # task needs to be declared as batch=True.
+            'BATCH_QUEUES': {},
         }
         if config:
             self.config.update(config)
@@ -121,14 +128,63 @@ class TaskTiger(object):
         ).bind()
 
     def _key(self, *parts):
+        """
+        Internal helper to get a Redis key, taking the REDIS_PREFIX into
+        account. Parts are delimited with a colon. Individual parts shouldn't
+        contain colons since we don't escape them.
+        """
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
+    def _redis_move_task(self, queue, task_id, from_state, to_state=None,
+                         when=None, remove_task=None):
+        """
+        Internal helper to move a task from one state another (e.g. from QUEUED
+        to DELAYED). The "when" argument indicates the timestamp of the task in
+        the new state. If no to_state is specified, the task will be simply
+        removed from the from_state. In this case remove_task can be specified,
+        which can have one of the following values:
+          * 'always': Remove the task object from Redis.
+          * 'check': Only remove the task object from Redis if the task doesn't
+            exist in the QUEUED or ERROR queue. This is useful for unique
+            tasks, which can have multiple instances in different states with
+            the same ID.
+        """
+        pipeline = self.connection.pipeline()
+        if to_state:
+            if not when:
+                when = time.time()
+            pipeline.zadd(self._key(to_state, queue), task_id, when)
+            pipeline.sadd(self._key(to_state), queue)
+        pipeline.zrem(self._key(from_state, queue), task_id)
+        if remove_task == 'always':
+            pipeline.delete(self._key('task', task_id))
+        elif remove_task == 'check':
+            # Only delete if it's not in the error or queued queue.
+            self.scripts.delete_if_not_in_zsets(self._key('task', task_id),
+                                                task_id, [
+                self._key(QUEUED, queue),
+                self._key(ERROR, queue)
+            ], client=pipeline)
+        self.scripts.srem_if_not_exists(self._key(from_state), queue,
+                self._key(from_state, queue), client=pipeline)
+        if to_state == QUEUED:
+            pipeline.publish(self._key('activity'), queue)
+        pipeline.execute()
+
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
-             retry=None, retry_on=None, retry_method=None):
+             retry=None, retry_on=None, retry_method=None, batch=False):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
-        decorated. All the arguments are described in the delay() method.
+        decorated. Arguments not listed below are described in the delay()
+        method.
+
+        * batch
+          If set to True, the task will receive a list of dicts with args and
+          kwargs and can process multiple tasks of the same type at once.
+          Example: [{"args": [1], "kwargs": {}}, {"args": [2], "kwargs": {}}]
+          Note that the list will only contain multiple items if the worker
+          has set up BATCH_QUEUES for the specific queue.
         """
 
         def _delay(func):
@@ -151,6 +207,8 @@ class TaskTiger(object):
                 func._task_retry_on = retry_on
             if retry_method is not None:
                 func._task_retry_method = retry_method
+            if batch is not None:
+                func._task_batch = batch
 
             func.delay = _delay(func)
 
@@ -159,11 +217,18 @@ class TaskTiger(object):
         return _wrap
 
     def run_worker_with_args(self, args):
+        """
+        Runs a worker with the given command line args. The use case is running
+        a worker from a custom manage script.
+        """
         run_worker(args=args, obj=self)
 
     def run_worker(self, queues=None, module=None):
         """
         Main worker entry point method.
+
+        The arguments are explained in the module-level run_worker() method's
+        click options.
         """
 
         module_names = module or ''
@@ -324,15 +389,15 @@ class TaskTiger(object):
         serialized_task = json.dumps(task)
 
         if when:
-            queue_type = SCHEDULED
+            state = SCHEDULED
         else:
-            queue_type = QUEUED
+            state = QUEUED
 
         pipeline = self.connection.pipeline()
-        pipeline.sadd(self._key(queue_type), queue)
+        pipeline.sadd(self._key(state), queue)
         pipeline.set(self._key('task', task_id), serialized_task)
-        pipeline.zadd(self._key(queue_type, queue), task_id, when or now)
-        if queue_type == QUEUED:
+        pipeline.zadd(self._key(state, queue), task_id, when or now)
+        if state == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
 
@@ -346,23 +411,23 @@ class TaskTiger(object):
         { "default": { "queued": 1, "error": 2 } }
         """
 
-        types = (QUEUED, ACTIVE, SCHEDULED, ERROR)
+        states = (QUEUED, ACTIVE, SCHEDULED, ERROR)
 
         pipeline = self.connection.pipeline()
-        for typ in types:
-            pipeline.smembers(self._key(typ))
+        for state in states:
+            pipeline.smembers(self._key(state))
         queue_results = pipeline.execute()
 
         pipeline = self.connection.pipeline()
-        for typ, result in zip(types, queue_results):
+        for state, result in zip(states, queue_results):
             for queue in result:
-                pipeline.zcard(self._key(typ, queue))
+                pipeline.zcard(self._key(state, queue))
         card_results = pipeline.execute()
 
         queue_stats = defaultdict(dict)
-        for typ, result in zip(types, queue_results):
+        for state, result in zip(states, queue_results):
             for queue in result:
-                queue_stats[queue][typ] = card_results.pop(0)
+                queue_stats[queue][state] = card_results.pop(0)
 
         return queue_stats
 

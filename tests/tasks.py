@@ -49,3 +49,17 @@ def locked_task(key):
         raise StandardError('task failed, key already set')
     time.sleep(DELAY)
     conn.delete(key)
+
+@tiger.task(queue='batch', batch=True)
+def batch_task(params):
+    conn = redis.Redis(db=TEST_DB)
+    conn.rpush('batch_task', json.dumps(params))
+    if any(p['args'][0] == 10 for p in params):
+        raise StandardError('exception')
+
+@tiger.task(queue='batch')
+def non_batch_task(arg):
+    conn = redis.Redis(db=TEST_DB)
+    conn.rpush('batch_task', arg)
+    if arg == 10:
+        raise StandardError('exception')
