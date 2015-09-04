@@ -23,6 +23,7 @@ class Worker(object):
         self.scripts = tiger.scripts
         self.config = tiger.config
         self._key = tiger._key
+        self._redis_move_task = tiger._redis_move_task
 
         # TODO: Also support wildcards in filter
         if queues:
@@ -234,31 +235,6 @@ class Worker(object):
 
             status = not return_code
             return status
-
-    def _redis_move_task(self, queue, task_id, from_state, to_state=None, when=None, remove_task=None):
-        """
-        remove_task='always'
-        remove_task='check'
-        """
-        pipeline = self.connection.pipeline()
-        if to_state:
-            if not when:
-                when = time.time()
-            pipeline.zadd(self._key(to_state, queue), task_id, when)
-            pipeline.sadd(self._key(to_state), queue)
-        pipeline.zrem(self._key(from_state, queue), task_id)
-        if remove_task == 'always':
-            pipeline.delete(self._key('task', task_id))
-        elif remove_task == 'check':
-            # Only delete if it's not in the error or queued queue.
-            self.scripts.delete_if_not_in_zsets(self._key('task', task_id),
-                                                task_id, [
-                self._key(QUEUED, queue),
-                self._key(ERROR, queue)
-            ], client=pipeline)
-        self.scripts.srem_if_not_exists(self._key(from_state), queue,
-                self._key(from_state, queue), client=pipeline)
-        pipeline.execute()
 
     def _process_from_queue(self, queue):
         """
