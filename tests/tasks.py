@@ -42,7 +42,7 @@ def unique_task(value=None):
     conn.lpush('unique_task', value)
 
 @tiger.task(lock=True)
-def locked_task(key):
+def locked_task(key, other=None):
     conn = redis.Redis(db=TEST_DB)
     data = conn.getset(key, 1)
     if data is not None:

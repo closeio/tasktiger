@@ -172,7 +172,8 @@ class TaskTiger(object):
         pipeline.execute()
 
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
-             retry=None, retry_on=None, retry_method=None, batch=False):
+             lock_key=None, retry=None, retry_on=None, retry_method=None,
+             batch=False):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -198,9 +199,11 @@ class TaskTiger(object):
             if queue is not None:
                 func._task_queue = queue
             if unique is not None:
-                func._task_unique = True
+                func._task_unique = unique
             if lock is not None:
-                func._task_lock = True
+                func._task_lock = lock
+            if lock_key is not None:
+                func._task_lock_key = lock_key
             if retry is not None:
                 func._task_retry = retry
             if retry_on is not None:
@@ -242,8 +245,8 @@ class TaskTiger(object):
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,
-              hard_timeout=None, unique=None, lock=None, when=None,
-              retry=None, retry_on=None, retry_method=None):
+              hard_timeout=None, unique=None, lock=None, lock_key=None,
+              when=None, retry=None, retry_on=None, retry_method=None):
         """
         Queues a task.
 
@@ -274,6 +277,11 @@ class TaskTiger(object):
           Hold a lock while the task is being executed (with the given args and
           kwargs). If a task with similar args/kwargs is queued and tries to
           acquire the lock, it will be retried later.
+
+        * lock_key
+          If set, this implies lock=True and specifies the list of kwargs to
+          use to construct the lock key. By default, all args and kwargs are
+          serialized and hashed.
 
         * when
           Takes either a datetime (for an absolute date) or a timedelta
@@ -330,6 +338,9 @@ class TaskTiger(object):
         if lock is None:
             lock = getattr(func, '_task_lock', False)
 
+        if lock_key is None:
+            lock_key = getattr(func, '_task_lock_key', None)
+
         if retry is None:
             retry = getattr(func, '_task_retry', False)
 
@@ -363,8 +374,10 @@ class TaskTiger(object):
         }
         if unique:
             task['unique'] = True
-        if lock:
+        if lock or lock_key:
             task['lock'] = True
+            if lock_key:
+                task['lock_key'] = lock_key
         if args:
             task['args'] = args
         if kwargs:

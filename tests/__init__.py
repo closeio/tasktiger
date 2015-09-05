@@ -239,6 +239,41 @@ class TestCase(unittest.TestCase):
                             scheduled={'default': 0},
                             error={'default': 0})
 
+    def test_lock_key(self):
+        self.tiger.delay(locked_task, kwargs={'key': '1', 'other': 1},
+                         lock_key=('key',))
+        self.tiger.delay(locked_task, kwargs={'key': '2', 'other': 2},
+                         lock_key=('key',))
+        self.tiger.delay(locked_task, kwargs={'key': '2', 'other': 3},
+                         lock_key=('key',))
+
+        self._ensure_queues(queued={'default': 3},
+                            scheduled={'default': 0},
+                            error={'default': 0})
+
+        Pool(3).map(external_worker, range(3))
+
+        # One task with keys 1 and 2 executed, but one is scheduled because
+        # it hit a lock.
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 1},
+                            error={'default': 0})
+
+        time.sleep(DELAY)
+
+        # Two runs: The first one picks the task up from the "scheduled" queue,
+        # the second one processes it.
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 1},
+                            scheduled={'default': 0},
+                            error={'default': 0})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 0},
+                            error={'default': 0})
+
+
     def test_retry(self):
         # Use the default retry method we configured.
         self.tiger.delay(exception_task, retry=True)

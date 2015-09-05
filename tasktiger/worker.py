@@ -344,11 +344,20 @@ class Worker(object):
         ready_tasks = []
         for task in tasks:
             if task.get('lock', False):
-                lock = Lock(self.connection, self._key('lock', gen_unique_id(
-                    task['func'],
-                    task.get('args', []),
-                    task.get('kwargs', []),
-                )), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+                if task.get('lock_key'):
+                    kwargs = task.get('kwargs', {})
+                    lock_id = gen_unique_id(
+                        task['func'],
+                        None,
+                        {key: kwargs.get(key) for key in task['lock_key']},
+                    )
+                else:
+                    lock_id = gen_unique_id(
+                        task['func'],
+                        task.get('args', []),
+                        task.get('kwargs', {}),
+                    )
+                lock = Lock(self.connection, self._key('lock', lock_id), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
 
                 acquired = lock.acquire(blocking=False)
                 if not acquired:
