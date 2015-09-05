@@ -328,7 +328,10 @@ class TaskTiger(object):
                 args = []
             if not kwargs:
                 kwargs = {}
-            return func(*args, **kwargs)
+            if getattr(func, '_task_batch', False):
+                return func([{'args': args, 'kwargs': kwargs}])
+            else:
+                return func(*args, **kwargs)
 
         serialized_name = serialize_func_name(func)
 
