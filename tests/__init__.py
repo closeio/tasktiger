@@ -273,7 +273,6 @@ class TestCase(unittest.TestCase):
                             scheduled={'default': 0},
                             error={'default': 0})
 
-
     def test_retry(self):
         # Use the default retry method we configured.
         self.tiger.delay(exception_task, retry=True)
@@ -486,6 +485,18 @@ class TestCase(unittest.TestCase):
         self._ensure_queues(queued={'batch': 3})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch': 0}, error={'batch': 2})
+
+    def test_batch_lock_key(self):
+        self.tiger.delay(batch_task, kwargs={'key': '1', 'other': 1},
+                         lock_key=('key,'))
+        self.tiger.delay(batch_task, kwargs={'key': '2', 'other': 2},
+                         lock_key=('key,'))
+        self.tiger.delay(batch_task, kwargs={'key': '2', 'other': 3},
+                         lock_key=('key,'))
+
+        self._ensure_queues(queued={'batch': 3})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch': 0})
 
 if __name__ == '__main__':
     unittest.main()

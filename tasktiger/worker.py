@@ -341,6 +341,10 @@ class Worker(object):
         log = self.log.bind(queue=queue)
 
         locks = []
+        # Keep track of the acquired locks: If two tasks in the list require
+        # the same lock we only acquire it once.
+        lock_ids = set()
+
         ready_tasks = []
         for task in tasks:
             if task.get('lock', False):
@@ -357,24 +361,24 @@ class Worker(object):
                         task.get('args', []),
                         task.get('kwargs', {}),
                     )
-                lock = Lock(self.connection, self._key('lock', lock_id), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
 
-                acquired = lock.acquire(blocking=False)
-                if not acquired:
-                    log.info('could not acquire lock', task_id=task['id'])
+                if lock_id not in lock_ids:
+                    lock = Lock(self.connection, self._key('lock', lock_id), timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
 
-                    # Reschedule the task
-                    when = time.time() + self.config['LOCK_RETRY']
-                    self._redis_move_task(queue, task['id'], ACTIVE, SCHEDULED, when)
-                    # Make sure to remove it from this list so we don't re-add
-                    # to the ACTIVE queue by updating the heartbeat.
-                    all_task_ids.remove(task['id'])
-                    continue
-            else:
-                lock = None
+                    acquired = lock.acquire(blocking=False)
+                    if acquired:
+                        lock_ids.add(lock_id)
+                        locks.append(lock)
+                    else:
+                        log.info('could not acquire lock', task_id=task['id'])
 
-            if lock:
-                locks.append(lock)
+                        # Reschedule the task
+                        when = time.time() + self.config['LOCK_RETRY']
+                        self._redis_move_task(queue, task['id'], ACTIVE, SCHEDULED, when)
+                        # Make sure to remove it from this list so we don't re-add
+                        # to the ACTIVE queue by updating the heartbeat.
+                        all_task_ids.remove(task['id'])
+                        continue
 
             ready_tasks.append(task)
 

@@ -54,7 +54,7 @@ def locked_task(key, other=None):
 def batch_task(params):
     conn = redis.Redis(db=TEST_DB)
     conn.rpush('batch_task', json.dumps(params))
-    if any(p['args'][0] == 10 for p in params):
+    if any(p['args'][0] == 10 for p in params if p['args']):
         raise StandardError('exception')
 
 @tiger.task(queue='batch')
