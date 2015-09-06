@@ -176,7 +176,7 @@ class TestCase(unittest.TestCase):
         self.assertEqual(len(executions), 1)
         execution = json.loads(executions[0])
         self.assertEqual(execution['exception_name'],
-                         'tasktiger.timeouts.JobTimeoutException')
+                         'tasktiger.exceptions.JobTimeoutException')
         self.assertEqual(execution['success'], False)
 
     def test_unique_task(self):

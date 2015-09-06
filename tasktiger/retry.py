@@ -1,7 +1,5 @@
 # The retry logic is documented in the delay() method.
-
-class StopRetry(Exception):
-    pass
+from .exceptions import StopRetry
 
 def _fixed(retry, delay, max_retries):
     if retry > max_retries:

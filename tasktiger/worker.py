@@ -155,44 +155,41 @@ class Worker(object):
         task_func = tasks[0]['func']
         assert all([task_func == task['func'] for task in tasks[1:]])
 
+        execution['time_started'] = time.time()
+
         try:
             func = import_attribute(task_func)
-        except (ValueError, ImportError, AttributeError):
-            log.error('could not import', func=task_func)
-        else:
-            execution['time_started'] = time.time()
 
-            try:
-                if getattr(func, '_task_batch', False):
-                    # Batch process if the task supports it.
-                    params = [{
-                        'args': task.get('args', []),
-                        'kwargs': task.get('kwargs', {}),
-                    } for task in tasks]
-                    hard_timeout = max(task.get('hard_timeout', None) for task in tasks) or \
+            if getattr(func, '_task_batch', False):
+                # Batch process if the task supports it.
+                params = [{
+                    'args': task.get('args', []),
+                    'kwargs': task.get('kwargs', {}),
+                } for task in tasks]
+                hard_timeout = max(task.get('hard_timeout', None) for task in tasks) or \
+                               getattr(func, '_task_hard_timeout', None) or \
+                               self.config['DEFAULT_HARD_TIMEOUT']
+
+                with UnixSignalDeathPenalty(hard_timeout):
+                    func(params)
+            else:
+                # Process sequentially.
+                for task in tasks:
+                    hard_timeout = task.get('hard_timeout', None) or \
                                    getattr(func, '_task_hard_timeout', None) or \
                                    self.config['DEFAULT_HARD_TIMEOUT']
+                    args = task.get('args', [])
+                    kwargs = task.get('kwargs', {})
 
                     with UnixSignalDeathPenalty(hard_timeout):
-                        func(params)
-                else:
-                    # Process sequentially.
-                    for task in tasks:
-                        hard_timeout = task.get('hard_timeout', None) or \
-                                       getattr(func, '_task_hard_timeout', None) or \
-                                       self.config['DEFAULT_HARD_TIMEOUT']
-                        args = task.get('args', [])
-                        kwargs = task.get('kwargs', {})
+                        func(*args, **kwargs)
 
-                        with UnixSignalDeathPenalty(hard_timeout):
-                            func(*args, **kwargs)
-
-            except Exception, exc:
-                execution['traceback'] = traceback.format_exc()
-                execution['exception_name'] = serialize_func_name(exc.__class__)
-                execution['time_failed'] = time.time()
-            else:
-                success = True
+        except Exception, exc:
+            execution['traceback'] = traceback.format_exc()
+            execution['exception_name'] = serialize_func_name(exc.__class__)
+            execution['time_failed'] = time.time()
+        else:
+            success = True
 
         if not success:
             # Currently we only log failed task executions to Redis.
@@ -424,7 +421,7 @@ class Worker(object):
                         exception_name = execution.get('exception_name')
                         try:
                             exception_class = import_attribute(exception_name)
-                        except (ValueError, ImportError, AttributeError):
+                        except TaskImportError:
                             log.error('could not import exception',
                                       exception_name=exception_name)
                         else:
@@ -449,7 +446,7 @@ class Worker(object):
 
                 try:
                     func = import_attribute(retry_func)
-                except (ValueError, ImportError, AttributeError):
+                except TaskImportError:
                     log.error('could not import retry function',
                               func=retry_func)
                 else:

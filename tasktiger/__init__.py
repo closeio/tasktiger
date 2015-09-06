@@ -14,12 +14,12 @@ from redis_scripts import RedisScripts
 from ._internal import *
 from .retry import *
 from .worker import Worker
-from .timeouts import JobTimeoutException
+from .exceptions import *
 
 __all__ = ['TaskTiger', 'Worker',
 
            # Exceptions
-           'JobTimeoutException', 'StopRetry',
+           'TaskImportError', 'JobTimeoutException', 'StopRetry',
 
            # Retry methods
            'fixed', 'linear', 'exponential']

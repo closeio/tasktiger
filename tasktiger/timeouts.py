@@ -4,12 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import signal
 
-
-class JobTimeoutException(Exception):
-    """Raised when a job takes longer to complete than the allowed maximum
-    timeout value.
-    """
-    pass
+from .exceptions import JobTimeoutException
 
 
 class BaseDeathPenalty(object):

@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 
+from .exceptions import TaskImportError
+
 # Task states (represented by different queues)
 # Note some client code may rely on the string values (e.g. get_queue_stats).
 QUEUED = 'queued'
@@ -13,9 +15,12 @@ ERROR = 'error'
 # from rq
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
-    module_name, attribute = name.rsplit('.', 1)
-    module = importlib.import_module(module_name)
-    return getattr(module, attribute)
+    try:
+        module_name, attribute = name.rsplit('.', 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, attribute)
+    except (ValueError, ImportError, AttributeError) as e:
+        raise TaskImportError(e)
 
 def gen_id():
     """
