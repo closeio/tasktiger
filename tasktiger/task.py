@@ -3,11 +3,12 @@ import json
 from ._internal import ERROR, QUEUED
 
 # This module contains helper methods to inspect and requeue tasks from queues.
+# TODO: Use task objects wherever we can.
 
 class Task(object):
     def __init__(self, tiger, queue, state, _data, _ts=None, _executions=None):
         """
-        Initializes a Task from the internal structure. Use from_queueto
+        Initializes a Task from the internal structure. Use tasks_from_queue to
         retrieve tasks from a given queue. Don't call this directly.
         """
         self.tiger = tiger
@@ -23,6 +24,7 @@ class Task(object):
         self.func = self.data['func']
         self.args = self.data.get('args', [])
         self.kwargs = self.data.get('kwargs', {})
+        self.unique = self.data.get('unique', False)
 
     def __repr__(self):
         return u'<Task %s>' % self.func
@@ -86,8 +88,21 @@ class Task(object):
 
     def retry(self):
         """
-        Retry a task that's in the error queue.
+        Retries a task that's in the error queue.
         """
         assert self.state == ERROR
         # TODO: Only allow this if the task is still in ERROR state
         self.tiger._redis_move_task(self.queue, self.id, ERROR, QUEUED)
+
+    def delete(self):
+        """
+        Removes a task that's in the error queue.
+        """
+        assert self.state == ERROR
+        if self.unique:
+            remove_task = 'check'
+        else:
+            remove_task = 'always'
+        # TODO: Only allow this if the task is still in ERROR state
+        self.tiger._redis_move_task(self.queue, self.id, ERROR,
+                                    remove_task=remove_task)

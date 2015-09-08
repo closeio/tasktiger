@@ -159,11 +159,12 @@ class TaskTiger(object):
         if remove_task == 'always':
             pipeline.delete(self._key('task', task_id))
         elif remove_task == 'check':
-            # Only delete if it's not in the error or queued queue.
+            # Only delete if it's not in any other queue
+            check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
+            check_states.remove(from_state)
             self.scripts.delete_if_not_in_zsets(self._key('task', task_id),
                                                 task_id, [
-                self._key(QUEUED, queue),
-                self._key(ERROR, queue)
+                self._key(state, queue) for state in check_states
             ], client=pipeline)
         self.scripts.srem_if_not_exists(self._key(from_state), queue,
                 self._key(from_state, queue), client=pipeline)
