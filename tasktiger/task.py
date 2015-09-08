@@ -35,7 +35,7 @@ class Task(object):
         Loads a task with the given ID from the given queue in the given
         state. An integer may be passed in the load_executions parameter
         to indicate how many executions should be loaded (starting from the
-        latest).
+        latest). If the task doesn't exist, None is returned.
         """
         if load_executions:
             pipeline = tiger.connection.pipeline()
@@ -46,7 +46,8 @@ class Task(object):
             task = tiger.connection.get(tiger._key('task', task_id))
             executions = []
         # XXX: No timestamp for now
-        return Task(tiger, queue, state, task, None, executions)
+        if task:
+            return Task(tiger, queue, state, task, None, executions)
 
     @classmethod
     def tasks_from_queue(self, tiger, queue, state, skip=0, limit=1000,
