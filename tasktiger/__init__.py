@@ -115,7 +115,9 @@ class TaskTiger(object):
             # are taken out of the queue at the same time and passed as a list
             # to the worker method. Takes a dict where the key represents the
             # queue name and the value represents the batch size. Note that the
-            # task needs to be declared as batch=True.
+            # task needs to be declared as batch=True. Also note that any
+            # subqueues will be automatically treated as batch queues, and the
+            # batch value of the most specific subqueue name takes precedence.
             'BATCH_QUEUES': {},
         }
         if config:

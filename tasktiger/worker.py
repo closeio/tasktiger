@@ -29,7 +29,6 @@ class Worker(object):
         self._key = tiger._key
         self._redis_move_task = tiger._redis_move_task
 
-        # TODO: Also support wildcards in filter
         if queues:
             self.queue_filter = queues.split(',')
         else:
@@ -62,23 +61,11 @@ class Worker(object):
         match both "foo" and "foo.bar".
         """
 
-        def parts(s):
-            """
-            For a string "a.b.c", yields "a", "a.b", "a.b.c".
-            """
-            idx = -1
-            while s:
-                idx = s.find('.', idx+1)
-                if idx == -1:
-                    yield s
-                    break
-                yield s[:idx]
-
         def match(queue):
             """
             Checks if any of the parts of the queue name match the filter.
             """
-            for part in parts(queue):
+            for part in dotted_parts(queue):
                 if part in self.queue_filter:
                     return True
             return False
@@ -298,7 +285,12 @@ class Worker(object):
         log = self.log.bind(queue=queue)
 
         # Fetch one item unless this is a batch queue.
-        batch_size = self.config['BATCH_QUEUES'].get(queue, 1)
+        # XXX: It would be more efficient to loop in reverse order and break.
+        batch_queues = self.config['BATCH_QUEUES']
+        batch_size = 1
+        for part in dotted_parts(queue):
+            if queue in batch_queues:
+                batch_size = batch_queues[queue]
 
         # Move an item to the active queue, if available.
         task_ids = self.scripts.zpoppush(

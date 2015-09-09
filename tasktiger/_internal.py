@@ -47,3 +47,15 @@ def serialize_func_name(func):
         raise ValueError('Functions from the __main__ module cannot be '
                          'processed by workers.')
     return '.'.join([func.__module__, func.__name__])
+
+def dotted_parts(s):
+    """
+    For a string "a.b.c", yields "a", "a.b", "a.b.c".
+    """
+    idx = -1
+    while s:
+        idx = s.find('.', idx+1)
+        if idx == -1:
+            yield s
+            break
+        yield s[:idx]
