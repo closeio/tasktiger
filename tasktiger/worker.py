@@ -57,10 +57,34 @@ class Worker(object):
     def _filter_queues(self, queues):
         """
         Applies the queue filter to the given list of queues and returns the
-        queues that match.
+        queues that match. Note that a queue name matches any subqueues
+        starting with the name, followed by a date. For example, "foo" will
+        match both "foo" and "foo.bar".
         """
+
+        def parts(s):
+            """
+            For a string "a.b.c", yields "a", "a.b", "a.b.c".
+            """
+            idx = -1
+            while s:
+                idx = s.find('.', idx+1)
+                if idx == -1:
+                    yield s
+                    break
+                yield s[:idx]
+
+        def match(queue):
+            """
+            Checks if any of the parts of the queue name match the filter.
+            """
+            for part in parts(queue):
+                if part in self.queue_filter:
+                    return True
+            return False
+
         if self.queue_filter:
-            return [q for q in queues if q in self.queue_filter]
+            return [q for q in queues if match(q)]
         else:
             return queues
 
