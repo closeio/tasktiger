@@ -254,8 +254,9 @@ class Worker(object):
             # Main process
             log = log.bind(child_pid=child_pid)
             log.debug('processing', func=task_func, params=[{
-                    "args": task.get('args', []),
-                    "kwargs": task.get('kwargs', {})
+                    'task_id': task['id'],
+                    'args': task.get('args', []),
+                    'kwargs': task.get('kwargs', {})
             } for task in tasks])
 
             while True:
