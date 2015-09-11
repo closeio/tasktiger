@@ -5,6 +5,7 @@ import os
 import random
 import select
 import signal
+import socket
 import time
 import traceback
 
@@ -205,6 +206,7 @@ class Worker(object):
         if not success:
             # Currently we only log failed task executions to Redis.
             execution['success'] = success
+            execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
             for task in tasks:
                 self.connection.rpush(
