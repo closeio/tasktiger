@@ -536,9 +536,9 @@ class Worker(object):
 
         try:
             while True:
-                if not self._queue_set:
-                    self._update_queue_set(
-                            timeout=self.config['SELECT_TIMEOUT'])
+                # Update the queue set on every iteration so we don't get stuck
+                # on processing a specific queue.
+                self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
 
                 self._install_signal_handlers()
                 self._worker_run()
