@@ -463,21 +463,23 @@ class TaskTiger(object):
 @click.pass_context
 def run_worker(context, **kwargs):
     # TODO: Make Redis settings configurable via click.
-    structlog.configure(
-        processors=[
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.filter_by_level,
-            structlog.processors.TimeStamper(fmt='iso', utc=True),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.JSONRenderer()
-        ],
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
+    if not context.obj:
+        structlog.configure(
+            processors=[
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.filter_by_level,
+                structlog.processors.TimeStamper(fmt='iso', utc=True),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.JSONRenderer()
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
     tiger = context.obj or TaskTiger()
-    tiger.log.setLevel(logging.DEBUG)
-    logging.basicConfig(format='%(message)s')
+    if not context.obj:
+        tiger.log.setLevel(logging.DEBUG)
+        logging.basicConfig(format='%(message)s')
     tiger.run_worker(**kwargs)
