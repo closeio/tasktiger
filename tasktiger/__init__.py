@@ -119,6 +119,9 @@ class TaskTiger(object):
             # subqueues will be automatically treated as batch queues, and the
             # batch value of the most specific subqueue name takes precedence.
             'BATCH_QUEUES': {},
+
+            # How often to print stats.
+            'STATS_INTERVAL': 60,
         }
         if config:
             self.config.update(config)
@@ -405,3 +408,6 @@ def run_worker(context, **kwargs):
         tiger.log.setLevel(logging.DEBUG)
         logging.basicConfig(format='%(message)s')
     tiger.run_worker(**kwargs)
+
+if __name__ == '__main__':
+    run_worker()

@@ -6,6 +6,7 @@ import random
 import select
 import signal
 import socket
+import threading
 import time
 import traceback
 
@@ -16,6 +17,53 @@ from .retry import *
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
+
+class StatsThread(threading.Thread):
+    def __init__(self, tiger):
+        super(StatsThread, self).__init__()
+        self.tiger = tiger
+        self._stop = threading.Event()
+
+        self._task_running = False
+        self._time_start = time.time()
+        self._time_busy = 0
+        self._task_start_time = None
+
+    def report_task_start(self):
+        self._task_start_time = time.time()
+        self._task_running = True
+
+    def report_task_end(self):
+        now = time.time()
+        self._time_busy += now - self._task_start_time
+        self._task_running = False
+        self._task_start_time = None
+
+    def compute_stats(self):
+        now = time.time()
+        time_total = now - self._time_start
+        time_busy = self._time_busy
+        self._time_start = now
+        self._time_busy = 0
+        if self._task_running:
+            time_busy += now - self._task_start_time
+            self._task_start_time = now
+        else:
+            self._task_start_time = None
+        if time_total:
+            utilization = 100. / time_total * time_busy
+            self.tiger.log.info('stats', time_total=time_total, time_busy=time_busy, utilization=utilization)
+
+    def run(self):
+        while True:
+            self._stop.wait(self.tiger.config['STATS_INTERVAL'])
+            if self._stop.isSet():
+                break
+            self.compute_stats()
+
+    def stop(self):
+        self._stop.set()
+
 
 class Worker(object):
     def __init__(self, tiger, queues=None):
@@ -29,6 +77,8 @@ class Worker(object):
         self.config = tiger.config
         self._key = tiger._key
         self._redis_move_task = tiger._redis_move_task
+
+        self.stats_thread = None
 
         if queues:
             self.queue_filter = queues.split(',')
@@ -401,7 +451,11 @@ class Worker(object):
         if not ready_tasks:
             return True, []
 
+        if self.stats_thread:
+            self.stats_thread.report_task_start()
         success = self._execute(queue, ready_tasks, log, locks, all_task_ids)
+        if self.stats_thread:
+            self.stats_thread.report_task_end()
 
         for lock in locks:
             lock.release()
@@ -524,6 +578,10 @@ class Worker(object):
 
         self.log.info('ready', queues=self.queue_filter)
 
+        if self.config['STATS_INTERVAL']:
+            self.stats_thread = StatsThread(self)
+            self.stats_thread.start()
+
         # First scan all the available queues for new items until they're empty.
         # Then, listen to the activity channel.
         # XXX: This can get inefficient when having lots of queues.
@@ -549,4 +607,9 @@ class Worker(object):
                     raise KeyboardInterrupt()
         except KeyboardInterrupt:
             pass
+
+        if self.stats_thread:
+            self.stats_thread.stop()
+            self.stats_thread = None
+
         self.log.info('done')
