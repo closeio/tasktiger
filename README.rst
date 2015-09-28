@@ -275,7 +275,6 @@ as the ``ubuntu`` user. For more information, read supervisor's documentation.
 
 .. code:: bash
 
-  % cat /etc/supervisor/tasktiger.ini
   [program:tasktiger]
   command=/usr/local/bin/tasktiger
   process_name=%(program_name)s_%(process_num)02d
