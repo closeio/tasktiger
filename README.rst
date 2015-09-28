@@ -8,8 +8,8 @@ TaskTiger
 
   TaskTiger forks a subprocess for each task, This comes with several benefits:
   Memory leaks caused by tasks are avoided since the subprocess is terminated
-  when the task is finished. A hard limit can be set for each task, after which
-  the task is killed if it hasn't completed. To ensure performance, any
+  when the task is finished. A hard time limit can be set for each task, after 
+  which the task is killed if it hasn't completed. To ensure performance, any
   necessary Python modules can be preloaded in the parent process.
 
 - Unique queues
@@ -27,7 +27,7 @@ TaskTiger
 
   TaskTiger can ensure to never execute more than one instance of tasks with
   similar arguments by acquiring a lock. If a task hits a lock, it is requeued
-  and scheduled for later executions after a configurable interva.
+  and scheduled for later executions after a configurable interval.
 
 - Task retrying
 
@@ -58,7 +58,7 @@ TaskTiger
 
   TaskTiger supports JSON-style logging via structlog, allowing more
   flexibility for tools to analyze the log. For example, you can use TaskTiger
-  together with logstash, Elasticsearch and kibana.
+  together with Logstash, Elasticsearch, and Kibana.
 
 - Reliability
 
@@ -133,7 +133,7 @@ Task decorator
 
 TaskTiger provides a task decorator to specify task options. Note that simple
 tasks don't need to be decorated. However, decorating the task allows you to
-use an alternative syntax to queue the task, which is compatible with celery:
+use an alternative syntax to queue the task, which is compatible with Celery:
 
 .. code:: python
 
@@ -190,7 +190,7 @@ The following options are supported:
 - ``unique``
 
   The task will only be queued if there is no similar task with the
-  same function, arguments and keyword arguments in the queue. Note
+  same function, arguments, and keyword arguments in the queue. Note
   that multiple similar tasks may still be executed at the same time
   since the task will still be inserted into the queue if another one
   is being processed.
@@ -269,9 +269,9 @@ Workers
 
 The ``tasktiger`` command is used on the command line to invoke a worker. To
 invoke multiple workers, multiple instances need to be started. This can be
-easily done e.g. via supervisor. The following supervisor configuration file
+easily done e.g. via Supervisor. The following Supervisor configuration file
 can be placed in ``/etc/supervisor/tasktiger.ini`` and runs 4 TaskTiger workers
-as the ``ubuntu`` user. For more information, read supervisor's documentation.
+as the ``ubuntu`` user. For more information, read Supervisor's documentation.
 
 .. code:: bash
 
@@ -305,7 +305,7 @@ Workers support the following options:
   If specified, only the given queue(s) are processed. Multiple queues can be
   separated by comma. Any subqueues of the given queues will be also processed.
   For example, ``-q first,second`` will process items from ``first``,
-  ``second`` and subqueues such as ``first.CUSTOMER1``, ``first.CUSTOMER2``.
+  ``second``, and subqueues such as ``first.CUSTOMER1``, ``first.CUSTOMER2``.
 
 - ``-m``, ``--module``
 
