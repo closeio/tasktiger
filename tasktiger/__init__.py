@@ -180,15 +180,9 @@ class TaskTiger(object):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
-        decorated. Arguments not listed below are described in the delay()
-        method.
+        decorated.
 
-        * batch
-          If set to True, the task will receive a list of dicts with args and
-          kwargs and can process multiple tasks of the same type at once.
-          Example: [{"args": [1], "kwargs": {}}, {"args": [2], "kwargs": {}}]
-          Note that the list will only contain multiple items if the worker
-          has set up BATCH_QUEUES for the specific queue.
+        See README.rst for an explanation of the options.
         """
 
         def _delay(func):
@@ -251,79 +245,7 @@ class TaskTiger(object):
               hard_timeout=None, unique=None, lock=None, lock_key=None,
               when=None, retry=None, retry_on=None, retry_method=None):
         """
-        Queues a task.
-
-        * func
-          Dotted path to the function that will be queued (e.g. module.func)
-
-        * args
-          List of arguments that will be passed to the function.
-
-        * kwargs
-          List of keyword arguments that will be passed to the function.
-
-        * queue
-          Name of the queue where the task will be queued.
-
-        * hard_timeout
-          If the task runs longer than the given number of seconds, it will be
-          killed and marked as failed.
-
-        * unique
-          The task will only be queued if there is no similar task with the
-          same function, arguments and keyword arguments in the queue. Note
-          that multiple similar tasks may still be executed at the same time
-          since the task will still be inserted into the queue if another one
-          is being processed.
-
-        * lock
-          Hold a lock while the task is being executed (with the given args and
-          kwargs). If a task with similar args/kwargs is queued and tries to
-          acquire the lock, it will be retried later.
-
-        * lock_key
-          If set, this implies lock=True and specifies the list of kwargs to
-          use to construct the lock key. By default, all args and kwargs are
-          serialized and hashed.
-
-        * when
-          Takes either a datetime (for an absolute date) or a timedelta
-          (relative to now). If given, the task will be scheduled for the given
-          time.
-
-        * retry
-          Whether to retry a task when it fails (either because of an exception
-          or because of a timeout). To restrict the list of failures, use
-          retry_on. Unless retry_method is given, the configured
-          DEFAULT_RETRY_METHOD is used.
-
-        * retry_on
-          If a list is given, it implies retry=True. Task will be only retried
-          on the given exceptions (or its subclasses). To retry the task when a
-          hard timeout occurs, use JobTimeoutException.
-
-        * retry_method
-          If given, implies retry=True. Pass either:
-
-          * a function that takes the retry number as an argument, or,
-          * a tuple (f, args), where f takes the retry number as the first
-            argument, followed by the additional args.
-
-          The function needs to return the desired retry interval in seconds,
-          or raise StopRetry to stop retrying. The following built-in functions
-          can be passed for common scenarios and return the appropriate tuple:
-
-          * fixed(delay, max_retries)
-            Returns a method that returns the given delay or raises StopRetry
-            if the number of retries exceeds max_retries.
-
-          * linear(delay, increment, max_retries)
-            Like fixed, but starts off with the given delay and increments it
-            by the given increment after every retry.
-
-          * exponential(delay, factor, max_retries)
-            Like fixed, but starts off with the given delay and multiplies it
-            by the given factor after every retry.
+        Queues a task. See README.rst for an explanation of the options.
         """
 
         if self.config['ALWAYS_EAGER']:

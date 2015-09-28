@@ -1,17 +1,94 @@
 =========
-tasktiger
+TaskTiger
 =========
 
-*tasktiger* is a Python task queue.
+*TaskTiger* is a Python task queue. Notable features include:
 
-Example
--------
+- Per-task fork
+
+  TaskTiger forks a subprocess for each task, This comes with several benefits:
+  Memory leaks caused by tasks are avoided since the subprocess is terminated
+  when the task is finished. A hard limit can be set for each task, after which
+  the task is killed if it hasn't completed. To ensure performance, any
+  necessary Python modules can be preloaded in the parent process.
+
+- Unique queues
+
+  TaskTiger has the option to avoid duplicate tasks in the task queue. In some
+  cases it is desirable to combine multiple similar tasks. For example, imagine
+  a task that indexes objects (e.g. to make them searchable). If an object is
+  already present in the task queue and hasn't been processed yet, a unique
+  queue will ensure that the indexing task doesn't have to do duplicate work.
+  However, if the task is already running while it's queued, the task will be
+  executed another time to ensure that the indexing task always picks up the
+  latest state.
+
+- Task locks
+
+  TaskTiger can ensure to never execute more than one instance of tasks with
+  similar arguments by acquiring a lock. If a task hits a lock, it is requeued
+  and scheduled for later executions after a configurable interva.
+
+- Task retrying
+
+  TaskTiger lets you retry exceptions (all exceptions or a list of specific
+  ones) and comes with configurable retry intervals (fixed, linear,
+  exponential, custom).
+
+- Flexible queues
+
+  Tasks can be easily queued in separate queues. Workers can be configured to
+  only process specific queues and pick tasks from a randomly chosen queue,
+  ensuring that all queues are processed equally. TaskTiger also supports
+  subqueues which are separated by a period. For example, you can have
+  per-customer queues in the form ``process_emails.CUSTOMER_ID`` and start a
+  worker to process ``process_emails`` and any of its subqueues.
+
+- Batch queues
+
+  Batch queues can be used to combine multiple queued tasks into one. That way,
+  your task function can process multiple sets of arguments at the same time,
+  which can improve performance. The batch size is configurable.
+
+- Scheduled tasks
+
+  Tasks can be scheduled for execution at a specific time.
+
+- Structured logging
+
+  TaskTiger supports JSON-style logging via structlog, allowing more
+  flexibility for tools to analyze the log. For example, you can use TaskTiger
+  together with logstash, Elasticsearch and kibana.
+
+- Reliability
+
+  TaskTiger atomically moves tasks between queue states, and will re-execute
+  tasks after a timeout if a worker crashes.
+
+- Error handling
+
+  If an exception occurs during task execution and the task is not set up to be
+  retried, TaskTiger stores the execution tracebacks in an error queue. The
+  task can then be retried or deleted manually. TaskTiger can be easily
+  integrated with error reporting services like Rollbar.
+
+
+Quick start
+-----------
+
+It is easy to get started with TaskTiger.
+
+Create a file that contains the task(s).
 
 .. code:: python
 
   # tasks.py
   def task():
-      print 'hello'
+      print 'Hello'
+
+Queue the task using the ``delay`` method. Make sure you import the task from a
+separate module instead of queueing it from the Python file you're executing,
+or TaskTiger won't be able to find the task.
 
 .. code:: python
 
@@ -19,10 +96,244 @@ Example
   In [2]: tiger = tasktiger.TaskTiger()
   In [3]: tiger.delay(tasks.task)
 
+Run a worker.
+
 .. code:: bash
 
   % tasktiger
   {"timestamp": "2015-08-27T21:00:09.135344Z", "queues": null, "pid": 69840, "event": "ready", "level": "info"}
   {"task_id": "6fa07a91642363593cddef7a9e0c70ae3480921231710aa7648b467e637baa79", "level": "debug", "timestamp": "2015-08-27T21:03:56.727051Z", "pid": 69840, "queue": "default", "child_pid": 70171, "event": "processing"}
-  hello
+  Hello
   {"task_id": "6fa07a91642363593cddef7a9e0c70ae3480921231710aa7648b467e637baa79", "level": "debug", "timestamp": "2015-08-27T21:03:56.732457Z", "pid": 69840, "queue": "default", "event": "done"}
+
+
+Configuration
+-------------
+
+A ``TaskTiger`` object keeps track of TaskTiger's settings and is used to
+decorate and queue tasks. The constructor takes a ``connection`` argument to
+pass a Redis connection, and a ``config`` argument that takes a dict with
+config options.
+
+.. code:: python
+
+  import tasktiger
+  from redis import Redis
+  conn = redis.Redis(db=1)
+  tiger = tasktiger.TaskTiger(connection=conn, config={
+      'BATCH_QUEUES': { 'batch': 10 },
+  })
+
+Most configuration options don't need to be changed, and a full list can be
+seen in ``TaskTiger``'s ``__init__`` method.
+
+
+Task decorator
+--------------
+
+TaskTiger provides a task decorator to specify task options. Note that simple
+tasks don't need to be decorated. However, decorating the task allows you to
+use an alternative syntax to queue the task, which is compatible with celery:
+
+.. code:: python
+
+  # tasks.py
+
+  import tasktiger
+  tiger = tasktiger.TaskTiger()
+
+  @tiger.task()
+  def task(name, n=None):
+      print 'Hello', name
+
+.. code:: python
+
+  In [1]: import tasks
+  # The following are equivalent. However, the second syntax can only be used
+  # if the task is decorated.
+  In [2]: tasks.tiger.delay(task, args=('John',), kwargs={'n': 1})
+  In [3]: tasks.task.delay('John', n=1)
+
+
+Task options
+------------
+
+Tasks support a variety of options that can be specified either in the task
+decorator, or when queueing a task. For the latter, the ``delay`` method must
+be called on the ``TaskTiger`` object, and any options in the task decorator
+are overridden.
+
+.. code:: python
+
+  @tiger.task(queue='myqueue', unique=True)
+  def task():
+      print 'Hello'
+
+.. code:: python
+
+  # The task will be queued in "otherqueue", even though the task decorator
+  # says "myqueue".
+  tiger.delay(task, queue='otherqueue')
+
+
+The following options are supported:
+
+- ``queue``
+
+  Name of the queue where the task will be queued.
+
+- ``hard_timeout``
+
+  If the task runs longer than the given number of seconds, it will be
+  killed and marked as failed.
+
+- ``unique``
+
+  The task will only be queued if there is no similar task with the
+  same function, arguments and keyword arguments in the queue. Note
+  that multiple similar tasks may still be executed at the same time
+  since the task will still be inserted into the queue if another one
+  is being processed.
+
+- ``lock``
+
+  Hold a lock while the task is being executed (with the given args and
+  kwargs). If a task with similar args/kwargs is queued and tries to
+  acquire the lock, it will be retried later.
+
+- ``lock_key``
+
+  If set, this implies lock=True and specifies the list of kwargs to
+  use to construct the lock key. By default, all args and kwargs are
+  serialized and hashed.
+
+- ``when``
+
+  Takes either a datetime (for an absolute date) or a timedelta
+  (relative to now). If given, the task will be scheduled for the given
+  time.
+
+- ``retry``
+
+  Whether to retry a task when it fails (either because of an exception
+  or because of a timeout). To restrict the list of failures, use
+  retry_on. Unless retry_method is given, the configured
+  ``DEFAULT_RETRY_METHOD`` is used.
+
+- ``retry_on``
+
+  If a list is given, it implies ``retry=True``. Task will be only retried
+  on the given exceptions (or its subclasses). To retry the task when a
+  hard timeout occurs, use ``JobTimeoutException``.
+
+- ``retry_method``
+
+  If given, implies ``retry=True``. Pass either:
+
+  - a function that takes the retry number as an argument, or,
+  - a tuple ``(f, args)``, where ``f`` takes the retry number as the first
+    argument, followed by the additional args.
+
+  The function needs to return the desired retry interval in seconds,
+  or raise StopRetry to stop retrying. The following built-in functions
+  can be passed for common scenarios and return the appropriate tuple:
+
+  - ``fixed(delay, max_retries)``
+
+    Returns a method that returns the given delay or raises StopRetry
+    if the number of retries exceeds max_retries.
+
+  - ``linear(delay, increment, max_retries)``
+
+    Like fixed, but starts off with the given delay and increments it
+    by the given increment after every retry.
+
+  - ``exponential(delay, factor, max_retries)``
+
+    Like fixed, but starts off with the given delay and multiplies it
+    by the given factor after every retry.
+
+The following options can be only specified in the task decorator:
+
+- ``batch``
+
+  If set to ``True``, the task will receive a list of dicts with args and
+  kwargs and can process multiple tasks of the same type at once.
+  Example: ``[{"args": [1], "kwargs": {}}, {"args": [2], "kwargs": {}}]``
+  Note that the list will only contain multiple items if the worker
+  has set up ``BATCH_QUEUES`` for the specific queue.
+
+
+Workers
+-------
+
+The ``tasktiger`` command is used on the command line to invoke a worker. To
+invoke multiple workers, multiple instances need to be started. This can be
+easily done e.g. via supervisor. The following supervisor configuration file
+can be placed in ``/etc/supervisor/tasktiger.ini`` and runs 4 TaskTiger workers
+as the ``ubuntu`` user. For more information, read supervisor's documentation.
+
+.. code:: bash
+
+  % cat /etc/supervisor/tasktiger.ini
+  [program:tasktiger]
+  command=/usr/local/bin/tasktiger
+  process_name=%(program_name)s_%(process_num)02d
+  numprocs=4
+  numprocs_start=0
+  priority=999
+  autostart=true
+  autorestart=true
+  startsecs=10
+  startretries=3
+  exitcodes=0,2
+  stopsignal=TERM
+  stopwaitsecs=600
+  killasgroup=false
+  user=ubuntu
+  redirect_stderr=false
+  stdout_logfile=/var/log/tasktiger.out.log
+  stdout_logfile_maxbytes=250MB
+  stdout_logfile_backups=10
+  stderr_logfile=/var/log/tasktiger.err.log
+  stderr_logfile_maxbytes=250MB
+  stderr_logfile_backups=10
+
+Workers support the following options:
+
+- ``-q``, ``--queues``
+
+  If specified, only the given queue(s) are processed. Multiple queues can be
+  separated by comma. Any subqueues of the given queues will be also processed.
+  For example, ``-q first,second`` will process items from ``first``,
+  ``second`` and subqueues such as ``first.CUSTOMER1``, ``first.CUSTOMER2``.
+
+- ``-m``, ``--module``
+
+  Module(s) to import when launching the worker. This improves task performance
+  since the module doesn't have to be reimported every time a task is forked.
+  Multiple modules can be separated by comma.
+
+  Another way to preload modules is to set up a custom TaskTiger launch script,
+  which is described below.
+
+In some cases it is convenient to have a custom TaskTiger launch script. For
+example, if your application has a ``manage.py`` command you can configure it
+to launch TaskTiger and parse any command line arguments using the
+``run_worker_with_args`` method. Here is an example:
+
+.. code:: python
+
+  import sys
+  from tasktiger import TaskTiger
+
+  try:
+      command = sys.argv[1]
+  except IndexError:
+      command = None
+
+  if command == 'tasktiger':
+      tiger = TaskTiger()
+      # Strip the "tasktiger" arg when running via manage
+      tiger.run_worker_with_args(sys.argv[2:])
+      sys.exit(0)
