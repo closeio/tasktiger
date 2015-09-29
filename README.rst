@@ -4,7 +4,12 @@ TaskTiger
 .. image:: https://circleci.com/gh/closeio/tasktiger/tree/master.svg?style=svg&circle-token=a86617952aa9b4cfee784b6ac43358cd042a6672
     :target: https://circleci.com/gh/closeio/tasktiger/tree/master
 
-*TaskTiger* is a Python task queue. Notable features include:
+*TaskTiger* is a Python task queue using Redis.
+
+.. contents:: Contents
+
+Features
+--------
 
 - Per-task fork
 
@@ -39,12 +44,15 @@ TaskTiger
 
 - Flexible queues
 
-  Tasks can be easily queued in separate queues. Workers can be configured to
-  only process specific queues and pick tasks from a randomly chosen queue,
+  Tasks can be easily queued in separate queues. Workers pick tasks from a
+  randomly chosen queue and can be configured to only process specific queues,
   ensuring that all queues are processed equally. TaskTiger also supports
   subqueues which are separated by a period. For example, you can have
   per-customer queues in the form ``process_emails.CUSTOMER_ID`` and start a
-  worker to process ``process_emails`` and any of its subqueues.
+  worker to process ``process_emails`` and any of its subqueues. Since tasks
+  are picked from a random queue, all customers get equal treatment: If one
+  customer is queueing many tasks it can't block other customers' tasks from
+  being processed.
 
 - Batch queues
 
@@ -85,18 +93,16 @@ Create a file that contains the task(s).
 .. code:: python
 
   # tasks.py
-  def task():
+  def my_task():
       print 'Hello'
 
-Queue the task using the ``delay`` method. Make sure you import the task from a
-separate module instead of queueing it from the Python file you're executing,
-or TaskTiger won't be able to find the task.
+Queue the task using the ``delay`` method.
 
 .. code:: python
 
   In [1]: import tasktiger, tasks
   In [2]: tiger = tasktiger.TaskTiger()
-  In [3]: tiger.delay(tasks.task)
+  In [3]: tiger.delay(tasks.my_task)
 
 Run a worker.
 
@@ -145,7 +151,7 @@ use an alternative syntax to queue the task, which is compatible with Celery:
   tiger = tasktiger.TaskTiger()
 
   @tiger.task()
-  def task(name, n=None):
+  def my_task(name, n=None):
       print 'Hello', name
 
 .. code:: python
@@ -153,8 +159,8 @@ use an alternative syntax to queue the task, which is compatible with Celery:
   In [1]: import tasks
   # The following are equivalent. However, the second syntax can only be used
   # if the task is decorated.
-  In [2]: tasks.tiger.delay(task, args=('John',), kwargs={'n': 1})
-  In [3]: tasks.task.delay('John', n=1)
+  In [2]: tasks.tiger.delay(my_task, args=('John',), kwargs={'n': 1})
+  In [3]: tasks.my_task.delay('John', n=1)
 
 
 Task options
@@ -168,17 +174,20 @@ are overridden.
 .. code:: python
 
   @tiger.task(queue='myqueue', unique=True)
-  def task():
+  def my_task():
       print 'Hello'
 
 .. code:: python
 
   # The task will be queued in "otherqueue", even though the task decorator
   # says "myqueue".
-  tiger.delay(task, queue='otherqueue')
+  tiger.delay(my_task, queue='otherqueue')
 
+When queueing a task, the task needs to be defined in a module other than the
+Python file which is being executed. In other words, the task can't be in the
+``__main__`` module. TaskTiger will give you back an error otherwise.
 
-The following options are supported:
+The following options are supported for ``delay``:
 
 - ``queue``
 
@@ -319,9 +328,10 @@ Workers support the following options:
   which is described below.
 
 In some cases it is convenient to have a custom TaskTiger launch script. For
-example, if your application has a ``manage.py`` command you can configure it
-to launch TaskTiger and parse any command line arguments using the
-``run_worker_with_args`` method. Here is an example:
+example, your application may have a ``manage.py`` command that sets up the
+environment and you may want to launch TaskTiger workers using that script. To
+do that, you can use the ``run_worker_with_args`` method, which launches a
+TakTiger worker and parases any command line arguments. Here is an example:
 
 .. code:: python
 
@@ -335,6 +345,78 @@ to launch TaskTiger and parse any command line arguments using the
 
   if command == 'tasktiger':
       tiger = TaskTiger()
-      # Strip the "tasktiger" arg when running via manage
+      # Strip the "tasktiger" arg when running via manage, so we can run e.g.
+      # ./manage.py tasktiger --help
       tiger.run_worker_with_args(sys.argv[2:])
       sys.exit(0)
+
+Note that if you're using ``flask-script``, you will still need to manually
+evaluate ``sys.argv`` to ensure proper argument parsing, instead of using a
+``flask-script`` command.
+
+
+Inspect, requeue and delete tasks
+---------------------------------
+
+TaskTiger does not currently come with an admin interface, but provides access
+to the ``Task`` class which lets you inspect queues and requeue and delete
+tasks.
+
+Each queue can have tasks in the following states:
+
+- ``queued``: Tasks that are queued and waiting to be picked up by the workers.
+- ``active``: Tasks that are currently being processed by the workers.
+- ``scheduled``: Tasks that are scheduled for later execution.
+- ``error``: Tasks that failed with an error.
+
+To get a list of all tasks for a given queue and state, use
+``Task.tasks_from_queue``. The method gives you back a tuple containing the
+total number of tasks in the queue (useful if the tasks are truncated) and a
+list of tasks in the queue, latest first. Using the ``skip`` and ``limit``
+keyword arguments, you can fetch arbitrary slices of the queue. If you know the
+task ID, you can fetch a given task using ``Task.from_id``. Both methods let
+you load tracebacks from failed task executions using the ``load_executions``
+keyword argument, which accepts an integer indicating how many executions
+should be loaded.
+
+The ``Task`` object has the following properties:
+
+- ``id``: The task ID.
+
+- ``data``: The raw data as a dict from Redis.
+
+- ``executions``: A list of failed task executions (as dicts). An execution
+  dict contains the processing time in ``time_started`` and ``time_failed``,
+  the worker host in ``host``, the exception name in ``exception_name`` and
+  the full traceback in ``traceback``.
+
+- ``func``, ``args``, ``kwargs``: The serialized function name with all of its
+  arguments.
+
+The ``Task`` object has the following methods. Note that these methods only
+work for tasks that are in the error queue.
+
+- ``retry``: Requeue the task for execution.
+
+- ``delete``: Remove the task from the error queue.
+
+Example:
+
+.. code:: python
+
+  from tasktiger import TaskTiger
+  from tasktiger.task import Task
+
+  QUEUE_NAME = 'default'
+  TASK_STATE = 'error'
+  TASK_ID = '6fa07a91642363593cddef7a9e0c70ae3480921231710aa7648b467e637baa79'
+
+  tiger = TaskTiger()
+
+  n_total, tasks = Task.tasks_from_queue(tiger, QUEUE_NAME, TASK_STATE)
+
+  for task in tasks:
+      print task.id, task.func
+
+  task = Task.from_id(tiger, QUEUE_NAME, TASK_STATE, TASK_ID)
+  task.retry()
