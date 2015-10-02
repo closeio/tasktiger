@@ -6,6 +6,13 @@ TaskTiger
 
 *TaskTiger* is a Python task queue using Redis.
 
+
+(Interested in working on projects like this? `Close.io`_ is looking for `great engineers`_ to join our team)
+
+.. _Close.io: http://close.io
+.. _great engineers: http://jobs.close.io
+
+
 .. contents:: Contents
 
 Features
