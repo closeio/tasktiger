@@ -416,6 +416,38 @@ class TestCase(unittest.TestCase):
         self.assertEqual(f[0](4, *f[1]), 8)
         self.assertRaises(StopRetry, f[0], 5, *f[1])
 
+    def test_retry_exception_1(self):
+        self.tiger.delay(retry_task)
+        self._ensure_queues(queued={'default': 1})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(scheduled={'default': 1})
+
+        time.sleep(DELAY)
+
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(scheduled={'default': 1})
+
+        time.sleep(DELAY)
+
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={'default': 1})
+
+    def test_retry_exception_2(self):
+        self.tiger.delay(retry_task_2)
+        self._ensure_queues(queued={'default': 1})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(scheduled={'default': 1})
+
+        time.sleep(DELAY)
+
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues()
+
     def test_batch_1(self):
         self.tiger.delay(batch_task, args=[1])
         self.tiger.delay(batch_task, args=[2])

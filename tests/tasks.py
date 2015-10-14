@@ -2,6 +2,9 @@ import json
 import redis
 import time
 
+from tasktiger import RetryException
+from tasktiger.retry import fixed
+
 from .config import *
 from .utils import get_tiger
 
@@ -63,3 +66,10 @@ def non_batch_task(arg):
     conn.rpush('batch_task', arg)
     if arg == 10:
         raise StandardError('exception')
+
+def retry_task():
+    raise RetryException()
+
+def retry_task_2():
+    raise RetryException(method=fixed(DELAY, 1),
+                         log_error=False)

@@ -6,12 +6,14 @@ import random
 import select
 import signal
 import socket
+import sys
 import time
 import traceback
 
 from redis_lock import Lock
 
 from ._internal import *
+from .exceptions import RetryException
 from .retry import *
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
@@ -169,6 +171,9 @@ class Worker(object):
 
         execution['time_started'] = time.time()
 
+        exc = None
+        exc_info = None
+
         try:
             func = import_attribute(task_func)
 
@@ -196,15 +201,25 @@ class Worker(object):
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*args, **kwargs)
 
+        except RetryException, exc:
+            execution['retry'] = True
+            if exc.method:
+                execution['retry_method'] = serialize_retry_method(exc.method)
+            execution['log_error'] = exc.log_error
+            exc_info = exc.exc_info
         except Exception, exc:
-            execution['traceback'] = traceback.format_exc()
-            execution['exception_name'] = serialize_func_name(exc.__class__)
-            execution['time_failed'] = time.time()
+            pass
         else:
             success = True
 
         if not success:
+            execution['time_failed'] = time.time()
+            if not exc_info:
+                exc_info = sys.exc_info()
             # Currently we only log failed task executions to Redis.
+            execution['traceback'] = \
+                    ''.join(traceback.format_exception(*exc_info))
+            execution['exception_name'] = serialize_func_name(exc.__class__)
             execution['success'] = success
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
@@ -416,7 +431,7 @@ class Worker(object):
         """
         log = self.log.bind(queue=queue, task_id=task['id'])
 
-        if success:
+        def _mark_done():
             # Remove the task from active queue
             if task.get('unique', False):
                 # For unique tasks we need to check if they're in use in
@@ -427,14 +442,31 @@ class Worker(object):
             self._redis_move_task(queue, task['id'], ACTIVE,
                                   remove_task=remove_task)
             log.debug('done')
+
+        if success:
+            _mark_done()
         else:
             should_retry = False
+            should_log_error = True
             # Get execution info (for logging and retry purposes)
             execution = self.connection.lindex(
                 self._key('task', task['id'], 'executions'), -1)
+
             if execution:
                 execution = json.loads(execution)
+
+            if execution.get('retry'):
+                if 'retry_method' in execution:
+                    retry_func, retry_args = execution['retry_method']
+                else:
+                    # We expect the serialized method here.
+                    retry_func, retry_args = serialize_retry_method( \
+                            self.config['DEFAULT_RETRY_METHOD'])
+                should_log_error = execution['log_error']
+                should_retry = True
+
             if 'retry_method' in task:
+                retry_func, retry_args = task['retry_method']
                 if 'retry_on' in task:
                     if execution:
                         exception_name = execution.get('exception_name')
@@ -458,7 +490,6 @@ class Worker(object):
             log_context = {}
 
             if should_retry:
-                retry_func, retry_args = task['retry_method']
                 retry_num = self.connection.llen(self._key('task', task['id'], 'executions'))
                 log_context['retry_func'] = retry_func
                 log_context['retry_num'] = retry_num
@@ -478,7 +509,7 @@ class Worker(object):
                     else:
                         state = SCHEDULED
 
-            if state == ERROR:
+            if state == ERROR and should_log_error:
                 log_func = log.error
             else:
                 log_func = log.warning
@@ -491,7 +522,10 @@ class Worker(object):
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
-            self._redis_move_task(queue, task['id'], ACTIVE, state, when)
+            if state == ERROR and not should_log_error:
+                _mark_done()
+            else:
+                self._redis_move_task(queue, task['id'], ACTIVE, state, when)
 
     def _worker_run(self):
         """
