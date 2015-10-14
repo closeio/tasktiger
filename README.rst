@@ -119,9 +119,25 @@ Configuration
 -------------
 
 A ``TaskTiger`` object keeps track of TaskTiger's settings and is used to
-decorate and queue tasks. The constructor takes a ``connection`` argument to
-pass a Redis connection, and a ``config`` argument that takes a dict with
-config options.
+decorate and queue tasks. The constructor takes the following arguments:
+
+- ``connection``
+
+  Redis connection object
+
+- ``config``
+
+  Dict with config options. Most configuration options don't need to be
+  changed, and a full list can be seen within ``TaskTiger``'s ``__init__``
+  method.
+
+- ``setup_structlog``
+
+  If set to True, sets up structured logging using ``structlog`` when
+  initializing TaskTiger. This makes writing custom worker scripts easier
+  since it doesn't require the user to set up ``structlog`` in advance.
+
+Example:
 
 .. code:: python
 
@@ -131,9 +147,6 @@ config options.
   tiger = tasktiger.TaskTiger(connection=conn, config={
       'BATCH_QUEUES': { 'batch': 10 },
   })
-
-Most configuration options don't need to be changed, and a full list can be
-seen in ``TaskTiger``'s ``__init__`` method.
 
 
 Task decorator
@@ -331,7 +344,7 @@ In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the
 environment and you may want to launch TaskTiger workers using that script. To
 do that, you can use the ``run_worker_with_args`` method, which launches a
-TakTiger worker and parases any command line arguments. Here is an example:
+TaskTiger worker and parases any command line arguments. Here is an example:
 
 .. code:: python
 
@@ -344,7 +357,7 @@ TakTiger worker and parases any command line arguments. Here is an example:
       command = None
 
   if command == 'tasktiger':
-      tiger = TaskTiger()
+      tiger = TaskTiger(setup_structlog=True)
       # Strip the "tasktiger" arg when running via manage, so we can run e.g.
       # ./manage.py tasktiger --help
       tiger.run_worker_with_args(sys.argv[2:])
@@ -420,3 +433,32 @@ Example:
 
   task = Task.from_id(tiger, QUEUE_NAME, TASK_STATE, TASK_ID)
   task.retry()
+
+
+Rollbar error handling
+----------------------
+
+TaskTiger comes with Rollbar integration for error handling. When a task errors
+out, it can be logged to Rollbar, grouped by queue, task function name and
+exception type. To enable logging, initialize rollbar with the
+``StructlogRollbarHandler`` provided in the ``tasktiger.rollbar`` module. The
+handler takes a string as an argument which is used to prefix all the messages
+reported to Rollbar. Here is a custom worker launch script:
+
+.. code:: python
+
+  import logging
+  import rollbar
+  import sys
+  from tasktiger import TaskTiger
+  from tasktiger.rollbar import StructlogRollbarHandler
+
+  tiger = TaskTiger(setup_structlog=True)
+
+  rollbar.init(ROLLBAR_API_KEY, APPLICATION_ENVIRONMENT,
+               allow_logging_basic_config=False)
+  rollbar_handler = StructlogRollbarHandler('TaskTiger')
+  rollbar_handler.setLevel(logging.ERROR)
+  tiger.log.addHandler(rollbar_handler)
+
+  tiger.run_worker_with_args(sys.argv[1:])
