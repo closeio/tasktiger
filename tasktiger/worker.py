@@ -465,7 +465,7 @@ class Worker(object):
                 should_log_error = execution['log_error']
                 should_retry = True
 
-            if 'retry_method' in task:
+            if 'retry_method' in task and not should_retry:
                 retry_func, retry_args = task['retry_method']
                 if 'retry_on' in task:
                     if execution:
