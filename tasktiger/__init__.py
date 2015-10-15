@@ -63,10 +63,10 @@ STRING <prefix>:lock:<lock_hash>
 """
 
 class TaskTiger(object):
-    def __init__(self, connection=None, config=None):
+    def __init__(self, connection=None, config=None, setup_structlog=False):
         """
         Initializes TaskTiger with the given Redis connection and config
-        options.
+        options. Optionally sets up structlog.
         """
 
         self.config = {
@@ -126,9 +126,30 @@ class TaskTiger(object):
 
         self.connection = connection or redis.Redis()
         self.scripts = RedisScripts(self.connection)
+
+        if setup_structlog:
+            structlog.configure(
+                processors=[
+                    structlog.stdlib.add_log_level,
+                    structlog.stdlib.filter_by_level,
+                    structlog.processors.TimeStamper(fmt='iso', utc=True),
+                    structlog.processors.StackInfoRenderer(),
+                    structlog.processors.format_exc_info,
+                    structlog.processors.JSONRenderer()
+                ],
+                context_class=dict,
+                logger_factory=structlog.stdlib.LoggerFactory(),
+                wrapper_class=structlog.stdlib.BoundLogger,
+                cache_logger_on_first_use=True,
+            )
+
         self.log = structlog.get_logger(
             self.config['LOGGER_NAME'],
         ).bind()
+
+        if setup_structlog:
+            self.log.setLevel(logging.DEBUG)
+            logging.basicConfig(format='%(message)s')
 
     def _key(self, *parts):
         """
@@ -382,23 +403,5 @@ class TaskTiger(object):
 @click.pass_context
 def run_worker(context, **kwargs):
     # TODO: Make Redis settings configurable via click.
-    if not context.obj:
-        structlog.configure(
-            processors=[
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.filter_by_level,
-                structlog.processors.TimeStamper(fmt='iso', utc=True),
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.JSONRenderer()
-            ],
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
-    tiger = context.obj or TaskTiger()
-    if not context.obj:
-        tiger.log.setLevel(logging.DEBUG)
-        logging.basicConfig(format='%(message)s')
+    tiger = context.obj or TaskTiger(setup_structlog=True)
     tiger.run_worker(**kwargs)
