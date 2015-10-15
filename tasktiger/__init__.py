@@ -20,6 +20,7 @@ __all__ = ['TaskTiger', 'Worker',
 
            # Exceptions
            'TaskImportError', 'JobTimeoutException', 'StopRetry',
+           'RetryException',
 
            # Retry methods
            'fixed', 'linear', 'exponential']
@@ -337,11 +338,7 @@ class TaskTiger(object):
             if not retry_method:
                 retry_method = self.config['DEFAULT_RETRY_METHOD']
 
-            if callable(retry_method):
-                retry_method = (serialize_func_name(retry_method), ())
-            else:
-                retry_method = (serialize_func_name(retry_method[0]),
-                                retry_method[1])
+            retry_method = serialize_retry_method(retry_method)
 
             task['retry_method'] = retry_method
             if retry_on:
