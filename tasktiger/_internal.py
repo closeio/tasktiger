@@ -59,3 +59,9 @@ def dotted_parts(s):
             yield s
             break
         yield s[:idx]
+
+def serialize_retry_method(retry_method):
+    if callable(retry_method):
+        return (serialize_func_name(retry_method), ())
+    else:
+        return (serialize_func_name(retry_method[0]), retry_method[1])
