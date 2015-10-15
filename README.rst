@@ -321,8 +321,8 @@ Example usage:
           some_code()
       except NetworkException:
           # Back off exponentially up to 5 times in case of a network failure.
-          # Log the original traceback and don't log an error if we still fail
-          # after 5 times.
+          # Log the original traceback (as a warning) and don't log an error if
+          # we still fail after 5 times.
           raise RetryException(method=exponential(60, 2, 5),
                                original_traceback=True,
                                log_error=False)
