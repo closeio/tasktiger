@@ -89,6 +89,13 @@ Features
   task can then be retried or deleted manually. TaskTiger can be easily
   integrated with error reporting services like Rollbar.
 
+- Admin interface
+
+  A simple admin interface using flask-admin exists as a separate project
+  (tasktiger-admin_).
+
+.. _tasktiger-admin: https://github.com/closeio/tasktiger-admin
+
 
 Quick start
 -----------
