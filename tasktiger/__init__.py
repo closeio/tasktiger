@@ -406,8 +406,12 @@ class TaskTiger(object):
                                      "reimported every time a task is forked. "
                                      "Multiple modules can be separated by "
                                      "comma.")
+@click.option('-h', '--host', help='Redis server hostname')
+@click.option('-p', '--port', help='Redis server port')
+@click.option('-a', '--password', help='Redis password')
+@click.option('-n', '--db', help='Redis database number')
 @click.pass_context
-def run_worker(context, **kwargs):
-    # TODO: Make Redis settings configurable via click.
-    tiger = context.obj or TaskTiger(setup_structlog=True)
+def run_worker(context, host, port, db, password, **kwargs):
+    conn = redis.Redis(host, int(port or 6379), int(db or 0), password)
+    tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
     tiger.run_worker(**kwargs)

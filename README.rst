@@ -400,6 +400,22 @@ Workers support the following options:
   Another way to preload modules is to set up a custom TaskTiger launch script,
   which is described below.
 
+- ``-h``, ``--host``
+
+  Redis server hostname (if different from ``localhost``).
+
+- ``-p``, ``--port``
+
+  Redis server port (if different from ``6379``).
+
+- ``-a``, ``--password``
+
+  Redis server password (if required).
+
+- ``-n``, ``--db``
+
+  Redis server database number (if different from ``0``).
+
 In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the
 environment and you may want to launch TaskTiger workers using that script. To
