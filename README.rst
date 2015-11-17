@@ -404,7 +404,7 @@ In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the
 environment and you may want to launch TaskTiger workers using that script. To
 do that, you can use the ``run_worker_with_args`` method, which launches a
-TaskTiger worker and parases any command line arguments. Here is an example:
+TaskTiger worker and parses any command line arguments. Here is an example:
 
 .. code:: python
 
