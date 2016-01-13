@@ -8,6 +8,7 @@ import logging
 import redis
 import structlog
 import time
+import pytz
 
 from redis_scripts import RedisScripts
 
@@ -276,7 +277,8 @@ class TaskTiger(object):
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        if self.config['ALWAYS_EAGER']:
+        if self.config['ALWAYS_EAGER'] and not \
+                (when and when.replace(tzinfo=pytz.UTC) >= datetime.datetime.now(tz=pytz.UTC)):
             if not args:
                 args = []
             if not kwargs:
