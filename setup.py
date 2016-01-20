@@ -9,6 +9,11 @@ setup(
     test_suite='tests',
     tests_require=['redis'],
     platforms='any',
+    install_requires=[
+        'click',
+        'redis',
+        'structlog'
+    ],
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
