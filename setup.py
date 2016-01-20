@@ -10,9 +10,9 @@ setup(
     tests_require=['redis'],
     platforms='any',
     install_requires=[
-        'click==4.0',
-        'redis==2.10.3',
-        'structlog==15.1.0'
+        'click',
+        'redis',
+        'structlog'
     ],
     classifiers=[
         'Intended Audience :: Developers',
