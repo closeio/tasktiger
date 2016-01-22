@@ -1,4 +1,3 @@
-pytz
 click==4.0
 redis==2.10.3
 structlog==15.1.0
