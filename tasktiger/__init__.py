@@ -83,8 +83,9 @@ class TaskTiger(object):
             # channel and check for scheduled or expired items.
             'SELECT_TIMEOUT': 1,
 
-            # If this is True, all tasks will be executed locally by blocking
-            # until the task returns. This is useful for testing purposes.
+            # If this is True, all tasks except future tasks (when=a future
+            # time) will be executed locally by blocking until the task
+            # returns. This is useful for testing purposes.
             'ALWAYS_EAGER': False,
 
             # If retry is True but no retry_method is specified for a given
@@ -276,7 +277,8 @@ class TaskTiger(object):
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        if self.config['ALWAYS_EAGER']:
+        if self.config['ALWAYS_EAGER'] and not \
+                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
             if not args:
                 args = []
             if not kwargs:
