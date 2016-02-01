@@ -429,7 +429,8 @@ class Worker(object):
         the task gets properly removed from the ACTIVE queue and, in case of an
         error, retried or marked as failed.
         """
-        log = self.log.bind(queue=queue, task_id=task['id'])
+        log = self.log.bind(queue=queue, task_id=task['id'],
+                            args=task.get('args'), kwargs=task.get('kwargs'))
 
         def _mark_done():
             # Remove the task from active queue
