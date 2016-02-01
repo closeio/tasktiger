@@ -9,6 +9,7 @@ import unittest
 from .config import *
 from .tasks import *
 from .utils import *
+from .redis_scripts import *
 
 class TestCase(unittest.TestCase):
     """

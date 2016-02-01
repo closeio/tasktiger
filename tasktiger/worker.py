@@ -88,18 +88,20 @@ class Worker(object):
                 self._key(SCHEDULED))))
         now = time.time()
         for queue in queues:
-            # Move due items from scheduled queue to active queue. If items
-            # were moved, remove the queue from the scheduled set if it is
-            # empty, and add it to the active set so the task gets picked up.
-
+            # Move due items from the SCHEDULED queue to the QUEUED queue. If
+            # items were moved, remove the queue from the scheduled set if it
+            # is empty, and add it to the queued set so the task gets picked
+            # up. If any unique tasks are already queued, don't update their
+            # queue time (because the new queue time would be later).
             result = self.scripts.zpoppush(
                 self._key(SCHEDULED, queue),
                 self._key(QUEUED, queue),
                 self.config['SCHEDULED_TASK_BATCH_SIZE'],
                 now,
                 now,
-                on_success=('update_sets', self._key(SCHEDULED),
-                                           self._key(QUEUED), queue),
+                if_exists=('noupdate',),
+                on_success=('update_sets', queue,
+                            self._key(SCHEDULED), self._key(QUEUED)),
             )
 
             # XXX: ideally this would be in the same pipeline, but we only want
@@ -141,14 +143,20 @@ class Worker(object):
         active_queues = self.connection.smembers(self._key(ACTIVE))
         now = time.time()
         for queue in active_queues:
+            # Move expired items from the ACTIVE queue to the QUEUED queue and
+            # update the active and queued sets (remove the affected queue from
+            # the ACTIVE set if there are no more items, and add it to the
+            # QUEUED set if any items were moved). If items already exist in
+            # the QUEUED queue, don't change their queue time.
             result = self.scripts.zpoppush(
                 self._key(ACTIVE, queue),
                 self._key(QUEUED, queue),
                 self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
                 now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
                 now,
-                on_success=('update_sets', self._key(ACTIVE),
-                                           self._key(QUEUED), queue),
+                if_exists=('noupdate',),
+                on_success=('update_sets', queue,
+                            self._key(ACTIVE), self._key(QUEUED)),
             )
             # XXX: Ideally this would be atomic with the operation above.
             if result:
@@ -311,14 +319,23 @@ class Worker(object):
                 batch_size = batch_queues[queue]
 
         # Move an item to the active queue, if available.
+        # We need to be careful when moving unique tasks: We currently don't
+        # support concurrent processing of multiple unique tasks. If the task
+        # is already in the ACTIVE queue, we need to execute the queued task
+        # later, i.e. move it to the SCHEDULED queue (prefer the earliest
+        # time if it's already scheduled). We want to make sure that the last
+        # queued instance of the task always gets executed no earlier than it
+        # was queued.
+        later = time.time() + self.config['LOCK_RETRY']
         task_ids = self.scripts.zpoppush(
             self._key(QUEUED, queue),
             self._key(ACTIVE, queue),
             batch_size,
             None,
             now,
-            on_success=('update_sets', self._key(QUEUED), self._key(ACTIVE),
-                        queue),
+            if_exists=('add', self._key(SCHEDULED, queue), later, 'min'),
+            on_success=('update_sets', queue, self._key(QUEUED),
+                        self._key(ACTIVE), self._key(SCHEDULED))
         )
 
         if task_ids:
@@ -403,11 +420,14 @@ class Worker(object):
                     else:
                         log.info('could not acquire lock', task_id=task['id'])
 
-                        # Reschedule the task
+                        # Reschedule the task (but if the task is already
+                        # scheduled in case of a unique task, don't prolong
+                        # the schedule date).
                         when = time.time() + self.config['LOCK_RETRY']
-                        self._redis_move_task(queue, task['id'], ACTIVE, SCHEDULED, when)
-                        # Make sure to remove it from this list so we don't re-add
-                        # to the ACTIVE queue by updating the heartbeat.
+                        self._redis_move_task(queue, task['id'], ACTIVE,
+                                              SCHEDULED, when, mode='min')
+                        # Make sure to remove it from this list so we don't
+                        # re-add to the ACTIVE queue by updating the heartbeat.
                         all_task_ids.remove(task['id'])
                         continue
 

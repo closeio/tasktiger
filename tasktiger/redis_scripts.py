@@ -1,36 +1,175 @@
-# ARGV = { score member }
-ZADD_NOUPDATE = """
-    if not redis.call('zscore', KEYS[1], ARGV[2]) then
-        return redis.call('zadd', KEYS[1], ARGV[1], ARGV[2])
+# ARGV = { score, member }
+ZADD_NOUPDATE_TEMPLATE = """
+    local zadd_result
+    if not redis.call('zscore', {key}, {member}) then
+        {ret} redis.call('zadd', {key}, {score}, {member})
     end
 """
+ZADD_NOUPDATE =  ZADD_NOUPDATE_TEMPLATE.format(
+    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+)
+ZADD_UPDATE_TEMPLATE = """
+    local score = redis.call('zscore', {key}, {member})
+    local new_score
+    if score then
+        new_score = math.{f}(score, {score})
+    else
+        new_score = {score}
+    end
+    {ret} redis.call('zadd', {key}, new_score, {member})
+"""
+ZADD_UPDATE_MIN = ZADD_UPDATE_TEMPLATE.format(
+    f='min', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return')
+ZADD_UPDATE_MAX = ZADD_UPDATE_TEMPLATE.format(
+    f='max', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return')
 
+_ZPOPPUSH_EXISTS_TEMPLATE = """
+    -- Load keys and arguments
+    local source = KEYS[1]
+    local destination = KEYS[2]
+    local remove_from_set = KEYS[3]
+    local add_to_set = KEYS[4]
+    local add_to_set_if_exists = KEYS[5]
+    local if_exists_key = KEYS[6]
+
+    local score = ARGV[1]
+    local count = ARGV[2]
+    local new_score = ARGV[3]
+    local set_value = ARGV[4]
+    local if_exists_score = ARGV[5]
+
+    -- Fetch affected members from the source set.
+    local members = redis.call('zrangebyscore', source, '-inf', score, 'LIMIT', 0, count)
+
+    -- Tables to keep track of the members that we're moving to the destination
+    -- (moved_members), along with their new scores (new_scoremembers), and
+    -- members that already exist at the destination (existing_members).
+    local new_scoremembers = {{}}
+    local moved_members = {{}}
+    local existing_members = {{}}
+
+    -- Counters so we can quickly append to the tables
+    local existing_idx = 0
+    local moved_idx = 0
+
+    -- Populate the tables defined above.
+    for i, member in ipairs(members) do
+        if redis.call('zscore', destination, member) then
+            existing_idx = existing_idx + 1
+            existing_members[existing_idx] = member
+        else
+            moved_idx = moved_idx + 1
+            new_scoremembers[2*moved_idx] = member
+            new_scoremembers[2*moved_idx-1] = new_score
+            moved_members[moved_idx] = member
+        end
+    end
+
+    if #members > 0 then
+        -- If we matched any members, remove them from the source.
+        redis.call('zremrangebyrank', source, 0, #members-1)
+
+        -- Add members to the destination.
+        if #new_scoremembers > 0 then
+            redis.call('zadd', destination, unpack(new_scoremembers))
+        end
+
+        -- Perform the "if exists" action for members that exist at the
+        -- destination.
+        for i, member in ipairs(existing_members) do
+            {if_exists_template}
+        end
+
+        -- Perform any "on success" action.
+        {on_success}
+
+        -- If we moved any members to the if_exists_key, add the set_value
+        -- to the add_to_set_if_exists (see zpoppush docstring).
+        local if_exists_key_exists = redis.call('exists', if_exists_key)
+        if if_exists_key_exists == 1 then
+            redis.call('sadd', add_to_set_if_exists, set_value)
+        end
+
+    end
+
+    -- Return just the moved members.
+    return moved_members
+"""
+
+_ON_SUCCESS_UPDATE_SETS_TEMPLATE = """
+    local src_exists = redis.call('exists', source)
+    if src_exists == 0 then
+        redis.call('srem', {remove_from_set}, {set_value})
+    end
+    redis.call('sadd', {add_to_set}, {set_value})
+"""
+
+# KEYS = { source, destination, remove_from_set, add_to_set,
+#          add_to_set_if_exists, if_exists_key }
+# ARGV = { score, count, new_score, set_value, if_exists_score }
+ZPOPPUSH_EXISTS_MIN_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
+    if_exists_template=ZADD_UPDATE_TEMPLATE.format(
+        f='min', key='if_exists_key', score='if_exists_score',
+        member='member', ret=''),
+    on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
+        set_value='set_value', add_to_set='add_to_set',
+        remove_from_set='remove_from_set')
+)
+
+# KEYS = { source, destination, remove_from_set, add_to_set }
+# ARGV = { score, count, new_score, set_value }
+ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
+    if_exists_template='',
+    on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
+        set_value='set_value', add_to_set='add_to_set',
+        remove_from_set='remove_from_set')
+)
+
+# KEYS = { source, destination, ... }
+# ARGV = { score, count, new_score, ... }
 _ZPOPPUSH_TEMPLATE = """
-    local members = redis.call('zrangebyscore', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
+    -- Load keys and arguments
+    local source = KEYS[1]
+    local destination = KEYS[2]
+
+    local score = ARGV[1]
+    local count = ARGV[2]
+    local new_score = ARGV[3]
+
+    -- Fetch affected members from the source set.
+    local members = redis.call('zrangebyscore', source, '-inf', score, 'LIMIT', 0, count)
+
+    -- Table to keep track of the members along with their new scores, which is
+    -- passed to ZADD.
     local new_scoremembers = {{}}
     for i, member in ipairs(members) do
         new_scoremembers[2*i] = member
-        new_scoremembers[2*i-1] = ARGV[3]
+        new_scoremembers[2*i-1] = new_score
     end
+
     if #members > 0 then
-        redis.call('zremrangebyrank', KEYS[1], 0, #members-1)
-        redis.call('zadd', KEYS[2], unpack(new_scoremembers))
+        -- Remove affected members and add them to the destination.
+        redis.call('zremrangebyrank', source, 0, #members-1)
+        redis.call('zadd', destination, unpack(new_scoremembers))
+
+        -- Perform any "on success" action.
         {on_success}
     end
+
+    -- Return moved members
     return members
 """
 
-# ARGV = { score, count, new_score }
 ZPOPPUSH = _ZPOPPUSH_TEMPLATE.format(on_success='')
 
+# KEYS = { source, destination, remove_from_set, add_to_set }
 # ARGV = { score, count, new_score, set_value }
-ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(on_success="""
-    local src_exists = redis.call('exists', KEYS[1])
-    if src_exists == 0 then
-        redis.call('srem', KEYS[3], ARGV[4])
-    end
-    redis.call('sadd', KEYS[4], ARGV[4])
-""")
+ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(on_success=
+    _ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
+        set_value='ARGV[4]',
+        add_to_set='KEYS[4]',
+        remove_from_set='KEYS[3]',
+))
 
 # ARGV = { score, count, new_score }
 ZPOPPUSH_WITHSCORES = """
@@ -76,87 +215,82 @@ DELETE_IF_NOT_IN_ZSETS = """
         end
     end
     if found == 0 then
-        redis.call('del', KEYS[1])
+        return redis.call('del', KEYS[1])
     end
-"""
-
-# ARGV = { unixtime, timeout_at }
-MULTILOCK_ACQUIRE = """
-    local keys = {} -- successfully acquired locks
-    local val
-    for i=1,#KEYS do
-        if redis.call('setnx', KEYS[i], ARGV[2]) == 0 then
-            -- key exists, check if expired
-            val = redis.call('get', KEYS[i])
-            if val and val < ARGV[1] then
-                val = redis.call('getset', KEYS[i], ARGV[2])
-                if val and val < ARGV[1] then
-                    keys[#keys+1] = KEYS[i] -- acquired
-                end
-            end
-        else -- setnx == 1
-            keys[#keys+1] = KEYS[i] -- acquired
-        end
-    end
-    return keys
-"""
-
-# ARGV = { timeout_at }
-MULTILOCK_RELEASE = """
-    local keys = {} -- successfully released locks
-    local val
-    for i=1,#KEYS do
-        val = redis.call('get', KEYS[i])
-        if val and val >= ARGV[1] then
-            redis.call('del', KEYS[i])
-            keys[#keys+1] = KEYS[i]
-        end
-    end
-    return keys
-"""
-
-# ARGV = { original_timeout_at, timeout_at }
-MULTILOCK_RENEW = """
-    local keys = {} -- successfully renewed locks
-    local val
-    for i=1,#KEYS do
-        val = redis.call('get', KEYS[i])
-        if val and val == ARGV[1] then
-            redis.call('set', KEYS[i], ARGV[2])
-            keys[#keys+1] = KEYS[i]
-        end
-    end
-    return keys
+    return 0
 """
 
 class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
+        self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
+        self._zadd_update_max = redis.register_script(ZADD_UPDATE_MAX)
+
         self._zpoppush = redis.register_script(ZPOPPUSH)
         self._zpoppush_update_sets = redis.register_script(ZPOPPUSH_UPDATE_SETS)
         self._zpoppush_withscores = redis.register_script(ZPOPPUSH_WITHSCORES)
-        self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
-        self._delete_if_not_in_zsets = redis.register_script(DELETE_IF_NOT_IN_ZSETS)
-        self._multilock_acquire = redis.register_script(MULTILOCK_ACQUIRE)
-        self._multilock_release = redis.register_script(MULTILOCK_RELEASE)
-        self._multilock_renew = redis.register_script(MULTILOCK_RENEW)
+        self._zpoppush_exists_min_update_sets = redis.register_script(
+            ZPOPPUSH_EXISTS_MIN_UPDATE_SETS)
+        self._zpoppush_exists_ignore_update_sets = redis.register_script(
+            ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS)
 
-    def zadd_noupdate(self, key, score, member, client=None):
+        self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
+
+        self._delete_if_not_in_zsets = redis.register_script(
+            DELETE_IF_NOT_IN_ZSETS)
+
+    def zadd(self, key, score, member, mode, client=None):
         """
-        Like ZADD, but doesn't update the score of a member if the member
-        already exists in the set.
+        Like ZADD, but supports different score update modes, in case the
+        member already exists in the ZSET:
+        - "nx": Don't update the score
+        - "min": Use the smaller of the given and existing score
+        - "max": Use the larger of the given and existing score
         """
-        return self._zadd_noupdate(keys=[key], args=[score, member], client=client)
+        if mode == 'nx':
+            f = self._zadd_noupdate
+        elif mode == 'min':
+            f = self._zadd_update_min
+        elif mode == 'max':
+            f = self._zadd_update_max
+        else:
+            raise NotImplementedError('mode "%s" unsupported' % mode)
+        return f(keys=[key], args=[score, member], client=client)
 
     def zpoppush(self, source, destination, count, score, new_score,
-                 client=None, withscores=False, on_success=None):
+                 client=None, withscores=False, on_success=None,
+                 if_exists=None):
         """
         Pops the first ``count`` members from the ZSET ``source`` and adds them
         to the ZSET ``destination`` with a score of ``new_score``. If ``score``
         is not None, only members up to a score of ``score`` are used. Returns
         the members that were moved and, if ``withscores`` is True, their
-        original scores. If items were moved, the action defined in
-        ``on_success`` is executed.
+        original scores.
+
+        If items were moved, the action defined in ``on_success`` is executed.
+        The only implemented option is a tuple in the form ('update_sets',
+        ``set_value``, ``remove_from_set``, ``add_to_set``
+        [, ``add_to_set_if_exists``]).
+        If no items are left in the ``source`` ZSET, the ``set_value`` is
+        removed from ``remove_from_set``. If any items were moved to the
+        ``destination`` ZSET, the ``set_value`` is added to ``add_to_set``. If
+        any items were moved to the ``if_exists_key`` ZSET (see below), the
+        ``set_value`` is added to the ``add_to_set_if_exists`` set.
+
+        If ``if_exists`` is specified as a tuple ('add', if_exists_key,
+        if_exists_score, if_exists_mode), then members that are already in the
+        ``destination`` set will not be returned or updated, but they will be
+        added to a ZSET ``if_exists_key`` with a score of ``if_exists_score``
+        and the given behavior specified in ``if_exists_mode`` for members that
+        already exist in the ``if_exists_key`` ZSET. ``if_exists_mode`` can be
+        one of the following:
+        - "nx": Don't update the score
+        - "min": Use the smaller of the given and existing score
+        - "max": Use the larger of the given and existing score
+
+        If ``if_exists`` is specified as a tuple ('noupdate',), then no action
+        will be taken for members that are already in the ``destination`` ZSET
+        (their score will not be updated).
         """
         if score is None:
             score = '+inf' # Include all elements.
@@ -168,14 +302,40 @@ class RedisScripts(object):
                 args=[score, count, new_score],
                 client=client)
         else:
+            if if_exists and if_exists[0] == 'add':
+                _, if_exists_key, if_exists_score, if_exists_mode = if_exists
+                if if_exists_mode != 'min':
+                    raise NotImplementedError()
+
+                if not on_success or on_success[0] != 'update_sets':
+                    raise NotImplementedError()
+                set_value, remove_from_set, add_to_set, add_to_set_if_exists \
+                    = on_success[1:]
+
+                return self._zpoppush_exists_min_update_sets(
+                        keys=[source, destination, remove_from_set, add_to_set,
+                              add_to_set_if_exists, if_exists_key],
+                        args=[score, count, new_score, set_value, if_exists_score],
+                )
+            elif if_exists and if_exists[0] == 'noupdate':
+                if not on_success or on_success[0] != 'update_sets':
+                    raise NotImplementedError()
+                set_value, remove_from_set, add_to_set \
+                    = on_success[1:]
+
+                return self._zpoppush_exists_ignore_update_sets(
+                        keys=[source, destination, remove_from_set, add_to_set],
+                        args=[score, count, new_score, set_value],
+                )
+
             if on_success:
                 if on_success[0] != 'update_sets':
                     raise NotImplementedError()
                 else:
+                    set_value, remove_from_set, add_to_set = on_success[1:]
                     return self._zpoppush_update_sets(
-                        keys=[source, destination, on_success[1],
-                              on_success[2]],
-                        args=[score, count, new_score, on_success[3]],
+                        keys=[source, destination, remove_from_set, add_to_set],
+                        args=[score, count, new_score, set_value],
                         client=client)
             else:
                 return self._zpoppush(
@@ -202,23 +362,3 @@ class RedisScripts(object):
             keys=[key]+set_list,
             args=[member],
             client=client)
-
-    def multilock_acquire(self, now, timeout_at, keys, client=None):
-        """
-        Acquires the lock for the given keys and returns the keys which were
-        successfully locked.
-        """
-        return self._multilock_acquire(keys=keys, args=[now, timeout_at], client=client)
-
-    def multilock_release(self, timeout_at, keys, client=None):
-        """
-        Releases the lock for the given keys. Returns the keys that were
-        deleted.
-        """
-        return self._multilock_release(keys=keys, args=[timeout_at], client=client)
-
-    def multilock_renew(self, original_timeout_at, timeout_at, keys, client=None):
-        """
-        Renews the lock for the given keys. Returns the keys that were renewed.
-        """
-        return self._multilock_renew(keys=keys, args=[original_timeout_at, timeout_at], client=client)
