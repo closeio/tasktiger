@@ -1,6 +1,5 @@
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
-    local zadd_result
     if not redis.call('zscore', {key}, {member}) then
         {ret} redis.call('zadd', {key}, {score}, {member})
     end
