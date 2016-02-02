@@ -161,7 +161,7 @@ class TaskTiger(object):
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
     def _redis_move_task(self, queue, task_id, from_state, to_state=None,
-                         when=None, remove_task=None):
+                         when=None, remove_task=None, mode=None):
         """
         Internal helper to move a task from one state another (e.g. from QUEUED
         to DELAYED). The "when" argument indicates the timestamp of the task in
@@ -173,12 +173,19 @@ class TaskTiger(object):
             exist in the QUEUED or ERROR queue. This is useful for unique
             tasks, which can have multiple instances in different states with
             the same ID.
+        The "mode" param can be specified to define how the timestamp in the
+        new state should be updated and is passed to the zadd Redis script (see
+        its documentation for details).
         """
         pipeline = self.connection.pipeline()
         if to_state:
             if not when:
                 when = time.time()
-            pipeline.zadd(self._key(to_state, queue), task_id, when)
+            if mode:
+                self.scripts.zadd(self._key(to_state, queue), when, task_id,
+                                  mode, client=pipeline)
+            else:
+                pipeline.zadd(self._key(to_state, queue), task_id, when)
             pipeline.sadd(self._key(to_state), queue)
         pipeline.zrem(self._key(from_state, queue), task_id)
         if remove_task == 'always':
@@ -363,7 +370,9 @@ class TaskTiger(object):
         pipeline = self.connection.pipeline()
         pipeline.sadd(self._key(state), queue)
         pipeline.set(self._key('task', task_id), serialized_task)
-        pipeline.zadd(self._key(state, queue), task_id, when or now)
+        # In case of unique tasks, don't update the score.
+        self.scripts.zadd(self._key(state, queue), when or now, task_id,
+                          mode='nx', client=pipeline)
         if state == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
