@@ -15,6 +15,7 @@ from redis_lock import Lock
 from ._internal import *
 from .exceptions import RetryException
 from .retry import *
+from .stats import StatsThread
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
@@ -31,6 +32,8 @@ class Worker(object):
         self.config = tiger.config
         self._key = tiger._key
         self._redis_move_task = tiger._redis_move_task
+
+        self.stats_thread = None
 
         if queues:
             self.queue_filter = queues.split(',')
@@ -436,7 +439,11 @@ class Worker(object):
         if not ready_tasks:
             return True, []
 
+        if self.stats_thread:
+            self.stats_thread.report_task_start()
         success = self._execute(queue, ready_tasks, log, locks, all_task_ids)
+        if self.stats_thread:
+            self.stats_thread.report_task_end()
 
         for lock in locks:
             lock.release()
@@ -578,6 +585,10 @@ class Worker(object):
 
         self.log.info('ready', queues=self.queue_filter)
 
+        if self.config['STATS_INTERVAL']:
+            self.stats_thread = StatsThread(self)
+            self.stats_thread.start()
+
         # First scan all the available queues for new items until they're empty.
         # Then, listen to the activity channel.
         # XXX: This can get inefficient when having lots of queues.
@@ -603,4 +614,9 @@ class Worker(object):
                     raise KeyboardInterrupt()
         except KeyboardInterrupt:
             pass
+
+        if self.stats_thread:
+            self.stats_thread.stop()
+            self.stats_thread = None
+
         self.log.info('done')

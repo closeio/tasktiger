@@ -121,6 +121,9 @@ class TaskTiger(object):
             # subqueues will be automatically treated as batch queues, and the
             # batch value of the most specific subqueue name takes precedence.
             'BATCH_QUEUES': {},
+
+            # How often to print stats.
+            'STATS_INTERVAL': 60,
         }
         if config:
             self.config.update(config)
@@ -426,3 +429,6 @@ def run_worker(context, host, port, db, password, **kwargs):
     conn = redis.Redis(host, int(port or 6379), int(db or 0), password)
     tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
     tiger.run_worker(**kwargs)
+
+if __name__ == '__main__':
+    run_worker()
