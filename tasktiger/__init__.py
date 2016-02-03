@@ -20,6 +20,7 @@ __all__ = ['TaskTiger', 'Worker',
 
            # Exceptions
            'TaskImportError', 'JobTimeoutException', 'StopRetry',
+           'RetryException',
 
            # Retry methods
            'fixed', 'linear', 'exponential']
@@ -62,10 +63,10 @@ STRING <prefix>:lock:<lock_hash>
 """
 
 class TaskTiger(object):
-    def __init__(self, connection=None, config=None):
+    def __init__(self, connection=None, config=None, setup_structlog=False):
         """
         Initializes TaskTiger with the given Redis connection and config
-        options.
+        options. Optionally sets up structlog.
         """
 
         self.config = {
@@ -82,8 +83,9 @@ class TaskTiger(object):
             # channel and check for scheduled or expired items.
             'SELECT_TIMEOUT': 1,
 
-            # If this is True, all tasks will be executed locally by blocking
-            # until the task returns. This is useful for testing purposes.
+            # If this is True, all tasks except future tasks (when=a future
+            # time) will be executed locally by blocking until the task
+            # returns. This is useful for testing purposes.
             'ALWAYS_EAGER': False,
 
             # If retry is True but no retry_method is specified for a given
@@ -128,9 +130,30 @@ class TaskTiger(object):
 
         self.connection = connection or redis.Redis()
         self.scripts = RedisScripts(self.connection)
+
+        if setup_structlog:
+            structlog.configure(
+                processors=[
+                    structlog.stdlib.add_log_level,
+                    structlog.stdlib.filter_by_level,
+                    structlog.processors.TimeStamper(fmt='iso', utc=True),
+                    structlog.processors.StackInfoRenderer(),
+                    structlog.processors.format_exc_info,
+                    structlog.processors.JSONRenderer()
+                ],
+                context_class=dict,
+                logger_factory=structlog.stdlib.LoggerFactory(),
+                wrapper_class=structlog.stdlib.BoundLogger,
+                cache_logger_on_first_use=True,
+            )
+
         self.log = structlog.get_logger(
             self.config['LOGGER_NAME'],
         ).bind()
+
+        if setup_structlog:
+            self.log.setLevel(logging.DEBUG)
+            logging.basicConfig(format='%(message)s')
 
     def _key(self, *parts):
         """
@@ -141,7 +164,7 @@ class TaskTiger(object):
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
     def _redis_move_task(self, queue, task_id, from_state, to_state=None,
-                         when=None, remove_task=None):
+                         when=None, remove_task=None, mode=None):
         """
         Internal helper to move a task from one state another (e.g. from QUEUED
         to DELAYED). The "when" argument indicates the timestamp of the task in
@@ -153,20 +176,33 @@ class TaskTiger(object):
             exist in the QUEUED or ERROR queue. This is useful for unique
             tasks, which can have multiple instances in different states with
             the same ID.
+        The "mode" param can be specified to define how the timestamp in the
+        new state should be updated and is passed to the zadd Redis script (see
+        its documentation for details).
         """
         pipeline = self.connection.pipeline()
         if to_state:
             if not when:
                 when = time.time()
-            pipeline.zadd(self._key(to_state, queue), task_id, when)
+            if mode:
+                self.scripts.zadd(self._key(to_state, queue), when, task_id,
+                                  mode, client=pipeline)
+            else:
+                pipeline.zadd(self._key(to_state, queue), task_id, when)
             pipeline.sadd(self._key(to_state), queue)
         pipeline.zrem(self._key(from_state, queue), task_id)
         if remove_task == 'always':
+            pipeline.delete(self._key('task', task_id, 'executions'))
             pipeline.delete(self._key('task', task_id))
         elif remove_task == 'check':
             # Only delete if it's not in any other queue
             check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
             check_states.remove(from_state)
+            # TODO: Do the following two in one call.
+            self.scripts.delete_if_not_in_zsets(self._key('task', task_id, 'executions'),
+                                                task_id, [
+                self._key(state, queue) for state in check_states
+            ], client=pipeline)
             self.scripts.delete_if_not_in_zsets(self._key('task', task_id),
                                                 task_id, [
                 self._key(state, queue) for state in check_states
@@ -251,7 +287,8 @@ class TaskTiger(object):
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        if self.config['ALWAYS_EAGER']:
+        if self.config['ALWAYS_EAGER'] and not \
+                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
             if not args:
                 args = []
             if not kwargs:
@@ -319,11 +356,7 @@ class TaskTiger(object):
             if not retry_method:
                 retry_method = self.config['DEFAULT_RETRY_METHOD']
 
-            if callable(retry_method):
-                retry_method = (serialize_func_name(retry_method), ())
-            else:
-                retry_method = (serialize_func_name(retry_method[0]),
-                                retry_method[1])
+            retry_method = serialize_retry_method(retry_method)
 
             task['retry_method'] = retry_method
             if retry_on:
@@ -340,7 +373,9 @@ class TaskTiger(object):
         pipeline = self.connection.pipeline()
         pipeline.sadd(self._key(state), queue)
         pipeline.set(self._key('task', task_id), serialized_task)
-        pipeline.zadd(self._key(state, queue), task_id, when or now)
+        # In case of unique tasks, don't update the score.
+        self.scripts.zadd(self._key(state, queue), when or now, task_id,
+                          mode='nx', client=pipeline)
         if state == QUEUED:
             pipeline.publish(self._key('activity'), queue)
         pipeline.execute()
@@ -385,28 +420,14 @@ class TaskTiger(object):
                                      "reimported every time a task is forked. "
                                      "Multiple modules can be separated by "
                                      "comma.")
+@click.option('-h', '--host', help='Redis server hostname')
+@click.option('-p', '--port', help='Redis server port')
+@click.option('-a', '--password', help='Redis password')
+@click.option('-n', '--db', help='Redis database number')
 @click.pass_context
-def run_worker(context, **kwargs):
-    # TODO: Make Redis settings configurable via click.
-    if not context.obj:
-        structlog.configure(
-            processors=[
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.filter_by_level,
-                structlog.processors.TimeStamper(fmt='iso', utc=True),
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.JSONRenderer()
-            ],
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
-    tiger = context.obj or TaskTiger()
-    if not context.obj:
-        tiger.log.setLevel(logging.DEBUG)
-        logging.basicConfig(format='%(message)s')
+def run_worker(context, host, port, db, password, **kwargs):
+    conn = redis.Redis(host, int(port or 6379), int(db or 0), password)
+    tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
     tiger.run_worker(**kwargs)
 
 if __name__ == '__main__':

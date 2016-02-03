@@ -106,4 +106,4 @@ class Task(object):
             remove_task = 'always'
         # TODO: Only allow this if the task is still in ERROR state
         self.tiger._redis_move_task(self.queue, self.id, ERROR,
-                                    remove_task=remove_task)
+                                    remove_task=remove_task, mode='min')

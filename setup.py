@@ -2,13 +2,18 @@ from setuptools import setup
 
 setup(
     name='tasktiger',
-    version='0.1',
+    version='0.2',
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
     test_suite='tests',
     tests_require=['redis'],
     platforms='any',
+    install_requires=[
+        'click',
+        'redis',
+        'structlog'
+    ],
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',

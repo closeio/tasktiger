@@ -6,6 +6,7 @@ import random
 import select
 import signal
 import socket
+import sys
 import threading
 import time
 import traceback
@@ -13,6 +14,7 @@ import traceback
 from redis_lock import Lock
 
 from ._internal import *
+from .exceptions import RetryException
 from .retry import *
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
@@ -136,18 +138,20 @@ class Worker(object):
                 self._key(SCHEDULED))))
         now = time.time()
         for queue in queues:
-            # Move due items from scheduled queue to active queue. If items
-            # were moved, remove the queue from the scheduled set if it is
-            # empty, and add it to the active set so the task gets picked up.
-
+            # Move due items from the SCHEDULED queue to the QUEUED queue. If
+            # items were moved, remove the queue from the scheduled set if it
+            # is empty, and add it to the queued set so the task gets picked
+            # up. If any unique tasks are already queued, don't update their
+            # queue time (because the new queue time would be later).
             result = self.scripts.zpoppush(
                 self._key(SCHEDULED, queue),
                 self._key(QUEUED, queue),
                 self.config['SCHEDULED_TASK_BATCH_SIZE'],
                 now,
                 now,
-                on_success=('update_sets', self._key(SCHEDULED),
-                                           self._key(QUEUED), queue),
+                if_exists=('noupdate',),
+                on_success=('update_sets', queue,
+                            self._key(SCHEDULED), self._key(QUEUED)),
             )
 
             # XXX: ideally this would be in the same pipeline, but we only want
@@ -189,14 +193,20 @@ class Worker(object):
         active_queues = self.connection.smembers(self._key(ACTIVE))
         now = time.time()
         for queue in active_queues:
+            # Move expired items from the ACTIVE queue to the QUEUED queue and
+            # update the active and queued sets (remove the affected queue from
+            # the ACTIVE set if there are no more items, and add it to the
+            # QUEUED set if any items were moved). If items already exist in
+            # the QUEUED queue, don't change their queue time.
             result = self.scripts.zpoppush(
                 self._key(ACTIVE, queue),
                 self._key(QUEUED, queue),
                 self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
                 now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
                 now,
-                on_success=('update_sets', self._key(ACTIVE),
-                                           self._key(QUEUED), queue),
+                if_exists=('noupdate',),
+                on_success=('update_sets', queue,
+                            self._key(ACTIVE), self._key(QUEUED)),
             )
             # XXX: Ideally this would be atomic with the operation above.
             if result:
@@ -218,6 +228,9 @@ class Worker(object):
         assert all([task_func == task['func'] for task in tasks[1:]])
 
         execution['time_started'] = time.time()
+
+        exc = None
+        exc_info = None
 
         try:
             func = import_attribute(task_func)
@@ -246,15 +259,25 @@ class Worker(object):
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*args, **kwargs)
 
+        except RetryException, exc:
+            execution['retry'] = True
+            if exc.method:
+                execution['retry_method'] = serialize_retry_method(exc.method)
+            execution['log_error'] = exc.log_error
+            exc_info = exc.exc_info
         except Exception, exc:
-            execution['traceback'] = traceback.format_exc()
-            execution['exception_name'] = serialize_func_name(exc.__class__)
-            execution['time_failed'] = time.time()
+            pass
         else:
             success = True
 
         if not success:
+            execution['time_failed'] = time.time()
+            if not exc_info:
+                exc_info = sys.exc_info()
             # Currently we only log failed task executions to Redis.
+            execution['traceback'] = \
+                    ''.join(traceback.format_exception(*exc_info))
+            execution['exception_name'] = serialize_func_name(exc.__class__)
             execution['success'] = success
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
@@ -346,14 +369,23 @@ class Worker(object):
                 batch_size = batch_queues[queue]
 
         # Move an item to the active queue, if available.
+        # We need to be careful when moving unique tasks: We currently don't
+        # support concurrent processing of multiple unique tasks. If the task
+        # is already in the ACTIVE queue, we need to execute the queued task
+        # later, i.e. move it to the SCHEDULED queue (prefer the earliest
+        # time if it's already scheduled). We want to make sure that the last
+        # queued instance of the task always gets executed no earlier than it
+        # was queued.
+        later = time.time() + self.config['LOCK_RETRY']
         task_ids = self.scripts.zpoppush(
             self._key(QUEUED, queue),
             self._key(ACTIVE, queue),
             batch_size,
             None,
             now,
-            on_success=('update_sets', self._key(QUEUED), self._key(ACTIVE),
-                        queue),
+            if_exists=('add', self._key(SCHEDULED, queue), later, 'min'),
+            on_success=('update_sets', queue, self._key(QUEUED),
+                        self._key(ACTIVE), self._key(SCHEDULED))
         )
 
         if task_ids:
@@ -438,11 +470,14 @@ class Worker(object):
                     else:
                         log.info('could not acquire lock', task_id=task['id'])
 
-                        # Reschedule the task
+                        # Reschedule the task (but if the task is already
+                        # scheduled in case of a unique task, don't prolong
+                        # the schedule date).
                         when = time.time() + self.config['LOCK_RETRY']
-                        self._redis_move_task(queue, task['id'], ACTIVE, SCHEDULED, when)
-                        # Make sure to remove it from this list so we don't re-add
-                        # to the ACTIVE queue by updating the heartbeat.
+                        self._redis_move_task(queue, task['id'], ACTIVE,
+                                              SCHEDULED, when, mode='min')
+                        # Make sure to remove it from this list so we don't
+                        # re-add to the ACTIVE queue by updating the heartbeat.
                         all_task_ids.remove(task['id'])
                         continue
 
@@ -470,7 +505,7 @@ class Worker(object):
         """
         log = self.log.bind(queue=queue, task_id=task['id'])
 
-        if success:
+        def _mark_done():
             # Remove the task from active queue
             if task.get('unique', False):
                 # For unique tasks we need to check if they're in use in
@@ -481,14 +516,31 @@ class Worker(object):
             self._redis_move_task(queue, task['id'], ACTIVE,
                                   remove_task=remove_task)
             log.debug('done')
+
+        if success:
+            _mark_done()
         else:
             should_retry = False
+            should_log_error = True
             # Get execution info (for logging and retry purposes)
             execution = self.connection.lindex(
                 self._key('task', task['id'], 'executions'), -1)
+
             if execution:
                 execution = json.loads(execution)
-            if 'retry_method' in task:
+
+            if execution.get('retry'):
+                if 'retry_method' in execution:
+                    retry_func, retry_args = execution['retry_method']
+                else:
+                    # We expect the serialized method here.
+                    retry_func, retry_args = serialize_retry_method( \
+                            self.config['DEFAULT_RETRY_METHOD'])
+                should_log_error = execution['log_error']
+                should_retry = True
+
+            if 'retry_method' in task and not should_retry:
+                retry_func, retry_args = task['retry_method']
                 if 'retry_on' in task:
                     if execution:
                         exception_name = execution.get('exception_name')
@@ -512,7 +564,6 @@ class Worker(object):
             log_context = {}
 
             if should_retry:
-                retry_func, retry_args = task['retry_method']
                 retry_num = self.connection.llen(self._key('task', task['id'], 'executions'))
                 log_context['retry_func'] = retry_func
                 log_context['retry_num'] = retry_num
@@ -532,7 +583,7 @@ class Worker(object):
                     else:
                         state = SCHEDULED
 
-            if state == ERROR:
+            if state == ERROR and should_log_error:
                 log_func = log.error
             else:
                 log_func = log.warning
@@ -545,7 +596,10 @@ class Worker(object):
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
-            self._redis_move_task(queue, task['id'], ACTIVE, state, when)
+            if state == ERROR and not should_log_error:
+                _mark_done()
+            else:
+                self._redis_move_task(queue, task['id'], ACTIVE, state, when)
 
     def _worker_run(self):
         """
