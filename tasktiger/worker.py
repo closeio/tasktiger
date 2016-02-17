@@ -431,8 +431,8 @@ class Worker(object):
                         # scheduled in case of a unique task, don't prolong
                         # the schedule date).
                         when = time.time() + self.config['LOCK_RETRY']
-                        assert task.state == ACTIVE
-                        task._move(to_state=SCHEDULED, when=when, mode='min')
+                        task._move(from_state=ACTIVE, to_state=SCHEDULED,
+                                   when=when, mode='min')
                         # Make sure to remove it from this list so we don't
                         # re-add to the ACTIVE queue by updating the heartbeat.
                         all_task_ids.remove(task.id)
@@ -470,8 +470,7 @@ class Worker(object):
                 remove_task = 'check'
             else:
                 remove_task = 'always'
-            assert task.state == ACTIVE
-            task._move()
+            task._move(from_state=ACTIVE)
             log.debug('done')
 
         if success:
@@ -556,8 +555,7 @@ class Worker(object):
             if state == ERROR and not should_log_error:
                 _mark_done()
             else:
-                assert task.state == ACTIVE
-                task._move(to_state=state, when=when)
+                task._move(from_state=ACTIVE, to_state=state, when=when)
 
     def _worker_run(self):
         """
