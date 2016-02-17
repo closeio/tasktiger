@@ -247,10 +247,6 @@ class Task(object):
     def delay(self, when=None):
         tiger = self.tiger
 
-        if tiger.config['ALWAYS_EAGER'] and not \
-                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
-            return self.execute()
-
         now = time.time()
         self._data['time_last_queued'] = now
         serialized_task = json.dumps(self._data)
@@ -262,6 +258,12 @@ class Task(object):
         # convert to unixtime
         if isinstance(when, datetime.datetime):
             when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+
+        # When using ALWAYS_EAGER, make sure we have serialized the task to
+        # ensure there are no serialization errors.
+        if tiger.config['ALWAYS_EAGER'] and not \
+                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
+            return self.execute()
 
         if when:
             state = SCHEDULED

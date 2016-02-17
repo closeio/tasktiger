@@ -633,6 +633,25 @@ class TaskTestCase(BaseTestCase):
         self.assertEqual(task0.queue, tasks[0].queue)
         self.assertEqual(task0.queue, 'default')
 
+    def test_eager(self):
+        self.tiger.config['ALWAYS_EAGER'] = True
+
+        # Ensure task is immediately executed.
+        task = Task(self.tiger, simple_task)
+        task.delay()
+        self._ensure_queues()
+
+        # Ensure task is immediately executed.
+        task = Task(self.tiger, exception_task)
+        self.assertRaises(StandardError, task.delay)
+        self._ensure_queues()
+
+        # Ensure there is an exception if we can't serialize the task.
+        task = Task(self.tiger, decorated_task,
+                    args=[datetime.datetime.utcnow()])
+        self.assertRaises(TypeError, task.delay)
+        self._ensure_queues()
+
 
 if __name__ == '__main__':
     unittest.main()
