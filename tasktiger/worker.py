@@ -16,6 +16,7 @@ from ._internal import *
 from .exceptions import RetryException
 from .retry import *
 from .stats import StatsThread
+from .task import Task
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
@@ -26,12 +27,12 @@ class Worker(object):
         Internal method to initialize a worker.
         """
 
+        self.tiger = tiger
         self.log = tiger.log.bind(pid=os.getpid())
         self.connection = tiger.connection
         self.scripts = tiger.scripts
         self.config = tiger.config
         self._key = tiger._key
-        self._redis_move_task = tiger._redis_move_task
 
         self.stats_thread = None
 
@@ -177,8 +178,8 @@ class Worker(object):
         execution = {}
 
         assert len(tasks)
-        task_func = tasks[0]['func']
-        assert all([task_func == task['func'] for task in tasks[1:]])
+        task_func = tasks[0].serialized_func
+        assert all([task_func == task.serialized_func for task in tasks[1:]])
 
         execution['time_started'] = time.time()
 
@@ -186,15 +187,15 @@ class Worker(object):
         exc_info = None
 
         try:
-            func = import_attribute(task_func)
+            func = tasks[0].func
 
             if getattr(func, '_task_batch', False):
                 # Batch process if the task supports it.
                 params = [{
-                    'args': task.get('args', []),
-                    'kwargs': task.get('kwargs', {}),
+                    'args': task.args,
+                    'kwargs': task.kwargs,
                 } for task in tasks]
-                hard_timeout = max(task.get('hard_timeout', None) for task in tasks) or \
+                hard_timeout = max(task.hard_timeout for task in tasks) or \
                                getattr(func, '_task_hard_timeout', None) or \
                                self.config['DEFAULT_HARD_TIMEOUT']
 
@@ -203,14 +204,12 @@ class Worker(object):
             else:
                 # Process sequentially.
                 for task in tasks:
-                    hard_timeout = task.get('hard_timeout', None) or \
+                    hard_timeout = task.hard_timeout or \
                                    getattr(func, '_task_hard_timeout', None) or \
                                    self.config['DEFAULT_HARD_TIMEOUT']
-                    args = task.get('args', [])
-                    kwargs = task.get('kwargs', {})
 
                     with UnixSignalDeathPenalty(hard_timeout):
-                        func(*args, **kwargs)
+                        func(*task.args, **task.kwargs)
 
         except RetryException, exc:
             execution['retry'] = True
@@ -236,7 +235,7 @@ class Worker(object):
             serialized_execution = json.dumps(execution)
             for task in tasks:
                 self.connection.rpush(
-                    self._key('task', task['id'],'executions'),
+                    self._key('task', task.id,'executions'),
                     serialized_execution)
 
         return success
@@ -258,8 +257,8 @@ class Worker(object):
 
         # The tasks must use the same function.
         assert len(tasks)
-        task_func = tasks[0]['func']
-        assert all([task_func == task['func'] for task in tasks[1:]])
+        task_func = tasks[0].serialized_func
+        assert all([task_func == task.serialized_func for task in tasks[1:]])
 
         # Adapted from rq Worker.execute_job / Worker.main_work_horse
         child_pid = os.fork()
@@ -282,9 +281,9 @@ class Worker(object):
             # Main process
             log = log.bind(child_pid=child_pid)
             log.debug('processing', func=task_func, params=[{
-                    'task_id': task['id'],
-                    'args': task.get('args', []),
-                    'kwargs': task.get('kwargs', {})
+                    'task_id': task.id,
+                    'args': task.args,
+                    'kwargs': task.kwargs,
             } for task in tasks])
 
             while True:
@@ -351,28 +350,33 @@ class Worker(object):
             tasks = []
             for task_id, serialized_task in zip(task_ids, serialized_tasks):
                 if serialized_task:
-                    task = json.loads(serialized_task)
-                    if task['id'] == task_id:
-                        tasks.append(task)
-                    else:
-                        log.error('task ID mismatch', task_id=task_id)
-                        # Remove task
-                        self._redis_move_task(queue, task_id, ACTIVE)
+                    task_data = json.loads(serialized_task)
                 else:
+                    task_data = {}
+                task = Task(self.tiger, queue=queue, _data=task_data,
+                            _state=ACTIVE, _ts=now)
+                if not task_data:
                     log.error('not found', task_id=task_id)
                     # Remove task
-                    self._redis_move_task(queue, task_id, ACTIVE)
+                    task._move()
+                elif task.id != task_id:
+                    log.error('task ID mismatch', task_id=task_id)
+                    # Remove task
+                    task._move()
+                else:
+                    tasks.append(task)
 
             # List of task IDs that exist and we will update the heartbeat on.
-            valid_task_ids = set(task['id'] for task in tasks)
+            valid_task_ids = set(task.id for task in tasks)
 
             # Group by task func
             tasks_by_func = OrderedDict()
             for task in tasks:
-                if task['func'] in tasks_by_func:
-                    tasks_by_func[task['func']].append(task)
+                func = task.serialized_func
+                if func in tasks_by_func:
+                    tasks_by_func[func].append(task)
                 else:
-                    tasks_by_func[task['func']] = [task]
+                    tasks_by_func[func] = [task]
 
             # Execute tasks for each task func
             for tasks in tasks_by_func.values():
@@ -398,19 +402,19 @@ class Worker(object):
 
         ready_tasks = []
         for task in tasks:
-            if task.get('lock', False):
-                if task.get('lock_key'):
-                    kwargs = task.get('kwargs', {})
+            if task.lock:
+                if task.lock_key:
+                    kwargs = task.kwargs
                     lock_id = gen_unique_id(
-                        task['func'],
+                        task.serialized_func,
                         None,
-                        {key: kwargs.get(key) for key in task['lock_key']},
+                        {key: kwargs.get(key) for key in task.lock_key},
                     )
                 else:
                     lock_id = gen_unique_id(
-                        task['func'],
-                        task.get('args', []),
-                        task.get('kwargs', {}),
+                        task.serialized_func,
+                        task.args,
+                        task.kwargs,
                     )
 
                 if lock_id not in lock_ids:
@@ -421,17 +425,17 @@ class Worker(object):
                         lock_ids.add(lock_id)
                         locks.append(lock)
                     else:
-                        log.info('could not acquire lock', task_id=task['id'])
+                        log.info('could not acquire lock', task_id=task.id)
 
                         # Reschedule the task (but if the task is already
                         # scheduled in case of a unique task, don't prolong
                         # the schedule date).
                         when = time.time() + self.config['LOCK_RETRY']
-                        self._redis_move_task(queue, task['id'], ACTIVE,
-                                              SCHEDULED, when, mode='min')
+                        assert task.state == ACTIVE
+                        task._move(to_state=SCHEDULED, when=when, mode='min')
                         # Make sure to remove it from this list so we don't
                         # re-add to the ACTIVE queue by updating the heartbeat.
-                        all_task_ids.remove(task['id'])
+                        all_task_ids.remove(task.id)
                         continue
 
             ready_tasks.append(task)
@@ -456,18 +460,18 @@ class Worker(object):
         the task gets properly removed from the ACTIVE queue and, in case of an
         error, retried or marked as failed.
         """
-        log = self.log.bind(queue=queue, task_id=task['id'])
+        log = self.log.bind(queue=queue, task_id=task.id)
 
         def _mark_done():
             # Remove the task from active queue
-            if task.get('unique', False):
+            if task.unique:
                 # For unique tasks we need to check if they're in use in
                 # another queue since they share the task ID.
                 remove_task = 'check'
             else:
                 remove_task = 'always'
-            self._redis_move_task(queue, task['id'], ACTIVE,
-                                  remove_task=remove_task)
+            assert task.state == ACTIVE
+            task._move()
             log.debug('done')
 
         if success:
@@ -477,7 +481,7 @@ class Worker(object):
             should_log_error = True
             # Get execution info (for logging and retry purposes)
             execution = self.connection.lindex(
-                self._key('task', task['id'], 'executions'), -1)
+                self._key('task', task.id, 'executions'), -1)
 
             if execution:
                 execution = json.loads(execution)
@@ -492,9 +496,9 @@ class Worker(object):
                 should_log_error = execution['log_error']
                 should_retry = True
 
-            if 'retry_method' in task and not should_retry:
-                retry_func, retry_args = task['retry_method']
-                if 'retry_on' in task:
+            if task.retry_method and not should_retry:
+                retry_func, retry_args = task.retry_method
+                if task.retry_on:
                     if execution:
                         exception_name = execution.get('exception_name')
                         try:
@@ -503,7 +507,7 @@ class Worker(object):
                             log.error('could not import exception',
                                       exception_name=exception_name)
                         else:
-                            for n in task['retry_on']:
+                            for n in task.retry_on:
                                 if issubclass(exception_class, import_attribute(n)):
                                     should_retry = True
                                     break
@@ -517,7 +521,7 @@ class Worker(object):
             log_context = {}
 
             if should_retry:
-                retry_num = self.connection.llen(self._key('task', task['id'], 'executions'))
+                retry_num = self.connection.llen(self._key('task', task.id, 'executions'))
                 log_context['retry_func'] = retry_func
                 log_context['retry_num'] = retry_num
 
@@ -541,7 +545,7 @@ class Worker(object):
             else:
                 log_func = log.warning
 
-            log_func(func=task['func'],
+            log_func(func=task.serialized_func,
                      time_failed=execution.get('time_failed'),
                      traceback=execution.get('traceback'),
                      exception_name=execution.get('exception_name'),
@@ -552,7 +556,8 @@ class Worker(object):
             if state == ERROR and not should_log_error:
                 _mark_done()
             else:
-                self._redis_move_task(queue, task['id'], ACTIVE, state, when)
+                assert task.state == ACTIVE
+                task._move(to_state=state, when=when)
 
     def _worker_run(self):
         """

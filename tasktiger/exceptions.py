@@ -31,3 +31,8 @@ class RetryException(Exception):
         self.method = method
         self.exc_info = sys.exc_info() if original_traceback else None
         self.log_error = log_error
+
+class TaskNotFound(Exception):
+    """
+    The task was not found or does not exist in the given queue/state.
+    """

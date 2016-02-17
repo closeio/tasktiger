@@ -219,6 +219,12 @@ DELETE_IF_NOT_IN_ZSETS = """
     return 0
 """
 
+# KEYS = { key }
+# ARGV = { member }
+FAIL_IF_NOT_IN_ZSET = """
+    assert(redis.call('zscore', KEYS[1], ARGV[1]), '<FAIL_IF_NOT_IN_ZSET>')
+"""
+
 class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
@@ -237,6 +243,9 @@ class RedisScripts(object):
 
         self._delete_if_not_in_zsets = redis.register_script(
             DELETE_IF_NOT_IN_ZSETS)
+
+        self._fail_if_not_in_zset = redis.register_script(
+            FAIL_IF_NOT_IN_ZSET)
 
     def zadd(self, key, score, member, mode, client=None):
         """
@@ -361,3 +370,12 @@ class RedisScripts(object):
             keys=[key]+set_list,
             args=[member],
             client=client)
+
+    def fail_if_not_in_zset(self, key, member, client=None):
+        """
+        Fails with an error containing the string '<FAIL_IF_NOT_IN_ZSET>' if
+        the given ``member`` is not in the ZSET ``key``. This can be used in
+        a pipeline to assert that the member is in the ZSET and cancel the
+        execution otherwise.
+        """
+        self._fail_if_not_in_zset(keys=[key], args=[member], client=client)

@@ -11,14 +11,7 @@ from .tasks import *
 from .utils import *
 from .redis_scripts import *
 
-class TestCase(unittest.TestCase):
-    """
-    TaskTiger test cases.
-
-    Run a single test like this:
-    python -m unittest tests.TestCase.test_unique_task
-    """
-
+class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self.tiger = get_tiger()
         self.conn = self.tiger.connection
@@ -51,6 +44,14 @@ class TestCase(unittest.TestCase):
             'error': _ensure_queue('error', error),
             'scheduled': _ensure_queue('scheduled', scheduled),
         }
+
+class TestCase(BaseTestCase):
+    """
+    TaskTiger main test cases.
+
+    Run a single test like this:
+    python -m unittest tests.TestCase.test_unique_task
+    """
 
     def test_simple_task(self):
         self.tiger.delay(simple_task)
@@ -550,6 +551,88 @@ class TestCase(unittest.TestCase):
         self._ensure_queues(queued={'batch': 3})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch': 0})
+
+class TaskTestCase(BaseTestCase):
+    """
+    Task class test cases.
+    """
+    def test_delay(self):
+        task = Task(self.tiger, simple_task)
+        self._ensure_queues()
+        task.delay()
+        self._ensure_queues(queued={'default': 1})
+
+        # Canceling only works for scheduled tasks.
+        self.assertRaises(TaskNotFound, task.cancel)
+
+    def test_delay_scheduled(self):
+        task = Task(self.tiger, simple_task, queue='a')
+        task.delay(when=datetime.timedelta(minutes=5))
+        self._ensure_queues(scheduled={'a': 1})
+
+        # Test canceling a scheduled task.
+        task.cancel()
+        self._ensure_queues()
+
+        # Canceling again raises an error
+        self.assertRaises(TaskNotFound, task.cancel)
+
+    def test_delay_scheduled_2(self):
+        task = Task(self.tiger, simple_task, queue='a')
+        task.delay(when=datetime.timedelta(minutes=5))
+        self._ensure_queues(scheduled={'a': 1})
+
+        task_id = task.id
+
+        # We can't look up a non-unique task by recreating it.
+        task = Task(self.tiger, simple_task, queue='a')
+        self.assertRaises(TaskNotFound, task.cancel)
+
+        # We can look up a task by its ID.
+        fetch_task = lambda: Task.from_id(self.tiger, 'a', 'scheduled', task_id)
+
+        task = fetch_task()
+        task.cancel()
+        self._ensure_queues()
+
+        # Task.from_id raises if it doesn't exist.
+        self.assertRaises(TaskNotFound, fetch_task)
+
+    def test_delay_scheduled_3(self):
+        task = Task(self.tiger, simple_task, unique=True)
+        task.delay(when=datetime.timedelta(minutes=5))
+        self._ensure_queues(scheduled={'default': 1})
+
+        # We can look up a non-unique task by recreating it.
+        task = Task(self.tiger, simple_task, unique=True)
+        task.cancel()
+        self._ensure_queues()
+
+    def test_execute(self):
+        task = Task(self.tiger, exception_task)
+        self.assertRaises(StandardError, task.execute)
+
+    def test_tasks_from_queue(self):
+        task0 = Task(self.tiger, simple_task)
+        task1 = Task(self.tiger, exception_task)
+        task2 = Task(self.tiger, simple_task, queue='other')
+
+        task0.delay()
+        task1.delay()
+        task2.delay()
+
+        n, tasks = Task.tasks_from_queue(self.tiger, 'default', 'queued')
+        self.assertEqual(n, 2)
+        self.assertEqual(task0.id, tasks[0].id)
+        self.assertEqual(task0.func, simple_task)
+        self.assertEqual(task0.func, tasks[0].func)
+        self.assertEqual(task0.serialized_func, 'tests.tasks.simple_task')
+        self.assertEqual(task0.serialized_func, tasks[0].serialized_func)
+        self.assertEqual(task0.state, tasks[0].state)
+        self.assertEqual(task0.state, 'queued')
+        self.assertEqual(task0.queue, tasks[0].queue)
+        self.assertEqual(task0.queue, 'default')
+
 
 if __name__ == '__main__':
     unittest.main()
