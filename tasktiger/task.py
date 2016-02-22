@@ -165,10 +165,10 @@ class Task(object):
 
     def _move(self, from_state=None, to_state=None, when=None, mode=None):
         """
-        Internal helper to move a task from one state another (e.g. from QUEUED
-        to DELAYED). The "when" argument indicates the timestamp of the task in
-        the new state. If no to_state is specified, the task will be simply
-        removed from the original state.
+        Internal helper to move a task from one state to another (e.g. from
+        QUEUED to DELAYED). The "when" argument indicates the timestamp of the
+        task in the new state. If no to_state is specified, the task will be
+        simply removed from the original state.
 
         The "mode" param can be specified to define how the timestamp in the
         new state should be updated and is passed to the ZADD Redis script (see
