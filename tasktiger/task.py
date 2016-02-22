@@ -249,28 +249,28 @@ class Task(object):
 
         now = time.time()
         self._data['time_last_queued'] = now
-        serialized_task = json.dumps(self._data)
 
         # convert timedelta to datetime
         if isinstance(when, datetime.timedelta):
             when = datetime.datetime.utcnow() + when
 
-        # convert to unixtime
-        if isinstance(when, datetime.datetime):
-            when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+        if when:
+            # Convert to unixtime: utctimetuple drops microseconds so we add
+            # them manually.
+            ts = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+            state = SCHEDULED
+
+        if not when or ts <= now:
+            # Immediately queue if the timestamp is in the past.
+            ts = now
+            state = QUEUED
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
-        if tiger.config['ALWAYS_EAGER'] and not \
-                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
+        serialized_task = json.dumps(self._data)
+
+        if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
-
-        if when:
-            state = SCHEDULED
-        else:
-            state = QUEUED
-
-        ts = when or now
 
         pipeline = tiger.connection.pipeline()
         pipeline.sadd(tiger._key(state), self.queue)

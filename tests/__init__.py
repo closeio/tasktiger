@@ -646,11 +646,21 @@ class TaskTestCase(BaseTestCase):
         self.assertRaises(StandardError, task.delay)
         self._ensure_queues()
 
+        # Even when we specify "when" in the past.
+        task = Task(self.tiger, simple_task)
+        task.delay(when=datetime.timedelta(seconds=-5))
+        self._ensure_queues()
+
         # Ensure there is an exception if we can't serialize the task.
         task = Task(self.tiger, decorated_task,
                     args=[object()])
         self.assertRaises(TypeError, task.delay)
         self._ensure_queues()
+
+        # Ensure task is not executed if it's scheduled in the future.
+        task = Task(self.tiger, simple_task)
+        task.delay(when=datetime.timedelta(seconds=5))
+        self._ensure_queues(scheduled={'default': 1})
 
 
 if __name__ == '__main__':
