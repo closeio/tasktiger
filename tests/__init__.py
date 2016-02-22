@@ -603,7 +603,7 @@ class TaskTestCase(BaseTestCase):
         task.delay(when=datetime.timedelta(minutes=5))
         self._ensure_queues(scheduled={'default': 1})
 
-        # We can look up a non-unique task by recreating it.
+        # We can look up a unique task by recreating it.
         task = Task(self.tiger, simple_task, unique=True)
         task.cancel()
         self._ensure_queues()
@@ -648,7 +648,7 @@ class TaskTestCase(BaseTestCase):
 
         # Ensure there is an exception if we can't serialize the task.
         task = Task(self.tiger, decorated_task,
-                    args=[datetime.datetime.utcnow()])
+                    args=[object()])
         self.assertRaises(TypeError, task.delay)
         self._ensure_queues()
 
