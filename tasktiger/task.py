@@ -1,4 +1,3 @@
-import calendar
 import datetime
 import json
 import redis
@@ -250,20 +249,14 @@ class Task(object):
         now = time.time()
         self._data['time_last_queued'] = now
 
-        # convert timedelta to datetime
-        if isinstance(when, datetime.timedelta):
-            when = datetime.datetime.utcnow() + when
+        ts = get_timestamp(when)
 
-        if when:
-            # Convert to unixtime: utctimetuple drops microseconds so we add
-            # them manually.
-            ts = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
-            state = SCHEDULED
-
-        if not when or ts <= now:
+        if not ts or ts <= now:
             # Immediately queue if the timestamp is in the past.
             ts = now
             state = QUEUED
+        else:
+            state = SCHEDULED
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
@@ -283,6 +276,28 @@ class Task(object):
         pipeline.execute()
 
         self._state = state
+        self._ts = ts
+
+    def update_scheduled_time(self, when):
+        """
+        Updates a scheduled task's date to the given date. If the task is not
+        scheduled, a TaskNotFound exception is raised.
+        """
+        tiger = self.tiger
+
+        ts = get_timestamp(when)
+        assert ts
+
+        pipeline = tiger.connection.pipeline()
+        key = tiger._key(SCHEDULED, self.queue)
+        tiger.scripts.zadd(key, ts, self.id, mode='xx', client=pipeline)
+        pipeline.zscore(key, self.id)
+        _, score = pipeline.execute()
+        if not score:
+            raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
+                self.id, self.queue, SCHEDULED
+            ))
+
         self._ts = ts
 
     def __repr__(self):
@@ -361,6 +376,20 @@ class Task(object):
                     tasks.append(task)
 
         return n, tasks
+
+    def n_executions(self):
+        """
+        Queries and returns the number of past task executions.
+        """
+        pipeline = self.tiger.connection.pipeline()
+        pipeline.exists(self.tiger._key('task', self.id))
+        pipeline.llen(self.tiger._key('task', self.id, 'executions'))
+        exists, n_executions = pipeline.execute()
+        if not exists:
+            raise TaskNotFound('Task {} not found.'.format(
+                self.id
+            ))
+        return n_executions
 
     def retry(self):
         """

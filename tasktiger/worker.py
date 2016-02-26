@@ -195,18 +195,18 @@ class Worker(object):
                     'args': task.args,
                     'kwargs': task.kwargs,
                 } for task in tasks]
-                hard_timeout = max(task.hard_timeout for task in tasks) or \
-                               getattr(func, '_task_hard_timeout', None) or \
-                               self.config['DEFAULT_HARD_TIMEOUT']
+                hard_timeout = (max(task.hard_timeout for task in tasks) or
+                                getattr(func, '_task_hard_timeout', None) or
+                                self.config['DEFAULT_HARD_TIMEOUT'])
 
                 with UnixSignalDeathPenalty(hard_timeout):
                     func(params)
             else:
                 # Process sequentially.
                 for task in tasks:
-                    hard_timeout = task.hard_timeout or \
-                                   getattr(func, '_task_hard_timeout', None) or \
-                                   self.config['DEFAULT_HARD_TIMEOUT']
+                    hard_timeout = (task.hard_timeout or
+                                    getattr(func, '_task_hard_timeout', None) or
+                                    self.config['DEFAULT_HARD_TIMEOUT'])
 
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*task.args, **task.kwargs)
@@ -234,9 +234,8 @@ class Worker(object):
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
             for task in tasks:
-                self.connection.rpush(
-                    self._key('task', task.id,'executions'),
-                    serialized_execution)
+                self.connection.rpush(self._key('task', task.id, 'executions'),
+                                      serialized_execution)
 
         return success
 
@@ -520,7 +519,7 @@ class Worker(object):
             log_context = {}
 
             if should_retry:
-                retry_num = self.connection.llen(self._key('task', task.id, 'executions'))
+                retry_num = task.n_executions()
                 log_context['retry_func'] = retry_func
                 log_context['retry_num'] = retry_num
 

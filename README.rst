@@ -497,7 +497,7 @@ The ``Task`` object has the following properties:
 
 - ``func``: The imported (executable) function
 
-The ``Task`` object has the following methods.
+The ``Task`` object has the following methods:
 
 - ``cancel``: Cancel a scheduled task.
 
@@ -507,7 +507,11 @@ The ``Task`` object has the following methods.
 
 - ``execute``: Run the task without queueing it.
 
+- ``n_executions``: Queries and returns the number of past task executions.
+
 - ``retry``: Requeue the task from the error queue for execution.
+
+- ``update_scheduled_time``: Updates a scheduled task's date to the given date.
 
 Example 1: Queueing a unique task and canceling it without a reference to the
 original task.

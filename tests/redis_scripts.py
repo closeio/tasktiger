@@ -25,6 +25,10 @@ class RedisScriptsTestCase(unittest.TestCase):
         entries = self._test_zadd('nx')
         self.assertEqual(entries, [('key2', 1.0), ('key1', 2.0)])
 
+    def test_zadd_xx(self):
+        entries = self._test_zadd('xx')
+        self.assertEqual(entries, [('key1', 3.0)])
+
     def test_zadd_min(self):
         entries = self._test_zadd('min')
         self.assertEqual(entries, [('key2', 0.0), ('key1', 2.0)])
