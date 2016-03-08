@@ -1,11 +1,14 @@
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
-    if not redis.call('zscore', {key}, {member}) then
-        {ret} redis.call('zadd', {key}, {score}, {member})
+    if {condition} redis.call('zscore', {key}, {member}) then
+        redis.call('zadd', {key}, {score}, {member})
     end
 """
 ZADD_NOUPDATE =  ZADD_NOUPDATE_TEMPLATE.format(
-    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition='not'
+)
+ZADD_UPDATE_EXISTING =  ZADD_NOUPDATE_TEMPLATE.format(
+    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition=''
 )
 ZADD_UPDATE_TEMPLATE = """
     local score = redis.call('zscore', {key}, {member})
@@ -219,9 +222,16 @@ DELETE_IF_NOT_IN_ZSETS = """
     return 0
 """
 
+# KEYS = { key }
+# ARGV = { member }
+FAIL_IF_NOT_IN_ZSET = """
+    assert(redis.call('zscore', KEYS[1], ARGV[1]), '<FAIL_IF_NOT_IN_ZSET>')
+"""
+
 class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
+        self._zadd_update_existing = redis.register_script(ZADD_UPDATE_EXISTING)
         self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
         self._zadd_update_max = redis.register_script(ZADD_UPDATE_MAX)
 
@@ -238,16 +248,22 @@ class RedisScripts(object):
         self._delete_if_not_in_zsets = redis.register_script(
             DELETE_IF_NOT_IN_ZSETS)
 
+        self._fail_if_not_in_zset = redis.register_script(
+            FAIL_IF_NOT_IN_ZSET)
+
     def zadd(self, key, score, member, mode, client=None):
         """
         Like ZADD, but supports different score update modes, in case the
         member already exists in the ZSET:
         - "nx": Don't update the score
+        - "xx": Only update elements that already exist. Never add elements.
         - "min": Use the smaller of the given and existing score
         - "max": Use the larger of the given and existing score
         """
         if mode == 'nx':
             f = self._zadd_noupdate
+        elif mode == 'xx':
+            f = self._zadd_update_existing
         elif mode == 'min':
             f = self._zadd_update_min
         elif mode == 'max':
@@ -361,3 +377,12 @@ class RedisScripts(object):
             keys=[key]+set_list,
             args=[member],
             client=client)
+
+    def fail_if_not_in_zset(self, key, member, client=None):
+        """
+        Fails with an error containing the string '<FAIL_IF_NOT_IN_ZSET>' if
+        the given ``member`` is not in the ZSET ``key``. This can be used in
+        a pipeline to assert that the member is in the ZSET and cancel the
+        execution otherwise.
+        """
+        self._fail_if_not_in_zset(keys=[key], args=[member], client=client)

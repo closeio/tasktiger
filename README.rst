@@ -454,9 +454,8 @@ evaluate ``sys.argv`` to ensure proper argument parsing, instead of using a
 Inspect, requeue and delete tasks
 ---------------------------------
 
-TaskTiger does not currently come with an admin interface, but provides access
-to the ``Task`` class which lets you inspect queues and requeue and delete
-tasks.
+TaskTiger provides access to the ``Task`` class which lets you inspect queues
+and perform various actions on tasks.
 
 Each queue can have tasks in the following states:
 
@@ -475,6 +474,13 @@ you load tracebacks from failed task executions using the ``load_executions``
 keyword argument, which accepts an integer indicating how many executions
 should be loaded.
 
+Tasks can also be constructed and queued using the regular constructor, which
+takes the TaskTiger instance, the function name and the options described in
+the "Task options" section. The task can then be queued using its ``delay``
+method. Note that the ``when`` argument needs to be passed to the ``delay``
+method, if applicable. Unique tasks can be reconstructed using the same
+arguments.
+
 The ``Task`` object has the following properties:
 
 - ``id``: The task ID.
@@ -486,22 +492,50 @@ The ``Task`` object has the following properties:
   the worker host in ``host``, the exception name in ``exception_name`` and
   the full traceback in ``traceback``.
 
-- ``func``, ``args``, ``kwargs``: The serialized function name with all of its
-  arguments.
+- ``serialized_func``, ``args``, ``kwargs``: The serialized function name with
+  all of its arguments.
 
-The ``Task`` object has the following methods. Note that these methods only
-work for tasks that are in the error queue.
+- ``func``: The imported (executable) function
 
-- ``retry``: Requeue the task for execution.
+The ``Task`` object has the following methods:
+
+- ``cancel``: Cancel a scheduled task.
+
+- ``delay``: Queue the task for execution.
 
 - ``delete``: Remove the task from the error queue.
 
-Example:
+- ``execute``: Run the task without queueing it.
+
+- ``n_executions``: Queries and returns the number of past task executions.
+
+- ``retry``: Requeue the task from the error queue for execution.
+
+- ``update_scheduled_time``: Updates a scheduled task's date to the given date.
+
+Example 1: Queueing a unique task and canceling it without a reference to the
+original task.
 
 .. code:: python
 
-  from tasktiger import TaskTiger
-  from tasktiger.task import Task
+  from tasktiger import TaskTiger, Task
+
+  tiger = TaskTiger()
+
+  # Send an email in five minutes.
+  task = Task(tiger, send_mail, args=['email_id'], unique=True)
+  task.delay(when=datetime.timedelta(minutes=5))
+
+  # Unique tasks get back a task instance referring to the same task by simply
+  # creating the same task again.
+  task = Task(tiger, send_mail, args=['email_id'], unique=True)
+  task.cancel()
+
+Example 2: Inspecting queues and retrying a task by ID.
+
+.. code:: python
+
+  from tasktiger import TaskTiger, Task
 
   QUEUE_NAME = 'default'
   TASK_STATE = 'error'

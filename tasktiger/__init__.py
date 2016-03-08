@@ -12,15 +12,16 @@ import time
 from redis_scripts import RedisScripts
 
 from ._internal import *
-from .retry import *
-from .worker import Worker
 from .exceptions import *
+from .retry import *
+from .task import Task
+from .worker import Worker
 
-__all__ = ['TaskTiger', 'Worker',
+__all__ = ['TaskTiger', 'Worker', 'Task',
 
            # Exceptions
-           'TaskImportError', 'JobTimeoutException', 'StopRetry',
-           'RetryException',
+           'JobTimeoutException', 'RetryException', 'StopRetry',
+           'TaskImportError', 'TaskNotFound',
 
            # Retry methods
            'fixed', 'linear', 'exponential']
@@ -163,56 +164,6 @@ class TaskTiger(object):
         """
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
-    def _redis_move_task(self, queue, task_id, from_state, to_state=None,
-                         when=None, remove_task=None, mode=None):
-        """
-        Internal helper to move a task from one state another (e.g. from QUEUED
-        to DELAYED). The "when" argument indicates the timestamp of the task in
-        the new state. If no to_state is specified, the task will be simply
-        removed from the from_state. In this case remove_task can be specified,
-        which can have one of the following values:
-          * 'always': Remove the task object from Redis.
-          * 'check': Only remove the task object from Redis if the task doesn't
-            exist in the QUEUED or ERROR queue. This is useful for unique
-            tasks, which can have multiple instances in different states with
-            the same ID.
-        The "mode" param can be specified to define how the timestamp in the
-        new state should be updated and is passed to the zadd Redis script (see
-        its documentation for details).
-        """
-        pipeline = self.connection.pipeline()
-        if to_state:
-            if not when:
-                when = time.time()
-            if mode:
-                self.scripts.zadd(self._key(to_state, queue), when, task_id,
-                                  mode, client=pipeline)
-            else:
-                pipeline.zadd(self._key(to_state, queue), task_id, when)
-            pipeline.sadd(self._key(to_state), queue)
-        pipeline.zrem(self._key(from_state, queue), task_id)
-        if remove_task == 'always':
-            pipeline.delete(self._key('task', task_id, 'executions'))
-            pipeline.delete(self._key('task', task_id))
-        elif remove_task == 'check':
-            # Only delete if it's not in any other queue
-            check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
-            check_states.remove(from_state)
-            # TODO: Do the following two in one call.
-            self.scripts.delete_if_not_in_zsets(self._key('task', task_id, 'executions'),
-                                                task_id, [
-                self._key(state, queue) for state in check_states
-            ], client=pipeline)
-            self.scripts.delete_if_not_in_zsets(self._key('task', task_id),
-                                                task_id, [
-                self._key(state, queue) for state in check_states
-            ], client=pipeline)
-        self.scripts.srem_if_not_exists(self._key(from_state), queue,
-                self._key(from_state, queue), client=pipeline)
-        if to_state == QUEUED:
-            pipeline.publish(self._key('activity'), queue)
-        pipeline.execute()
-
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
              lock_key=None, retry=None, retry_on=None, retry_method=None,
              batch=False):
@@ -287,98 +238,14 @@ class TaskTiger(object):
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        if self.config['ALWAYS_EAGER'] and not \
-                (when and when.utctimetuple() >= datetime.datetime.utcnow().utctimetuple()):
-            if not args:
-                args = []
-            if not kwargs:
-                kwargs = {}
-            if getattr(func, '_task_batch', False):
-                return func([{'args': args, 'kwargs': kwargs}])
-            else:
-                return func(*args, **kwargs)
+        task = Task(self, func, args=args, kwargs=kwargs, queue=queue,
+                    hard_timeout=hard_timeout, unique=unique,
+                    lock=lock, lock_key=lock_key,
+                    retry=retry, retry_on=retry_on, retry_method=retry_method)
 
-        serialized_name = serialize_func_name(func)
+        task.delay(when=when)
 
-        if unique is None:
-            unique = getattr(func, '_task_unique', False)
-
-        if lock is None:
-            lock = getattr(func, '_task_lock', False)
-
-        if lock_key is None:
-            lock_key = getattr(func, '_task_lock_key', None)
-
-        if retry is None:
-            retry = getattr(func, '_task_retry', False)
-
-        if retry_on is None:
-            retry_on = getattr(func, '_task_retry_on', None)
-
-        if retry_method is None:
-            retry_method = getattr(func, '_task_retry_method', None)
-
-        if unique:
-            task_id = gen_unique_id(serialized_name, args, kwargs)
-        else:
-            task_id = gen_id()
-
-        if queue is None:
-            queue = getattr(func, '_task_queue', self.config['DEFAULT_QUEUE'])
-
-        # convert timedelta to datetime
-        if isinstance(when, datetime.timedelta):
-            when = datetime.datetime.utcnow() + when
-
-        # convert to unixtime
-        if isinstance(when, datetime.datetime):
-            when = calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
-
-        now = time.time()
-        task = {
-            'id': task_id,
-            'func': serialized_name,
-            'time_last_queued': now,
-        }
-        if unique:
-            task['unique'] = True
-        if lock or lock_key:
-            task['lock'] = True
-            if lock_key:
-                task['lock_key'] = lock_key
-        if args:
-            task['args'] = args
-        if kwargs:
-            task['kwargs'] = kwargs
-        if hard_timeout:
-            task['hard_timeout'] = hard_timeout
-        if retry or retry_on or retry_method:
-            if not retry_method:
-                retry_method = self.config['DEFAULT_RETRY_METHOD']
-
-            retry_method = serialize_retry_method(retry_method)
-
-            task['retry_method'] = retry_method
-            if retry_on:
-                task['retry_on'] = [serialize_func_name(cls)
-                                    for cls in retry_on]
-
-        serialized_task = json.dumps(task)
-
-        if when:
-            state = SCHEDULED
-        else:
-            state = QUEUED
-
-        pipeline = self.connection.pipeline()
-        pipeline.sadd(self._key(state), queue)
-        pipeline.set(self._key('task', task_id), serialized_task)
-        # In case of unique tasks, don't update the score.
-        self.scripts.zadd(self._key(state, queue), when or now, task_id,
-                          mode='nx', client=pipeline)
-        if state == QUEUED:
-            pipeline.publish(self._key('activity'), queue)
-        pipeline.execute()
+        return task
 
     def get_queue_stats(self):
         """

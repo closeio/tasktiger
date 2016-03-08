@@ -1,3 +1,5 @@
+import calendar
+import datetime
 import importlib
 import hashlib
 import json
@@ -65,3 +67,13 @@ def serialize_retry_method(retry_method):
         return (serialize_func_name(retry_method), ())
     else:
         return (serialize_func_name(retry_method[0]), retry_method[1])
+
+def get_timestamp(when):
+    # convert timedelta to datetime
+    if isinstance(when, datetime.timedelta):
+        when = datetime.datetime.utcnow() + when
+
+    if when:
+        # Convert to unixtime: utctimetuple drops microseconds so we add
+        # them manually.
+        return calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
