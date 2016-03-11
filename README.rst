@@ -446,9 +446,27 @@ TaskTiger worker and parses any command line arguments. Here is an example:
       tiger.run_worker_with_args(sys.argv[2:])
       sys.exit(0)
 
-Note that if you're using ``flask-script``, you will still need to manually
-evaluate ``sys.argv`` to ensure proper argument parsing, instead of using a
-``flask-script`` command.
+If you're using ``flask-script``, you can use the ``TaskTigerCommand`` provided
+in the ``tasktiger.flask_script`` module. It takes the ``TaskTiger`` instance
+as an argument. Tasks will have access to Flask's application context. Example:
+
+.. code:: python
+
+  from flask import Flask
+  from flask.ext.script import Manager
+  from tasktiger.flask_script import TaskTigerCommand
+
+  app = Flask()
+  manager = Manager(app)
+  tiger = TaskTiger(setup_structlog=True)
+
+  manager.add_command('tasktiger', TaskTigerCommand(tiger))
+
+  if __name__ == "__main__":
+      manager.run()
+
+You can subclass the ``TaskTigerCommand`` and override the ``setup`` method to
+implement any custom setup that needs to be done before running the worker.
 
 
 Inspect, requeue and delete tasks
