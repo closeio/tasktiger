@@ -19,7 +19,7 @@ def decorated_task(*args, **kwargs):
     pass
 
 def exception_task():
-    raise StandardError('this failed')
+    raise Exception('this failed')
 
 @tiger.task(queue='other')
 def task_on_other_queue():
@@ -41,31 +41,34 @@ def long_task_ok():
 
 @tiger.task(unique=True)
 def unique_task(value=None):
-    conn = redis.Redis(db=TEST_DB)
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
     conn.lpush('unique_task', value)
 
 @tiger.task(lock=True)
 def locked_task(key, other=None):
-    conn = redis.Redis(db=TEST_DB)
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
     data = conn.getset(key, 1)
     if data is not None:
-        raise StandardError('task failed, key already set')
+        raise Exception('task failed, key already set')
     time.sleep(DELAY)
     conn.delete(key)
 
 @tiger.task(queue='batch', batch=True)
-def batch_task(params):
-    conn = redis.Redis(db=TEST_DB)
-    conn.rpush('batch_task', json.dumps(params))
+def batch_task(params): 
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    try:
+        conn.rpush('batch_task', json.dumps(params))
+    except Exception:
+        pass
     if any(p['args'][0] == 10 for p in params if p['args']):
-        raise StandardError('exception')
+        raise Exception('exception')
 
 @tiger.task(queue='batch')
 def non_batch_task(arg):
-    conn = redis.Redis(db=TEST_DB)
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
     conn.rpush('batch_task', arg)
     if arg == 10:
-        raise StandardError('exception')
+        raise Exception('exception')
 
 def retry_task():
     raise RetryException()

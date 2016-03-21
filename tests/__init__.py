@@ -10,6 +10,7 @@ from .config import *
 from .tasks import *
 from .utils import *
 from .redis_scripts import *
+from tasktiger._internal import serialize_func_name
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -84,7 +85,8 @@ class TestCase(BaseTestCase):
         worker.run(once=True)
         self._ensure_queues(queued={'default': 0})
 
-        self.assertEqual(json.loads(tmpfile.read()), {
+        json_data = tmpfile.read().decode('utf8')
+        self.assertEqual(json.loads(json_data), {
             'args': [],
             'kwargs': {}
         })
@@ -97,8 +99,8 @@ class TestCase(BaseTestCase):
 
         worker.run(once=True)
         self._ensure_queues(queued={'default': 0})
-
-        self.assertEqual(json.loads(tmpfile.read()), {
+        json_data = tmpfile.read().decode('utf8')
+        self.assertEqual(json.loads(json_data), {
             'args': [123, 'args'],
             'kwargs': {'more': [1, 2, 3]}
         })
@@ -177,7 +179,7 @@ class TestCase(BaseTestCase):
         self.assertEqual(len(executions), 1)
         execution = json.loads(executions[0])
         self.assertEqual(execution['exception_name'],
-                         'exceptions.StandardError')
+                         serialize_func_name(Exception))
         self.assertEqual(execution['success'], False)
 
     def test_long_task_ok(self):
@@ -347,7 +349,7 @@ class TestCase(BaseTestCase):
 
     def test_retry_on_2(self):
         # Will be retried
-        self.tiger.delay(exception_task, retry_on=[ValueError, StandardError])
+        self.tiger.delay(exception_task, retry_on=[ValueError, Exception])
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'default': 0},
                             scheduled={'default': 1},
@@ -624,7 +626,7 @@ class TaskTestCase(BaseTestCase):
 
     def test_execute(self):
         task = Task(self.tiger, exception_task)
-        self.assertRaises(StandardError, task.execute)
+        self.assertRaises(Exception, task.execute)
 
     def test_tasks_from_queue(self):
         task0 = Task(self.tiger, simple_task)
@@ -657,7 +659,7 @@ class TaskTestCase(BaseTestCase):
 
         # Ensure task is immediately executed.
         task = Task(self.tiger, exception_task)
-        self.assertRaises(StandardError, task.delay)
+        self.assertRaises(Exception, task.delay)
         self._ensure_queues()
 
         # Even when we specify "when" in the past.

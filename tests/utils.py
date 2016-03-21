@@ -14,7 +14,7 @@ def get_tiger():
         wrapper_class=structlog.stdlib.BoundLogger,
     )
     logging.basicConfig(format='%(message)s')
-    conn = redis.Redis(db=TEST_DB)
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
     tiger = TaskTiger(connection=conn, config={
         # We need this 0 here so we don't pick up scheduled tasks when
         # doing a single worker run.

@@ -5,7 +5,7 @@ class StatsThread(threading.Thread):
     def __init__(self, tiger):
         super(StatsThread, self).__init__()
         self.tiger = tiger
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
         self._task_running = False
         self._time_start = time.time()
@@ -39,10 +39,10 @@ class StatsThread(threading.Thread):
 
     def run(self):
         while True:
-            self._stop.wait(self.tiger.config['STATS_INTERVAL'])
-            if self._stop.isSet():
+            self._stop_event.wait(self.tiger.config['STATS_INTERVAL'])
+            if self._stop_event.isSet():
                 break
             self.compute_stats()
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()

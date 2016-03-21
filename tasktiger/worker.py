@@ -9,8 +9,9 @@ import socket
 import sys
 import time
 import traceback
+import six
 
-from redis_lock import Lock
+from .redis_lock import Lock
 
 from ._internal import *
 from .exceptions import RetryException
@@ -131,7 +132,7 @@ class Worker(object):
             r, w, x = select.select([fileno], [], [],
                                     0 if self._queue_set else timeout)
             if fileno in r: # or not self._queue_set:
-                message = gen.next()
+                message = six.next(gen)
                 if message['type'] == 'message':
                     for queue in self._filter_queues([message['data']]):
                         self._queue_set.add(queue)
@@ -195,12 +196,15 @@ class Worker(object):
                     'args': task.args,
                     'kwargs': task.kwargs,
                 } for task in tasks]
-                hard_timeout = (max(task.hard_timeout for task in tasks) or
+                task_timeouts = [task.hard_timeout for task in tasks if task.hard_timeout is not None]
+                hard_timeout = ((max(task_timeouts) if task_timeouts else None)
+                                or
                                 getattr(func, '_task_hard_timeout', None) or
                                 self.config['DEFAULT_HARD_TIMEOUT'])
 
                 with UnixSignalDeathPenalty(hard_timeout):
                     func(params)
+
             else:
                 # Process sequentially.
                 for task in tasks:
@@ -211,14 +215,15 @@ class Worker(object):
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*task.args, **task.kwargs)
 
-        except RetryException, exc:
+        except RetryException as exc:
             execution['retry'] = True
             if exc.method:
                 execution['retry_method'] = serialize_retry_method(exc.method)
             execution['log_error'] = exc.log_error
+            execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = exc.exc_info
-        except Exception, exc:
-            pass
+        except Exception as exc:
+            execution['exception_name'] = serialize_func_name(exc.__class__)
         else:
             success = True
 
@@ -229,7 +234,6 @@ class Worker(object):
             # Currently we only log failed task executions to Redis.
             execution['traceback'] = \
                     ''.join(traceback.format_exception(*exc_info))
-            execution['exception_name'] = serialize_func_name(exc.__class__)
             execution['success'] = success
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)

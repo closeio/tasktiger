@@ -1,9 +1,11 @@
+import binascii
 import calendar
 import datetime
 import importlib
 import hashlib
 import json
 import os
+import six
 
 from .exceptions import TaskImportError
 
@@ -28,7 +30,7 @@ def gen_id():
     """
     Generates and returns a random hex-encoded 256-bit unique ID.
     """
-    return os.urandom(32).encode('hex')
+    return binascii.b2a_hex(os.urandom(32)).decode('utf8')
 
 def gen_unique_id(serialized_name, args, kwargs):
     """
@@ -39,7 +41,7 @@ def gen_unique_id(serialized_name, args, kwargs):
         'func': serialized_name,
         'args': args,
         'kwargs': kwargs,
-    }, sort_keys=True)).hexdigest()
+    }, sort_keys=True).encode('utf8')).hexdigest()
 
 def serialize_func_name(func):
     """
