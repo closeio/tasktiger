@@ -5,7 +5,6 @@ import importlib
 import hashlib
 import json
 import os
-import six
 
 from .exceptions import TaskImportError
 

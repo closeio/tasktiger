@@ -3,7 +3,6 @@ import json
 import redis
 import time
 
-from six import text_type
 from ._internal import *
 from .exceptions import TaskNotFound
 
@@ -229,7 +228,7 @@ class Task(object):
         try:
             pipeline.execute()
         except redis.ResponseError as e:
-            if '<FAIL_IF_NOT_IN_ZSET>' in text_type(e):
+            if '<FAIL_IF_NOT_IN_ZSET>' in e.args[0]:
                 raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
                     self.id, queue, from_state
                 ))

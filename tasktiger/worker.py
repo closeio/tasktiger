@@ -9,7 +9,6 @@ import socket
 import sys
 import time
 import traceback
-import six
 
 from .redis_lock import Lock
 
@@ -132,7 +131,7 @@ class Worker(object):
             r, w, x = select.select([fileno], [], [],
                                     0 if self._queue_set else timeout)
             if fileno in r: # or not self._queue_set:
-                message = six.next(gen)
+                message = next(gen)
                 if message['type'] == 'message':
                     for queue in self._filter_queues([message['data']]):
                         self._queue_set.add(queue)
