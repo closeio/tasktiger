@@ -9,7 +9,7 @@ import redis
 import structlog
 import time
 
-from redis_scripts import RedisScripts
+from .redis_scripts import RedisScripts
 
 from ._internal import *
 from .exceptions import *
@@ -129,7 +129,7 @@ class TaskTiger(object):
         if config:
             self.config.update(config)
 
-        self.connection = connection or redis.Redis()
+        self.connection = connection or redis.Redis(decode_responses=True)
         self.scripts = RedisScripts(self.connection)
 
         if setup_structlog:
@@ -293,7 +293,7 @@ class TaskTiger(object):
 @click.option('-n', '--db', help='Redis database number')
 @click.pass_context
 def run_worker(context, host, port, db, password, **kwargs):
-    conn = redis.Redis(host, int(port or 6379), int(db or 0), password)
+    conn = redis.Redis(host, int(port or 6379), int(db or 0), password, decode_responses=True)
     tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
     tiger.run_worker(**kwargs)
 

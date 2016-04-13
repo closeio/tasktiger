@@ -228,7 +228,7 @@ class Task(object):
         try:
             pipeline.execute()
         except redis.ResponseError as e:
-            if '<FAIL_IF_NOT_IN_ZSET>' in unicode(e):
+            if '<FAIL_IF_NOT_IN_ZSET>' in e.args[0]:
                 raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
                     self.id, queue, from_state
                 ))
