@@ -512,6 +512,25 @@ class TestCase(BaseTestCase):
             ]
         ])
 
+    def test_batch_4(self):
+        self.tiger.delay(batch_task, queue='batch.sub', args=[1])
+        self.tiger.delay(batch_task, queue='batch.sub', args=[2])
+        self.tiger.delay(batch_task, queue='batch.sub', args=[3])
+        self.tiger.delay(batch_task, queue='batch.sub', args=[4])
+        self._ensure_queues(queued={'batch.sub': 4})
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'batch.sub': 0})
+        data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
+        self.assertEqual(data, [
+            [
+                {'args': [1], 'kwargs': {}},
+                {'args': [2], 'kwargs': {}},
+                {'args': [3], 'kwargs': {}},
+            ], [
+                {'args': [4], 'kwargs': {}},
+            ]
+        ])
+
     def test_batch_exception_1(self):
         self.tiger.delay(batch_task, args=[1])
         self.tiger.delay(batch_task, args=[10])

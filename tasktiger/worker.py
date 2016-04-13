@@ -316,8 +316,8 @@ class Worker(object):
         batch_queues = self.config['BATCH_QUEUES']
         batch_size = 1
         for part in dotted_parts(queue):
-            if queue in batch_queues:
-                batch_size = batch_queues[queue]
+            if part in batch_queues:
+                batch_size = batch_queues[part]
 
         # Move an item to the active queue, if available.
         # We need to be careful when moving unique tasks: We currently don't
