@@ -573,6 +573,20 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch': 0})
 
+    def test_only_queues(self):
+        self.tiger.delay(simple_task, queue='a')
+        self.tiger.delay(simple_task, queue='a.a')
+        self.tiger.delay(simple_task, queue='b')
+        self.tiger.delay(simple_task, queue='b.a')
+
+        self._ensure_queues(queued={'a': 1, 'a.a': 1, 'b': 1, 'b.a': 1})
+
+        self.tiger.config['ONLY_QUEUES'] = ['a']
+
+        Worker(self.tiger).run(once=True)
+
+        self._ensure_queues(queued={'b': 1, 'b.a': 1})
+
 class TaskTestCase(BaseTestCase):
     """
     Task class test cases.
