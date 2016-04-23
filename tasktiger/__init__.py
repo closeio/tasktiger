@@ -240,7 +240,7 @@ class TaskTiger(object):
                 importlib.import_module(module_name)
                 self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self, queues.split(','))
+        worker = Worker(self, queues.split(',') if queues else None)
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,
