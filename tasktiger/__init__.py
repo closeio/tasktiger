@@ -125,6 +125,18 @@ class TaskTiger(object):
 
             # How often to print stats.
             'STATS_INTERVAL': 60,
+
+            # The following settings are only considered if no explicit queues
+            # are passed in the command line (or to the queues argument in the
+            # run_worker() method).
+
+            # If non-empty, a worker only processeses the given queues.
+            'ONLY_QUEUES': [],
+
+            # TODO: not implemented
+            # The defined queues will be excluded (even if they're specified
+            # in ONLY_QUEUES).
+            #'IGNORE_QUEUES': []
         }
         if config:
             self.config.update(config)
@@ -228,7 +240,7 @@ class TaskTiger(object):
                 importlib.import_module(module_name)
                 self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self, queues)
+        worker = Worker(self, queues.split(',') if queues else None)
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,

@@ -37,7 +37,9 @@ class Worker(object):
         self.stats_thread = None
 
         if queues:
-            self.queue_filter = queues.split(',')
+            self.queue_filter = queues
+        elif self.config['ONLY_QUEUES']:
+            self.queue_filter = self.config['ONLY_QUEUES']
         else:
             self.queue_filter = None
 

@@ -115,7 +115,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task, queue='c')
         self._ensure_queues(queued={'a': 1, 'b': 1, 'c': 1})
 
-        Worker(self.tiger, queues='a,b').run(once=True)
+        Worker(self.tiger, queues=['a', 'b']).run(once=True)
         self._ensure_queues(queued={'a': 0, 'b': 0, 'c': 1})
 
         Worker(self.tiger).run(once=True)
@@ -128,7 +128,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task, queue='a.b.c')
         self._ensure_queues(queued={'a': 1, 'a.b': 1, 'a.b.c': 1, 'x': 1})
 
-        Worker(self.tiger, queues='a,b').run(once=True)
+        Worker(self.tiger, queues=['a', 'b']).run(once=True)
         self._ensure_queues(queued={'a': 0, 'a.b': 0, 'a.b.c': 0, 'x': 1})
 
     def test_nested_queue_2(self):
@@ -138,7 +138,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task, queue='a.b.c')
         self._ensure_queues(queued={'a': 1, 'a.b': 1, 'a.b.c': 1, 'x': 1})
 
-        Worker(self.tiger, queues='a.b,b').run(once=True)
+        Worker(self.tiger, queues=['a.b', 'b']).run(once=True)
         self._ensure_queues(queued={'a': 1, 'a.b': 0, 'a.b.c': 0, 'x': 1})
 
     def test_task_on_other_queue(self):
@@ -572,6 +572,20 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'batch': 3})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch': 0})
+
+    def test_only_queues(self):
+        self.tiger.delay(simple_task, queue='a')
+        self.tiger.delay(simple_task, queue='a.a')
+        self.tiger.delay(simple_task, queue='b')
+        self.tiger.delay(simple_task, queue='b.a')
+
+        self._ensure_queues(queued={'a': 1, 'a.a': 1, 'b': 1, 'b.a': 1})
+
+        self.tiger.config['ONLY_QUEUES'] = ['a']
+
+        Worker(self.tiger).run(once=True)
+
+        self._ensure_queues(queued={'b': 1, 'b.a': 1})
 
 class TaskTestCase(BaseTestCase):
     """
