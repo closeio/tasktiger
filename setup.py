@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='tasktiger',
-    version='0.6',
+    version='0.7',
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
