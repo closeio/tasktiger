@@ -622,8 +622,13 @@ class Worker(object):
         except KeyboardInterrupt:
             pass
 
-        if self.stats_thread:
-            self.stats_thread.stop()
-            self.stats_thread = None
+        except Exception as e:
+            self.log.exception()
+            raise
 
-        self.log.info('done')
+        finally:
+            if self.stats_thread:
+                self.stats_thread.stop()
+                self.stats_thread = None
+
+            self.log.info('done')
