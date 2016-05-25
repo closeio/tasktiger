@@ -132,11 +132,6 @@ class TaskTiger(object):
 
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
-
-            # TODO: not implemented
-            # The defined queues will be excluded (even if they're specified
-            # in ONLY_QUEUES).
-            #'IGNORE_QUEUES': []
         }
         if config:
             self.config.update(config)
