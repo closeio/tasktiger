@@ -108,7 +108,7 @@ Create a file that contains the task(s).
 
   # tasks.py
   def my_task():
-      print 'Hello'
+      print('Hello')
 
 Queue the task using the ``delay`` method.
 
@@ -179,7 +179,7 @@ use an alternative syntax to queue the task, which is compatible with Celery:
 
   @tiger.task()
   def my_task(name, n=None):
-      print 'Hello', name
+      print('Hello', name)
 
 .. code:: python
 
@@ -202,7 +202,7 @@ are overridden.
 
   @tiger.task(queue='myqueue', unique=True)
   def my_task():
-      print 'Hello'
+      print('Hello')
 
 .. code:: python
 
@@ -531,6 +531,13 @@ The ``Task`` object has the following methods:
 
 - ``update_scheduled_time``: Updates a scheduled task's date to the given date.
 
+The current task can be accessed within the task function while it's being
+executed: In case of a non-batch task, the ``current_task`` property of the
+``TaskTiger`` instance returns the current ``Task`` instance. In case of a
+batch task the ``current_tasks`` property must be used which returns a list of
+tasks that are currently being processed (in the same order as they were passed
+to the task).
+
 Example 1: Queueing a unique task and canceling it without a reference to the
 original task.
 
@@ -564,10 +571,25 @@ Example 2: Inspecting queues and retrying a task by ID.
   n_total, tasks = Task.tasks_from_queue(tiger, QUEUE_NAME, TASK_STATE)
 
   for task in tasks:
-      print task.id, task.func
+      print(task.id, task.func)
 
   task = Task.from_id(tiger, QUEUE_NAME, TASK_STATE, TASK_ID)
   task.retry()
+
+Example 3: Accessing the task instances within a batch task function to
+determine how many times the currently processing tasks were previously
+executed.
+
+.. code:: python
+
+  from tasktiger import TaskTiger
+
+  tiger = TaskTiger()
+
+  @tiger.task(batch=True)
+  def my_task(args):
+      for task in tiger.current_tasks:
+          print(task.n_executions())
 
 
 Rollbar error handling
