@@ -21,14 +21,6 @@ from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
 
-# Global worker context. We store this globally (and not on the TaskTiger
-# instance) for consistent results just in case the user has multiple TaskTiger
-# instances.
-_g = {
-    'current_task_is_batch': None,
-    'current_tasks': None,
-}
-
 class Worker(object):
     def __init__(self, tiger, queues=None):
         """
@@ -200,7 +192,7 @@ class Worker(object):
             func = tasks[0].func
 
             is_batch_func = getattr(func, '_task_batch', False)
-            _g['current_task_is_batch'] = is_batch_func
+            g['current_task_is_batch'] = is_batch_func
 
             if is_batch_func:
                 # Batch process if the task supports it.
@@ -214,7 +206,7 @@ class Worker(object):
                                 getattr(func, '_task_hard_timeout', None) or
                                 self.config['DEFAULT_HARD_TIMEOUT'])
 
-                _g['current_tasks'] = tasks
+                g['current_tasks'] = tasks
                 with UnixSignalDeathPenalty(hard_timeout):
                     func(params)
 
@@ -225,7 +217,7 @@ class Worker(object):
                                     getattr(func, '_task_hard_timeout', None) or
                                     self.config['DEFAULT_HARD_TIMEOUT'])
 
-                    _g['current_tasks'] = [task]
+                    g['current_tasks'] = [task]
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*task.args, **task.kwargs)
 

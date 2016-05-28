@@ -15,7 +15,7 @@ from ._internal import *
 from .exceptions import *
 from .retry import *
 from .task import Task
-from .worker import Worker, _g
+from .worker import Worker
 
 __all__ = ['TaskTiger', 'Worker', 'Task',
 
@@ -164,18 +164,18 @@ class TaskTiger(object):
             logging.basicConfig(format='%(message)s')
 
     def _get_current_task(self):
-        if _g['current_tasks'] is None:
+        if g['current_tasks'] is None:
             raise RuntimeError('Must be accessed from within a task')
-        if _g['current_task_is_batch']:
+        if g['current_task_is_batch']:
             raise RuntimeError('Must use current_tasks in a batch task.')
-        return _g['current_tasks'][0]
+        return g['current_tasks'][0]
 
     def _get_current_tasks(self):
-        if _g['current_tasks'] is None:
+        if g['current_tasks'] is None:
             raise RuntimeError('Must be accessed from within a task')
-        if not _g['current_task_is_batch']:
+        if not g['current_task_is_batch']:
             raise RuntimeError('Must use current_task in a non-batch task.')
-        return _g['current_tasks']
+        return g['current_tasks']
 
     """
     Properties to access the currently processing task (or tasks, in case of a

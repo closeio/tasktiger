@@ -238,10 +238,19 @@ class Task(object):
 
     def execute(self):
         func = self.func
-        if getattr(func, '_task_batch', False):
-            return func([{'args': self.args, 'kwargs': self.kwargs}])
-        else:
-            return func(*self.args, **self.kwargs)
+        is_batch_func = getattr(func, '_task_batch', False)
+
+        g['current_task_is_batch'] = is_batch_func
+        g['current_tasks'] = [self]
+
+        try:
+            if is_batch_func:
+                return func([{'args': self.args, 'kwargs': self.kwargs}])
+            else:
+                return func(*self.args, **self.kwargs)
+        finally:
+            g['current_task_is_batch'] = None
+            g['current_tasks'] = None
 
     def delay(self, when=None):
         tiger = self.tiger
