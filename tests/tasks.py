@@ -76,3 +76,26 @@ def retry_task():
 def retry_task_2():
     raise RetryException(method=fixed(DELAY, 1),
                          log_error=False)
+
+def current_task():
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+
+    try:
+        tasks = tiger.current_tasks
+    except RuntimeError:
+        # This is expected (we need to use current_task)
+
+        task = tiger.current_task
+        conn.set('task_id', task.id)
+
+@tiger.task(batch=True, queue='batch')
+def current_tasks(tasks):
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+
+    try:
+        tasks = tiger.current_task
+    except RuntimeError:
+        # This is expected (we need to use current_tasks)
+
+        tasks = tiger.current_tasks
+        conn.rpush('task_ids', *[t.id for t in tasks])
