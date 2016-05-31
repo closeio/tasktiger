@@ -145,6 +145,30 @@ decorate and queue tasks. The constructor takes the following arguments:
   changed, and a full list can be seen within ``TaskTiger``'s ``__init__``
   method.
 
+  Here are a few commonly used options:
+
+  - ``ALWAYS_EAGER``
+
+    If set to ``True``, all tasks except future tasks (``when`` is a future
+    time) will be executed locally by blocking until the task returns. This is
+    useful for testing purposes.
+
+  - ``BATCH_QUEUES``
+
+    Set up queues that will be processed in batch, i.e. multiple jobs are taken
+    out of the queue at the same time and passed as a list to the worker
+    method. Takes a dict where the key represents the queue name and the value
+    represents the batch size. Note that the task needs to be declared as
+    ``batch=True``. Also note that any subqueues will be automatically treated
+    as batch queues, and the batch value of the most specific subqueue name
+    takes precedence.
+
+  - ``ONLY_QUEUES``
+
+    If set to a non-empty list of queue names, a worker only processeses the
+    given queues (and their subqueues), unless explicit queues are passed to
+    the command line.
+
 - ``setup_structlog``
 
   If set to True, sets up structured logging using ``structlog`` when
@@ -159,7 +183,13 @@ Example:
   from redis import Redis
   conn = redis.Redis(db=1)
   tiger = tasktiger.TaskTiger(connection=conn, config={
-      'BATCH_QUEUES': { 'batch': 10 },
+      'BATCH_QUEUES': {
+          # Batch up to 50 tasks that are queued in the my_batch_queue or any
+          # of its subqueues, except for the send_email subqueue which only
+          # processes up to 10 tasks at a time.
+          'my_batch_queue': 50,
+          'my_batch_queue.send_email': 10,
+      },
   })
 
 
@@ -214,7 +244,7 @@ When queueing a task, the task needs to be defined in a module other than the
 Python file which is being executed. In other words, the task can't be in the
 ``__main__`` module. TaskTiger will give you back an error otherwise.
 
-The following options are supported for ``delay``:
+The following options are supported by both ``delay`` and the task decorator:
 
 - ``queue``
 
@@ -227,21 +257,21 @@ The following options are supported for ``delay``:
 
 - ``unique``
 
-  The task will only be queued if there is no similar task with the
-  same function, arguments, and keyword arguments in the queue. Note
-  that multiple similar tasks may still be executed at the same time
-  since the task will still be inserted into the queue if another one
+  Boolean to indicate whether the task will only be queued if there is no
+  similar task with the same function, arguments, and keyword arguments in the
+  queue. Note that multiple similar tasks may still be executed at the same
+  time since the task will still be inserted into the queue if another one
   is being processed.
 
 - ``lock``
 
-  Hold a lock while the task is being executed (with the given args and
-  kwargs). If a task with similar args/kwargs is queued and tries to
-  acquire the lock, it will be retried later.
+  Boolean to indicate whether to hold a lock while the task is being executed
+  (for the given args and kwargs). If a task with similar args/kwargs is queued
+  and tries to acquire the lock, it will be retried later.
 
 - ``lock_key``
 
-  If set, this implies lock=True and specifies the list of kwargs to
+  If set, this implies ``lock=True`` and specifies the list of kwargs to
   use to construct the lock key. By default, all args and kwargs are
   serialized and hashed.
 
@@ -253,16 +283,16 @@ The following options are supported for ``delay``:
 
 - ``retry``
 
-  Whether to retry a task when it fails (either because of an exception
-  or because of a timeout). To restrict the list of failures, use
-  retry_on. Unless retry_method is given, the configured
+  Boolean to indicate whether to retry the task when it fails (either because
+  of an exception or because of a timeout). To restrict the list of failures,
+  use ``retry_on``. Unless ``retry_method`` is given, the configured
   ``DEFAULT_RETRY_METHOD`` is used.
 
 - ``retry_on``
 
-  If a list is given, it implies ``retry=True``. Task will be only retried
-  on the given exceptions (or its subclasses). To retry the task when a
-  hard timeout occurs, use ``JobTimeoutException``.
+  If a list is given, it implies ``retry=True``. The task will be only retried
+  on the given exceptions (or its subclasses). To retry the task when a hard
+  timeout occurs, use ``JobTimeoutException``.
 
 - ``retry_method``
 
@@ -272,24 +302,27 @@ The following options are supported for ``delay``:
   - a tuple ``(f, args)``, where ``f`` takes the retry number as the first
     argument, followed by the additional args.
 
-  The function needs to return the desired retry interval in seconds,
-  or raise StopRetry to stop retrying. The following built-in functions
-  can be passed for common scenarios and return the appropriate tuple:
+  The function needs to return the desired retry interval in seconds, or raise
+  ``StopRetry`` to stop retrying. The following built-in functions can be
+  passed for common scenarios and return the appropriate tuple:
 
   - ``fixed(delay, max_retries)``
 
-    Returns a method that returns the given delay or raises StopRetry
-    if the number of retries exceeds max_retries.
+    Returns a method that returns the given ``delay`` (in seconds) or raises
+    ``StopRetry`` if the number of retries exceeds ``max_retries``.
 
   - ``linear(delay, increment, max_retries)``
 
-    Like fixed, but starts off with the given delay and increments it
-    by the given increment after every retry.
+    Like ``fixed``, but starts off with the given ``delay`` and increments it
+    by the given ``increment`` after every retry.
 
   - ``exponential(delay, factor, max_retries)``
 
-    Like fixed, but starts off with the given delay and multiplies it
-    by the given factor after every retry.
+    Like ``fixed``, but starts off with the given ``delay`` and multiplies it
+    by the given ``factor`` after every retry.
+
+  For example, to retry a task 3 times (for a total of 4 executions), and wait
+  60 seconds between executions, pass ``retry_method=fixed(60, 3)``.
 
 The following options can be only specified in the task decorator:
 
@@ -299,7 +332,8 @@ The following options can be only specified in the task decorator:
   kwargs and can process multiple tasks of the same type at once.
   Example: ``[{"args": [1], "kwargs": {}}, {"args": [2], "kwargs": {}}]``
   Note that the list will only contain multiple items if the worker
-  has set up ``BATCH_QUEUES`` for the specific queue.
+  has set up ``BATCH_QUEUES`` for the specific queue (see the *Configuration*
+  section).
 
 
 Custom retrying
@@ -494,7 +528,7 @@ should be loaded.
 
 Tasks can also be constructed and queued using the regular constructor, which
 takes the TaskTiger instance, the function name and the options described in
-the "Task options" section. The task can then be queued using its ``delay``
+the *Task options* section. The task can then be queued using its ``delay``
 method. Note that the ``when`` argument needs to be passed to the ``delay``
 method, if applicable. Unique tasks can be reconstructed using the same
 arguments.
