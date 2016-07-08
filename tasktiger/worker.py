@@ -191,7 +191,10 @@ class Worker(object):
         try:
             func = tasks[0].func
 
-            if getattr(func, '_task_batch', False):
+            is_batch_func = getattr(func, '_task_batch', False)
+            g['current_task_is_batch'] = is_batch_func
+
+            if is_batch_func:
                 # Batch process if the task supports it.
                 params = [{
                     'args': task.args,
@@ -203,6 +206,7 @@ class Worker(object):
                                 getattr(func, '_task_hard_timeout', None) or
                                 self.config['DEFAULT_HARD_TIMEOUT'])
 
+                g['current_tasks'] = tasks
                 with UnixSignalDeathPenalty(hard_timeout):
                     func(params)
 
@@ -213,6 +217,7 @@ class Worker(object):
                                     getattr(func, '_task_hard_timeout', None) or
                                     self.config['DEFAULT_HARD_TIMEOUT'])
 
+                    g['current_tasks'] = [task]
                     with UnixSignalDeathPenalty(hard_timeout):
                         func(*task.args, **task.kwargs)
 

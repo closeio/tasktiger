@@ -163,6 +163,27 @@ class TaskTiger(object):
             self.log.setLevel(logging.DEBUG)
             logging.basicConfig(format='%(message)s')
 
+    def _get_current_task(self):
+        if g['current_tasks'] is None:
+            raise RuntimeError('Must be accessed from within a task')
+        if g['current_task_is_batch']:
+            raise RuntimeError('Must use current_tasks in a batch task.')
+        return g['current_tasks'][0]
+
+    def _get_current_tasks(self):
+        if g['current_tasks'] is None:
+            raise RuntimeError('Must be accessed from within a task')
+        if not g['current_task_is_batch']:
+            raise RuntimeError('Must use current_task in a non-batch task.')
+        return g['current_tasks']
+
+    """
+    Properties to access the currently processing task (or tasks, in case of a
+    batch task) from within the task. They must be invoked from within a task.
+    """
+    current_task = property(_get_current_task)
+    current_tasks = property(_get_current_tasks)
+
     def _key(self, *parts):
         """
         Internal helper to get a Redis key, taking the REDIS_PREFIX into
