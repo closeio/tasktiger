@@ -713,16 +713,16 @@ class TaskTestCase(BaseTestCase):
 
 class CurrentTaskTestCase(BaseTestCase):
     def test_current_task(self):
-        task = Task(self.tiger, current_task)
+        task = Task(self.tiger, verify_current_task)
         task.delay()
         Worker(self.tiger).run(once=True)
         self.assertFalse(self.conn.exists('runtime_error'))
         self.assertEqual(self.conn.get('task_id'), task.id)
 
     def test_current_tasks(self):
-        task1 = Task(self.tiger, current_tasks)
+        task1 = Task(self.tiger, verify_current_tasks)
         task1.delay()
-        task2 = Task(self.tiger, current_tasks)
+        task2 = Task(self.tiger, verify_current_tasks)
         task2.delay()
         Worker(self.tiger).run(once=True)
         self.assertEqual(self.conn.lrange('task_ids', 0, -1), [task1.id, task2.id])
@@ -730,7 +730,7 @@ class CurrentTaskTestCase(BaseTestCase):
     def test_current_task_eager(self):
         self.tiger.config['ALWAYS_EAGER'] = True
 
-        task = Task(self.tiger, current_task)
+        task = Task(self.tiger, verify_current_task)
         task.delay()
         self.assertFalse(self.conn.exists('runtime_error'))
         self.assertEqual(self.conn.get('task_id'), task.id)
@@ -738,7 +738,7 @@ class CurrentTaskTestCase(BaseTestCase):
     def test_current_tasks_eager(self):
         self.tiger.config['ALWAYS_EAGER'] = True
 
-        task = Task(self.tiger, current_tasks)
+        task = Task(self.tiger, verify_current_tasks)
         task.delay()
         self.assertFalse(self.conn.exists('runtime_error'))
         self.assertEqual(self.conn.lrange('task_ids', 0, -1), [task.id])

@@ -77,7 +77,7 @@ def retry_task_2():
     raise RetryException(method=fixed(DELAY, 1),
                          log_error=False)
 
-def current_task():
+def verify_current_task():
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
 
     try:
@@ -89,7 +89,7 @@ def current_task():
         conn.set('task_id', task.id)
 
 @tiger.task(batch=True, queue='batch')
-def current_tasks(tasks):
+def verify_current_tasks(tasks):
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
 
     try:
