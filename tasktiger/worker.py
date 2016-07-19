@@ -227,7 +227,7 @@ class Worker(object):
                 execution['retry_method'] = serialize_retry_method(exc.method)
             execution['log_error'] = exc.log_error
             execution['exception_name'] = serialize_func_name(exc.__class__)
-            exc_info = exc.exc_info
+            exc_info = exc.exc_info or sys.exc_info()
         except Exception as exc:
             execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = sys.exc_info()
@@ -236,8 +236,6 @@ class Worker(object):
 
         if not success:
             execution['time_failed'] = time.time()
-            if not exc_info:
-                exc_info = sys.exc_info()
             # Currently we only log failed task executions to Redis.
             execution['traceback'] = \
                     ''.join(traceback.format_exception(*exc_info))
