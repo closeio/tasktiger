@@ -1,3 +1,4 @@
+import pickle
 import datetime
 import json
 from multiprocessing import Pool
@@ -45,6 +46,24 @@ class BaseTestCase(unittest.TestCase):
             'error': _ensure_queue('error', error),
             'scheduled': _ensure_queue('scheduled', scheduled),
         }
+
+
+class CustomSerializerTestCase(BaseTestCase):
+    def setUp(self):
+        self.tiger = get_tiger(SERIALIZER=pickle.dumps, DESERIALIZER=pickle.loads)
+        self.conn = self.tiger.connection
+        self.conn.flushdb()
+
+    def test_simple_task(self):
+        self.tiger.delay(simple_task)
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        self.assertEqual(task['func'], 'tests.tasks.simple_task')
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0})
+        self.assertFalse(self.conn.exists('t:task:%s' % task['id']))
+
 
 class TestCase(BaseTestCase):
     """
