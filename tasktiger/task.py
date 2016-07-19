@@ -329,8 +329,8 @@ class Task(object):
             serialized_executions = []
         # XXX: No timestamp for now
         if serialized_data:
-            data = tiger.deserialize_data(serialized_data)
-            executions = [tiger.deserialize_data(e) for e in serialized_executions if e]
+            data = tiger._deserialize_data(serialized_data)
+            executions = [tiger._deserialize_data(e) for e in serialized_executions if e]
             return Task(tiger, queue=queue, _data=data, _state=state,
                         _executions=executions)
         else:
@@ -368,8 +368,8 @@ class Task(object):
                 results = pipeline.execute()
 
                 for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
-                    data = tiger.deserialize_data(serialized_data)
-                    executions = [tiger.deserialize_data.loads(e) for e in serialized_executions if e]
+                    data = tiger._deserialize_data(serialized_data)
+                    executions = [tiger._deserialize_data.loads(e) for e in serialized_executions if e]
 
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts, _executions=executions)
@@ -378,7 +378,7 @@ class Task(object):
             else:
                 data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
                 for serialized_data, ts in zip(data, tss):
-                    data = tiger.deserialize_data(serialized_data)
+                    data = tiger._deserialize_data(serialized_data)
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts)
                     tasks.append(task)
