@@ -230,6 +230,7 @@ class Worker(object):
             exc_info = exc.exc_info
         except Exception as exc:
             execution['exception_name'] = serialize_func_name(exc.__class__)
+            exc_info = sys.exc_info()
         else:
             success = True
 
@@ -239,7 +240,7 @@ class Worker(object):
                 exc_info = sys.exc_info()
             # Currently we only log failed task executions to Redis.
             execution['traceback'] = \
-                    ''.join(traceback.format_exception(*exc_info)) if exc_info != (None, None, None) else None
+                    ''.join(traceback.format_exception(*exc_info))
             execution['success'] = success
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
