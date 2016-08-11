@@ -181,6 +181,8 @@ class TestCase(BaseTestCase):
         self.assertEqual(execution['exception_name'],
                          serialize_func_name(Exception))
         self.assertEqual(execution['success'], False)
+        self.assertTrue(execution['traceback'].startswith(
+                        'Traceback (most recent call last):'))
 
     def test_long_task_ok(self):
         self.tiger.delay(long_task_ok)
