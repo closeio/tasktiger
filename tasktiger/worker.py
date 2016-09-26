@@ -493,7 +493,7 @@ class Worker(object):
             if execution:
                 execution = json.loads(execution)
 
-            if execution.get('retry'):
+            if execution and execution.get('retry'):
                 if 'retry_method' in execution:
                     retry_func, retry_args = execution['retry_method']
                 else:
