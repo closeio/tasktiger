@@ -745,6 +745,90 @@ class CurrentTaskTestCase(BaseTestCase):
         self.assertFalse(self.conn.exists('runtime_error'))
         self.assertEqual(self.conn.lrange('task_ids', 0, -1), [task.id])
 
+class PeriodicTaskTestCase(BaseTestCase):
+    def test_periodic_schedule(self):
+        """
+        Test the periodic() schedule function.
+        """
+        dt = datetime.datetime(2010, 1, 1)
+
+        f = periodic(seconds=1)
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 1, 0, 0, 1))
+
+        f = periodic(minutes=1)
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 1, 0, 1))
+
+        f = periodic(hours=1)
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 1, 1))
+
+        f = periodic(days=1)
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 2))
+
+        f = periodic(weeks=1)
+        # 2010-01-02 is a Saturday
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 2))
+
+        f = periodic(weeks=1, start_date=datetime.datetime(2000, 1, 2))
+        # 2000-01-02 and 2010-01-02 are Sundays
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 3))
+
+        f = periodic(seconds=1, minutes=2, hours=3, start_date=dt)
+        self.assertEqual(f[0](dt, *f[1]), datetime.datetime(2010, 1, 1, 3, 2, 1))
+        # Make sure we return the start_date if the current date is earlier.
+        self.assertEqual(f[0](datetime.datetime(1990, 1, 1), *f[1]), dt)
+
+        f = periodic(minutes=1, end_date=dt)
+        self.assertEqual(f[0](datetime.datetime(2009, 12, 31, 23, 58), *f[1]),
+                              datetime.datetime(2009, 12, 31, 23, 59))
+
+        f = periodic(minutes=1, end_date=dt)
+        self.assertEqual(f[0](datetime.datetime(2009, 12, 31, 23, 59), *f[1]),
+                              datetime.datetime(2010,  1,  1,  0,  0))
+
+        f = periodic(minutes=1, end_date=dt)
+        self.assertEqual(f[0](datetime.datetime(2010,  1,  1,  0,  0), *f[1]),
+                              None)
+
+        f = periodic(minutes=1, end_date=dt)
+        self.assertEqual(f[0](datetime.datetime(2010,  1,  1,  0,  1), *f[1]),
+                              None)
+
+    def test_periodic_execution(self):
+        """
+        Test periodic task execution.
+        """
+
+        # After the first worker run, the periodic task will be queued.
+        # Note that since periodic tasks register with the Tiger instance, it
+        # must be the same instance that was used to decorate the task. We
+        # therefore use `tiger` from the tasks module instead of `self.tiger`.
+        self._ensure_queues()
+        Worker(tiger).run(once=True)
+        self._ensure_queues(scheduled={'periodic': 1})
+
+        # Within less than a second, the task will be processed.
+        for n in range(10):
+            time.sleep(0.1)
+            Worker(tiger).run(once=True)
+            if self.conn.get('period_count'):
+                break
+
+        self.assertEqual(int(self.conn.get('period_count')), 1)
+
+        # The task is requeued for the next period
+        self._ensure_queues(scheduled={'periodic': 1})
+
+        # Within less than a second, the task will be processed.
+        time.sleep(1)
+
+        # Run worker twice (once to move from scheduled to queued, and once to
+        # execute the task)
+        Worker(tiger).run(once=True)
+        Worker(tiger).run(once=True)
+        self.assertEqual(int(self.conn.get('period_count')), 2)
+
+        # The task is requeued for the next period
+        self._ensure_queues(scheduled={'periodic': 1})
 
 if __name__ == '__main__':
     unittest.main()

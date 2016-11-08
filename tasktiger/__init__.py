@@ -14,6 +14,7 @@ from .redis_scripts import RedisScripts
 from ._internal import *
 from .exceptions import *
 from .retry import *
+from .schedule import *
 from .task import Task
 from .worker import Worker
 
@@ -24,7 +25,11 @@ __all__ = ['TaskTiger', 'Worker', 'Task',
            'TaskImportError', 'TaskNotFound',
 
            # Retry methods
-           'fixed', 'linear', 'exponential']
+           'fixed', 'linear', 'exponential',
+
+           # Schedules
+           'periodic',
+           ]
 
 """
 Redis keys:
@@ -59,8 +64,11 @@ ZSET <prefix>:scheduled:<queue>
 Channel that receives the queue name as a message whenever a task is queued.
 CHANNEL <prefix>:activity
 
-Locks
+Task locks
 STRING <prefix>:lock:<lock_hash>
+
+Queue periodic tasks lock
+STRING <prefix>:queue_periodic_tasks_lock
 """
 
 class TaskTiger(object):
@@ -132,6 +140,9 @@ class TaskTiger(object):
 
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
+
+            # Upper bound for the time it takes to queue all periodic tasks.
+            'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
         }
         if config:
             self.config.update(config)
@@ -162,6 +173,9 @@ class TaskTiger(object):
         if setup_structlog:
             self.log.setLevel(logging.DEBUG)
             logging.basicConfig(format='%(message)s')
+
+        # List of task functions that are executed periodically.
+        self.periodic_task_funcs = {}
 
     def _get_current_task(self):
         if g['current_tasks'] is None:
@@ -194,7 +208,7 @@ class TaskTiger(object):
 
     def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
              lock_key=None, retry=None, retry_on=None, retry_method=None,
-             batch=False):
+             schedule=None, batch=False):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -207,6 +221,10 @@ class TaskTiger(object):
             def _delay_inner(*args, **kwargs):
                 self.delay(func, args=args, kwargs=kwargs)
             return _delay_inner
+
+        # Periodic tasks are unique.
+        if schedule is not None:
+            unique = True
 
         def _wrap(func):
             if hard_timeout is not None:
@@ -227,8 +245,16 @@ class TaskTiger(object):
                 func._task_retry_method = retry_method
             if batch is not None:
                 func._task_batch = batch
+            if schedule is not None:
+                func._task_schedule = schedule
 
             func.delay = _delay(func)
+
+            if schedule is not None:
+                serialized_func = serialize_func_name(func)
+                assert serialized_func not in self.periodic_task_funcs, \
+                    "attempted duplicate registration of periodic task"
+                self.periodic_task_funcs[serialized_func] = func
 
             return func
 

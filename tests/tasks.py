@@ -4,6 +4,7 @@ import time
 
 from tasktiger import RetryException
 from tasktiger.retry import fixed
+from tasktiger.schedule import periodic
 
 from .config import *
 from .utils import get_tiger
@@ -99,3 +100,8 @@ def verify_current_tasks(tasks):
 
         tasks = tiger.current_tasks
         conn.rpush('task_ids', *[t.id for t in tasks])
+
+@tiger.task(schedule=periodic(seconds=1), queue='periodic')
+def periodic_task():
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn.incr('period_count', 1)
