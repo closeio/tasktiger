@@ -352,7 +352,7 @@ The following options can be only specified in the task decorator:
   For most common scenarios, the ``periodic`` built-in function can be passed:
 
   - ``periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
-               end_date=None)``
+    end_date=None)``
 
     Use equal, periodic intervals, starting from ``start_date`` (defaults to
     ``2000-01-01T00:00Z``, a Saturday, if not given), ending at ``end_date`` (or
