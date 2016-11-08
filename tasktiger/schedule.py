@@ -12,7 +12,7 @@ def _periodic(dt, period, start_date, end_date):
     # Determine the next time the task should be run
     delta = dt - start_date
     seconds = delta.seconds + delta.days*86400
-    runs = seconds / period
+    runs = seconds // period
     next_run = runs + 1
     next_date = start_date + datetime.timedelta(seconds=next_run * period)
 
