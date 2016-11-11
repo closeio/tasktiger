@@ -87,9 +87,11 @@ _ZPOPPUSH_EXISTS_TEMPLATE = """
 
         -- If we moved any members to the if_exists_key, add the set_value
         -- to the add_to_set_if_exists (see zpoppush docstring).
-        local if_exists_key_exists = redis.call('exists', if_exists_key)
-        if if_exists_key_exists == 1 then
-            redis.call('sadd', add_to_set_if_exists, set_value)
+        if if_exists_key then
+            local if_exists_key_exists = redis.call('exists', if_exists_key)
+            if if_exists_key_exists == 1 then
+                redis.call('sadd', add_to_set_if_exists, set_value)
+            end
         end
 
     end
