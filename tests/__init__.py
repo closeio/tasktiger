@@ -1,6 +1,6 @@
 import datetime
 import json
-from multiprocessing import Pool
+from multiprocessing import Pool, Process
 from tasktiger import *
 import tempfile
 import time
@@ -744,6 +744,48 @@ class CurrentTaskTestCase(BaseTestCase):
         task.delay()
         self.assertFalse(self.conn.exists('runtime_error'))
         self.assertEqual(self.conn.lrange('task_ids', 0, -1), [task.id])
+
+class ReliabilityTestCase(BaseTestCase):
+    """ Test behavior if things go wrong. """
+
+    def test_killed_child_process(self):
+        """
+        Ensure that TaskTiger completes gracefully if the child process
+        disappears and there is no execution object.
+        """
+
+        import os
+        import psutil
+        import signal
+
+        sleep_task.delay()
+        queues = self._ensure_queues(queued={'default': 1})
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # Get the PID of the worker subprocess actually executing the task
+        current_process = psutil.Process()
+        current_children = current_process.children()
+        assert len(current_children) == 1
+
+        worker_process = psutil.Process(pid=current_children[0].pid)
+        worker_children = worker_process.children()
+        assert len(worker_children) == 1
+
+        worker_subprocess_pid = worker_children[0].pid
+
+        # Kill the worker subprocess that is executing the task.
+        os.kill(worker_subprocess_pid, signal.SIGKILL)
+
+        # Make sure the worker still terminates gracefully.
+        worker.join()
+        assert worker.exitcode == 0
+
+        # Make sure the task is in the error queue.
+        queues = self._ensure_queues(error={'default': 1})
 
 
 if __name__ == '__main__':

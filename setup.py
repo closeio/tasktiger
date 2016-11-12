@@ -7,7 +7,7 @@ setup(
     license='MIT',
     description='Python task queue',
     test_suite='tests',
-    tests_require=['redis'],
+    tests_require=['redis', 'psutil'],
     platforms='any',
     install_requires=[
         'click',

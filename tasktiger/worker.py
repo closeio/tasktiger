@@ -525,7 +525,9 @@ class Worker(object):
 
             when = time.time()
 
-            log_context = {}
+            log_context = {
+                'func': task.serialized_func
+            }
 
             if should_retry:
                 retry_num = task.n_executions()
@@ -547,16 +549,21 @@ class Worker(object):
                     else:
                         state = SCHEDULED
 
-            if state == ERROR and should_log_error:
-                log_func = log.error
-            else:
-                log_func = log.warning
+            if execution:
+                if state == ERROR and should_log_error:
+                    log_func = log.error
+                else:
+                    log_func = log.warning
 
-            log_func(func=task.serialized_func,
-                     time_failed=execution.get('time_failed'),
-                     traceback=execution.get('traceback'),
-                     exception_name=execution.get('exception_name'),
-                     **log_context)
+                log_context.update({
+                    'time_failed': execution.get('time_failed'),
+                    'traceback': execution.get('traceback'),
+                    'exception_name': execution.get('exception_name'),
+                })
+
+                log_func(**log_context)
+            else:
+                log.error('execution not found', **log_context)
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
