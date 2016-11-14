@@ -321,8 +321,8 @@ class Worker(object):
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
 
-            status = not return_code
-            return status
+            success = (return_code == 0)
+            return success
 
     def _process_from_queue(self, queue):
         """
