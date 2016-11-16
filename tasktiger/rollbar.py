@@ -32,7 +32,10 @@ class StructlogRollbarHandler(RollbarHandler):
         if record.levelno < self.notify_level:
             return
 
-        data = json.loads(record.msg)
+        try:
+            data = json.loads(record.msg)
+        except json.JSONDecodeError:
+            return super(StructlogRollbarHandler, self).emit(record)
 
         # Title and grouping
         data['title'] = data['fingerprint'] = self.format_title(data)
