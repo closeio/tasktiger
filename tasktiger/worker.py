@@ -294,12 +294,26 @@ class Worker(object):
                     'kwargs': task.kwargs,
             } for task in tasks])
 
+            return_code = None
+
             while True:
                 try:
                     with UnixSignalDeathPenalty(self.config['ACTIVE_TASK_UPDATE_TIMER']):
                         _, return_code = os.waitpid(child_pid, 0)
                         break
                 except OSError as e:
+                    # ECHILD happens when we make a duplicate call to waitpid().
+                    # This happens when SIGALRM occurs just after the waitpid()
+                    # call has waited for the child, but before we're able to
+                    # break out of the loop. Then we handle the
+                    # JobTimeoutException and loop again, which causes a
+                    # duplicate call to waitpid().
+                    # TODO: Figure out how to handle the case when return_code
+                    # is None (and if this even happens), and change this to a
+                    # warning eventually.
+                    if e.errno == errno.ECHILD:
+                        log.error('encountered ECHILD while os.waitpid', return_code=return_code)
+                        break
                     if e.errno != errno.EINTR:
                         raise
                 except JobTimeoutException:
@@ -307,8 +321,8 @@ class Worker(object):
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
 
-            status = not return_code
-            return status
+            success = (return_code == 0)
+            return success
 
     def _process_from_queue(self, queue):
         """
