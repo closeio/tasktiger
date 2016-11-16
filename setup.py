@@ -7,7 +7,7 @@ setup(
     license='MIT',
     description='Python task queue',
     test_suite='tests',
-    tests_require=['redis'],
+    tests_require=['redis', 'psutil'],
     platforms='any',
     install_requires=[
         'click',
@@ -24,6 +24,7 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
     ],
     packages=[
         'tasktiger',

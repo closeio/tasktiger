@@ -99,3 +99,7 @@ def verify_current_tasks(tasks):
 
         tasks = tiger.current_tasks
         conn.rpush('task_ids', *[t.id for t in tasks])
+
+@tiger.task()
+def sleep_task():
+    time.sleep(10)
