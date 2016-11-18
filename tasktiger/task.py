@@ -1,5 +1,4 @@
 import datetime
-import json
 import redis
 import time
 
@@ -12,7 +11,7 @@ class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
                  hard_timeout=None, unique=None, lock=None, lock_key=None,
                  retry=None, retry_on=None, retry_method=None,
-                 _data=None, _state=None, _ts=None, _executions=None):
+                 _data=None, _state=None, _ts=None, _executions=None, deserialize=json.loads, serialize=json.dumps):
         """
         Queues a task. See README.rst for an explanation of the options.
         """
@@ -269,7 +268,7 @@ class Task(object):
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
-        serialized_task = json.dumps(self._data)
+        serialized_task = self.tiger._serialize_data(self._data)
 
         if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
@@ -330,8 +329,8 @@ class Task(object):
             serialized_executions = []
         # XXX: No timestamp for now
         if serialized_data:
-            data = json.loads(serialized_data)
-            executions = [json.loads(e) for e in serialized_executions if e]
+            data = tiger._deserialize_data(serialized_data)
+            executions = [tiger._deserialize_data(e) for e in serialized_executions if e]
             return Task(tiger, queue=queue, _data=data, _state=state,
                         _executions=executions)
         else:
@@ -369,8 +368,8 @@ class Task(object):
                 results = pipeline.execute()
 
                 for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
-                    data = json.loads(serialized_data)
-                    executions = [json.loads(e) for e in serialized_executions if e]
+                    data = tiger._deserialize_data(serialized_data)
+                    executions = [tiger._deserialize_data.loads(e) for e in serialized_executions if e]
 
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts, _executions=executions)
@@ -379,7 +378,7 @@ class Task(object):
             else:
                 data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
                 for serialized_data, ts in zip(data, tss):
-                    data = json.loads(serialized_data)
+                    data = tiger._deserialize_data(serialized_data)
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts)
                     tasks.append(task)

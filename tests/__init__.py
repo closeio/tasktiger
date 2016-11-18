@@ -1,3 +1,4 @@
+import pickle
 import datetime
 import json
 from multiprocessing import Pool, Process
@@ -32,7 +33,7 @@ class BaseTestCase(unittest.TestCase):
             for name, n in data.items():
                 task_ids = self.conn.zrange('t:%s:%s' % (typ, name), 0, -1)
                 self.assertEqual(len(task_ids), n)
-                ret[name] = [json.loads(self.conn.get('t:task:%s' % task_id))
+                ret[name] = [self.tiger._deserialize_data(self.conn.get('t:task:%s' % task_id))
                              for task_id in task_ids]
                 self.assertEqual(list(task['id'] for task in ret[name]),
                                  task_ids)
@@ -45,6 +46,22 @@ class BaseTestCase(unittest.TestCase):
             'error': _ensure_queue('error', error),
             'scheduled': _ensure_queue('scheduled', scheduled),
         }
+
+
+class CustomSerializerTestCase(BaseTestCase):
+    def setUp(self):
+        self.tiger = get_tiger(SERIALIZER=lambda x: pickle.dumps(x).decode('latin1'), DESERIALIZER=lambda x: pickle.loads(x.encode('latin1')))
+        self.conn = self.tiger.connection
+        self.conn.flushdb()
+
+    def test_simple_task(self):
+        self.tiger.delay(simple_task, queue='custom_ser')
+        queues = self._ensure_queues(queued={'custom_ser': 1})
+        task = queues['queued']['custom_ser'][0]
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'custom_ser': 0})
+        self.assertFalse(self.conn.exists('t:task:%s' % task['id']))
+
 
 class TestCase(BaseTestCase):
     """

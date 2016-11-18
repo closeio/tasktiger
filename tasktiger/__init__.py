@@ -132,9 +132,16 @@ class TaskTiger(object):
 
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
+
+            'SERIALIZER': json.dumps,
+
+            'DESERIALIZER': json.loads
         }
         if config:
             self.config.update(config)
+
+        self._serialize_data = self.config['SERIALIZER']
+        self._deserialize_data = self.config['DESERIALIZER']
 
         self.connection = connection or redis.Redis(decode_responses=True)
         self.scripts = RedisScripts(self.connection)

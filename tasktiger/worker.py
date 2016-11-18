@@ -1,6 +1,5 @@
 from collections import OrderedDict
 import errno
-import json
 import os
 import random
 import select
@@ -241,7 +240,7 @@ class Worker(object):
                     ''.join(traceback.format_exception(*exc_info))
             execution['success'] = success
             execution['host'] = socket.gethostname()
-            serialized_execution = json.dumps(execution)
+            serialized_execution = self.tiger._serialize_data(execution)
             for task in tasks:
                 self.connection.rpush(self._key('task', task.id, 'executions'),
                                       serialized_execution)
@@ -372,7 +371,7 @@ class Worker(object):
             tasks = []
             for task_id, serialized_task in zip(task_ids, serialized_tasks):
                 if serialized_task:
-                    task_data = json.loads(serialized_task)
+                    task_data = self.tiger._deserialize_data(serialized_task)
                 else:
                     task_data = {}
                 task = Task(self.tiger, queue=queue, _data=task_data,
@@ -505,7 +504,7 @@ class Worker(object):
                 self._key('task', task.id, 'executions'), -1)
 
             if execution:
-                execution = json.loads(execution)
+                execution = self.tiger._deserialize_data(execution)
 
             if execution and execution.get('retry'):
                 if 'retry_method' in execution:
