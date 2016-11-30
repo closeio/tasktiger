@@ -66,17 +66,30 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task)
         queues = self._ensure_queues(queued={'default': 1})
         task = queues['queued']['default'][0]
-        assert task['func'] == 'tests.tasks.simple_task'
+        assert task['func'] == 'tests.tasks:simple_task'
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'default': 0})
         assert not self.conn.exists('t:task:%s' % task['id'])
 
+    def test_staticmethod_task(self):
+        if hasattr(StaticTask.task, '__qualname__'):
+            # This functionality only works on versions of python (3.3+) that support __qualname__
+            assert self.__qualname__ == self.__name__
+            self.tiger.delay(StaticTask.task)
+            queues = self._ensure_queues(queued={'default': 1})
+            task = queues['queued']['default'][0]
+            assert task['func'] == 'tests.tasks:StaticTask.task'
+
+            Worker(self.tiger).run(once=True)
+            self._ensure_queues(queued={'default': 0})
+            assert not self.conn.exists('t:task:%s' % task['id'])
+
     def test_task_delay(self):
         decorated_task.delay(1, 2, a=3, b=4)
         queues = self._ensure_queues(queued={'default': 1})
         task = queues['queued']['default'][0]
-        assert task['func'] == 'tests.tasks.decorated_task'
+        assert task['func'] == 'tests.tasks:decorated_task'
         assert task['args'] == [1, 2]
         assert task['kwargs'] == {'a': 3, 'b': 4}
 
@@ -88,7 +101,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(file_args_task, args=(tmpfile.name,))
         queues = self._ensure_queues(queued={'default': 1})
         task = queues['queued']['default'][0]
-        assert task['func'] == 'tests.tasks.file_args_task'
+        assert task['func'] == 'tests.tasks:file_args_task'
 
         worker.run(once=True)
         self._ensure_queues(queued={'default': 0})
@@ -181,7 +194,7 @@ class TestCase(BaseTestCase):
                                      error={'default': 1})
 
         task = queues['error']['default'][0]
-        assert task['func'] == 'tests.tasks.exception_task'
+        assert task['func'] == 'tests.tasks:exception_task'
 
         executions = self.conn.lrange('t:task:%s:executions' % task['id'], 0, -1)
         assert len(executions) == 1
@@ -206,7 +219,7 @@ class TestCase(BaseTestCase):
         )
 
         task = queues['error']['default'][0]
-        assert task['func'] == 'tests.tasks.long_task_killed'
+        assert task['func'] == 'tests.tasks:long_task_killed'
 
         executions = self.conn.lrange('t:task:%s:executions' % task['id'], 0, -1)
         assert len(executions) == 1
@@ -225,10 +238,10 @@ class TestCase(BaseTestCase):
 
         task_1, task_2 = queues['queued']['default']
 
-        assert task_1['func'] == 'tests.tasks.unique_task'
+        assert task_1['func'] == 'tests.tasks:unique_task'
         assert task_1['kwargs'] == {'value': 1}
 
-        assert task_2['func'] == 'tests.tasks.unique_task'
+        assert task_2['func'] == 'tests.tasks:unique_task'
         assert task_2['kwargs'] == {'value': 2}
 
         Pool(3).map(external_worker, range(3))
@@ -714,7 +727,7 @@ class TaskTestCase(BaseTestCase):
         assert task0.id == tasks[0].id
         assert task0.func == simple_task
         assert task0.func == tasks[0].func
-        assert task0.serialized_func == 'tests.tasks.simple_task'
+        assert task0.serialized_func == 'tests.tasks:simple_task'
         assert task0.serialized_func == tasks[0].serialized_func
         assert task0.state == tasks[0].state
         assert task0.state == 'queued'

@@ -118,3 +118,9 @@ def verify_current_tasks(tasks):
 @tiger.task()
 def sleep_task(delay=10):
     time.sleep(delay)
+
+
+class StaticTask(object):
+    @staticmethod
+    def task():
+        pass
