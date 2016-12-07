@@ -274,12 +274,8 @@ class Worker(object):
             # Child process
             log = log.bind(child_pid=os.getpid())
 
-            # We need to reinitialize Redis' connection pool, otherwise the
-            # parent socket will be disconnected by the Redis library.
-            # TODO: We might only need this if the task fails.
-            pool = self.connection.connection_pool
-            pool.__init__(pool.connection_class, pool.max_connections,
-                          **pool.connection_kwargs)
+            # Disconnect the Main process's Redis connections
+            self.connection.connection_pool.disconnect()
 
             random.seed()
             signal.signal(signal.SIGINT, signal.SIG_IGN)
