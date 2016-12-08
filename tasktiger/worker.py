@@ -7,6 +7,7 @@ import select
 import signal
 import socket
 import sys
+import threading
 import time
 import traceback
 
@@ -284,6 +285,13 @@ class Worker(object):
             random.seed()
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             success = self._execute_forked(tasks, log)
+
+            # Wait for any threads that might be running in the child, just
+            # like sys.exit() would. Note we don't call sys.exit() directly
+            # because it would perform additional cleanup (e.g. calling atexit
+            # handlers twice). See also: https://bugs.python.org/issue18966
+            threading._shutdown()
+
             os._exit(int(not success))
         else:
             # Main process
