@@ -269,7 +269,9 @@ class Worker(object):
         assert all([task_func == task.serialized_func for task in tasks[1:]])
 
         # Adapted from rq Worker.execute_job / Worker.main_work_horse
-        child_pid = os.fork()
+
+        with g_fork_lock:
+            child_pid = os.fork()
         if child_pid == 0:
             # Child process
             log = log.bind(child_pid=os.getpid())
