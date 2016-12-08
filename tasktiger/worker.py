@@ -274,7 +274,8 @@ class Worker(object):
             # Child process
             log = log.bind(child_pid=os.getpid())
 
-            # Disconnect the Main process's Redis connections
+            # Disconnect the Redis connection inherited from the main process.
+            # Note that this doesn't disconnect the socket in the main process.
             self.connection.connection_pool.disconnect()
 
             random.seed()
