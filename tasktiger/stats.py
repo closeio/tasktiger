@@ -35,7 +35,12 @@ class StatsThread(threading.Thread):
             self._task_start_time = None
         if time_total:
             utilization = 100. / time_total * time_busy
-            self.tiger.log.info('stats', time_total=time_total, time_busy=time_busy, utilization=utilization)
+            with g_fork_lock:
+                self.tiger.log.info(
+                    'stats',
+                    time_total=time_total,
+                    time_busy=time_busy,
+                    utilization=utilization)
 
     def run(self):
         while True:
