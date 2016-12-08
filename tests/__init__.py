@@ -1,16 +1,19 @@
 import datetime
 import json
 from multiprocessing import Pool, Process
-from tasktiger import *
+import os
+import signal
 import tempfile
 import time
 import unittest
+
+from tasktiger import *
+from tasktiger._internal import serialize_func_name
 
 from .config import *
 from .tasks import *
 from .utils import *
 from .redis_scripts import *
-from tasktiger._internal import serialize_func_name
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -786,6 +789,63 @@ class ReliabilityTestCase(BaseTestCase):
 
         # Make sure the task is in the error queue.
         queues = self._ensure_queues(error={'default': 1})
+
+    def test_task_disappears(self):
+        """
+        Ensure that a task object that disappears while the task is processing
+        is handled properly. This could happen when a worker processes a task,
+        then hangs for a long time, causing another worker to pick up and finish
+        the task. Then, when the original worker resumes, the task object will
+        be gone. Make sure we log a "not found" error and move on.
+        """
+
+        task = Task(self.tiger, sleep_task, kwargs={'delay': 2*DELAY})
+        task.delay()
+        queues = self._ensure_queues(queued={'default': 1})
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # Remove the task object while the task is processing.
+        assert self.conn.delete('t:task:{}'.format(task.id)) == 1
+
+        # Kill the worker while it's still processing the task.
+        os.kill(worker.pid, signal.SIGKILL)
+
+        # _ensure_queues() breaks here because it can't find the task
+        assert self.conn.scard('t:queued') == 0
+        assert self.conn.scard('t:active') == 1
+        assert self.conn.scard('t:error') == 0
+        assert self.conn.scard('t:scheduled') == 0
+
+        # Capture logger
+        errors = []
+        def fake_error(msg):
+            errors.append(msg)
+
+        with Patch(self.tiger.log._logger, 'error', fake_error):
+            # Since ACTIVE_TASK_UPDATE_TIMEOUT hasn't elapsed yet, re-running
+            # the worker at this time won't change anything. (run twice to move
+            # from scheduled to queued)
+            Worker(self.tiger).run(once=True)
+            Worker(self.tiger).run(once=True)
+
+            assert len(errors) == 0
+            assert self.conn.scard('t:queued') == 0
+            assert self.conn.scard('t:active') == 1
+            assert self.conn.scard('t:error') == 0
+            assert self.conn.scard('t:scheduled') == 0
+
+            # After waiting and re-running the worker, queues will clear.
+            time.sleep(DELAY)
+            Worker(self.tiger).run(once=True)
+            Worker(self.tiger).run(once=True)
+
+            self._ensure_queues()
+            assert len(errors) == 1
+            assert "event='not found'" in errors[0]
 
 
 if __name__ == '__main__':

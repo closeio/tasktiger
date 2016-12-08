@@ -374,12 +374,19 @@ class Worker(object):
                 if serialized_task:
                     task_data = json.loads(serialized_task)
                 else:
-                    task_data = {}
+                    # In the rare case where we don't find the task which is
+                    # queued (see ReliabilityTestCase.test_task_disappears),
+                    # we log an error and remove the task below. We need to
+                    # at least initialize the Task object with an ID so we can
+                    # remove it.
+                    task_data = {'id': task_id}
+
                 task = Task(self.tiger, queue=queue, _data=task_data,
                             _state=ACTIVE, _ts=now)
-                if not task_data:
+
+                if not serialized_task:
+                    # Remove task as per comment above
                     log.error('not found', task_id=task_id)
-                    # Remove task
                     task._move()
                 elif task.id != task_id:
                     log.error('task ID mismatch', task_id=task_id)
