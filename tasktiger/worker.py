@@ -315,11 +315,12 @@ class Worker(object):
                     # break out of the loop. Then we handle the
                     # JobTimeoutException and loop again, which causes a
                     # duplicate call to waitpid().
-                    # TODO: Figure out how to handle the case when return_code
-                    # is None (and if this even happens), and change this to a
-                    # warning eventually.
+                    #
+                    # TODO: How should we handle the case where return_code is
+                    # None (which happens)?
                     if e.errno == errno.ECHILD:
-                        log.error('encountered ECHILD while os.waitpid', return_code=return_code)
+                        if return_code is None:
+                            log.error('encountered ECHILD with no return code while os.waitpid')
                         break
                     if e.errno != errno.EINTR:
                         raise
