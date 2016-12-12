@@ -205,7 +205,7 @@ class TaskTiger(object):
 
         def _delay(func):
             def _delay_inner(*args, **kwargs):
-                self.delay(func, args=args, kwargs=kwargs)
+                return self.delay(func, args=args, kwargs=kwargs)
             return _delay_inner
 
         def _wrap(func):
