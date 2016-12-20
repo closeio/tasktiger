@@ -23,7 +23,7 @@ from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 __all__ = ['Worker']
 
 class Worker(object):
-    def __init__(self, tiger, queues=None):
+    def __init__(self, tiger, queues=None, exclude_queues=None):
         """
         Internal method to initialize a worker.
         """
@@ -43,6 +43,15 @@ class Worker(object):
             self.queue_filter = self.config['ONLY_QUEUES']
         else:
             self.queue_filter = None
+
+        # TODO: If we have similar items in exclude_queues we should just remove
+        # them from queue_filter
+        if exclude_queues:
+            self.exclude_queues = exclude_queues
+        elif self.config['EXCLUDE_QUEUES']:
+            self.exclude_queues = self.config['EXCLUDE_QUEUES']
+        else:
+            self.exclude_queues = None
 
         self._stop_requested = False
 
@@ -71,17 +80,23 @@ class Worker(object):
         match both "foo" and "foo.bar".
         """
 
-        def match(queue):
+        def match(queue, queue_filter):
             """
             Checks if any of the parts of the queue name match the filter.
             """
             for part in dotted_parts(queue):
-                if part in self.queue_filter:
+                if part in queue_filter:
                     return True
             return False
 
+        # First, exclude any excluded queues.
+        # TODO: Eventually more specific includes should override excludes.
+        # (consider e.g. including "a", "a.b.c" and excluding "a.b")
+        if self.exclude_queues:
+            queues = [q for q in queues if not match(q, self.exclude_queues)]
+
         if self.queue_filter:
-            return [q for q in queues if match(q)]
+            return [q for q in queues if match(q, self.queue_filter)]
         else:
             return queues
 
@@ -630,7 +645,8 @@ class Worker(object):
         then exit.
         """
 
-        self.log.info('ready', queues=self.queue_filter)
+        self.log.info('ready', queues=self.queue_filter,
+                               exclude_queues=self.exclude_queues)
 
         if self.config['STATS_INTERVAL']:
             self.stats_thread = StatsThread(self)

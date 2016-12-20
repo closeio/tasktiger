@@ -132,6 +132,9 @@ class TaskTiger(object):
 
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
+
+            # If non-empty, a worker excludes the given queues from processing.
+            'EXCLUDE_QUEUES': [],
         }
         if config:
             self.config.update(config)
@@ -241,7 +244,7 @@ class TaskTiger(object):
         """
         run_worker(args=args, obj=self)
 
-    def run_worker(self, queues=None, module=None):
+    def run_worker(self, queues=None, module=None, exclude_queues=None):
         """
         Main worker entry point method.
 
@@ -256,7 +259,9 @@ class TaskTiger(object):
                 importlib.import_module(module_name)
                 self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self, queues.split(',') if queues else None)
+        worker = Worker(self,
+                        queues.split(',') if queues else None,
+                        exclude_queues.split(',') if exclude_queues else None)
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,
@@ -315,6 +320,10 @@ class TaskTiger(object):
                                      "reimported every time a task is forked. "
                                      "Multiple modules can be separated by "
                                      "comma.")
+@click.option('-e', '--exclude-queues', help='If specified, exclude the given '
+                                             'queue(s) from processing. '
+                                             'Multiple queues can be '
+                                             'separated by comma.')
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')
