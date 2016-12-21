@@ -841,7 +841,7 @@ class ReliabilityTestCase(BaseTestCase):
             assert self.conn.scard('t:scheduled') == 0
 
             # After waiting and re-running the worker, queues will clear.
-            time.sleep(DELAY)
+            time.sleep(2 * DELAY)
             Worker(self.tiger).run(once=True)
             Worker(self.tiger).run(once=True)
 
