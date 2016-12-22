@@ -1,5 +1,16 @@
 from setuptools import setup
 
+install_requires = [
+    'click',
+    'redis',
+    'structlog'
+]
+
+tests_require = install_requires + [
+    'pytest',
+    'psutil',
+]
+
 setup(
     name='tasktiger',
     version='0.8.3',
@@ -7,13 +18,9 @@ setup(
     license='MIT',
     description='Python task queue',
     test_suite='tests',
-    tests_require=['redis', 'psutil'],
+    tests_require=tests_require,
     platforms='any',
-    install_requires=[
-        'click',
-        'redis',
-        'structlog'
-    ],
+    install_requires=install_requires,
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
