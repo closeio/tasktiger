@@ -440,7 +440,7 @@ Workers support the following options:
   For example, ``-q email,email.incoming.CUSTOMER1 -e email.incoming`` will
   process items from the ``email`` queue and subqueues like
   ``email.outgoing.CUSTOMER1`` or ``email.incoming.CUSTOMER1``, but not
-  ``email.incoming.CUSTOMER2``.
+  ``email.incoming`` or ``email.incoming.CUSTOMER2``.
 
 - ``-m``, ``--module``
 
