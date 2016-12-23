@@ -165,7 +165,7 @@ decorate and queue tasks. The constructor takes the following arguments:
 
   - ``ONLY_QUEUES``
 
-    If set to a non-empty list of queue names, a worker only processeses the
+    If set to a non-empty list of queue names, a worker only processes the
     given queues (and their subqueues), unless explicit queues are passed to
     the command line.
 
