@@ -83,6 +83,19 @@ def dotted_parts(s):
             break
         yield s[:idx]
 
+def reversed_dotted_parts(s):
+    """
+    For a string "a.b.c", yields "a.b.c", "a.b", "a".
+    """
+    idx = -1
+    if s:
+        yield s
+    while s:
+        idx = s.rfind('.', 0, idx)
+        if idx == -1:
+            break
+        yield s[:idx]
+
 def serialize_retry_method(retry_method):
     if callable(retry_method):
         return (serialize_func_name(retry_method), ())
