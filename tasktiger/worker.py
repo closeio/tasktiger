@@ -22,6 +22,11 @@ from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
 
+def sigchld_handler(*args):
+    # Nothing to do here. This is just a dummy handler that we set up to catch
+    # the child process exiting.
+    pass
+
 class Worker(object):
     def __init__(self, tiger, queues=None):
         """
@@ -269,10 +274,14 @@ class Worker(object):
         task_func = tasks[0].serialized_func
         assert all([task_func == task.serialized_func for task in tasks[1:]])
 
-        # Adapted from rq Worker.execute_job / Worker.main_work_horse
+        # Attach a signal handler to SIGCHLD. That way syscalls are interrupted
+        # when the child process exits. We use this as a "hack" to interrupt
+        # select() when the task is complete.
+        signal.signal(signal.SIGCHLD, sigchld_handler)
 
         with g_fork_lock:
             child_pid = os.fork()
+
         if child_pid == 0:
             # Child process
             log = log.bind(child_pid=os.getpid())
@@ -282,7 +291,11 @@ class Worker(object):
             self.connection.connection_pool.disconnect()
 
             random.seed()
+
+            # Ignore Ctrl+C in the child so we don't abort the job -- the main
+            # process already takes care of a graceful shutdown.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
+
             success = self._execute_forked(tasks, log)
 
             # Wait for any threads that might be running in the child, just
@@ -301,33 +314,60 @@ class Worker(object):
                     'kwargs': task.kwargs,
             } for task in tasks])
 
-            return_code = None
-
-            while True:
+            def check_child_exit():
+                """
+                Do a non-blocking check to see if the child process exited.
+                Returns None if the process is still running, or the exit code
+                value of the child process.
+                """
                 try:
-                    with UnixSignalDeathPenalty(self.config['ACTIVE_TASK_UPDATE_TIMER']):
-                        _, return_code = os.waitpid(child_pid, 0)
-                        break
+                    pid, return_code = os.waitpid(child_pid, os.WNOHANG)
+                    if pid != 0: # The child process is done.
+                        return return_code
                 except OSError as e:
-                    # ECHILD happens when we make a duplicate call to waitpid().
-                    # This happens when SIGALRM occurs just after the waitpid()
-                    # call has waited for the child, but before we're able to
-                    # break out of the loop. Then we handle the
-                    # JobTimeoutException and loop again, which causes a
-                    # duplicate call to waitpid().
-                    #
-                    # TODO: How should we handle the case where return_code is
-                    # None (which happens)?
-                    if e.errno == errno.ECHILD:
-                        if return_code is None:
-                            log.error('encountered ECHILD with no return code while os.waitpid')
-                        break
-                    if e.errno != errno.EINTR:
+                    # Of course EINTR can happen if the child process exits
+                    # while we're checking whether it exited. In this case it
+                    # should be safe to retry.
+                    if e.errno == errno.EINTR:
+                        return check_child_exit()
+                    else:
                         raise
-                except JobTimeoutException:
+
+            # Wait for the child to exit and perform a periodic heartbeat.
+            # We check for the child twice in this loop so that we avoid
+            # unnecessary waiting if the child exited just before entering
+            # the while loop or while renewing heartbeat/locks. Note that there
+            # is still a possible race condition where we unnecessarily wait
+            # for select() to complete if the child process exits right after
+            # waitpid(), but before select().
+            while True:
+                return_code = check_child_exit()
+                if return_code is not None:
+                    break
+
+                # Wait until the timeout or a syscall (child exit) occurs.
+                try:
+                    select.select([], [], [],
+                                  self.config['ACTIVE_TASK_UPDATE_TIMER'])
+                except select.error as e:
+                    if e.args[0] != errno.EINTR:
+                        raise
+
+                return_code = check_child_exit()
+                if return_code is not None:
+                    break
+
+                try:
                     self._heartbeat(queue, all_task_ids)
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+                except OSError as e:
+                    # EINTR happens if the task completed. Since we're just
+                    # renewing locks/heartbeat it's okay if we get interrupted.
+                    if e.errno != errno.EINTR:
+                        raise
+
+            signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
             success = (return_code == 0)
             return success
