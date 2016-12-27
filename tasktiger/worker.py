@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import errno
+import fcntl
 import json
 import os
 import random
@@ -274,11 +275,6 @@ class Worker(object):
         task_func = tasks[0].serialized_func
         assert all([task_func == task.serialized_func for task in tasks[1:]])
 
-        # Attach a signal handler to SIGCHLD. That way syscalls are interrupted
-        # when the child process exits. We use this as a "hack" to interrupt
-        # select() when the task is complete.
-        signal.signal(signal.SIGCHLD, sigchld_handler)
-
         with g_fork_lock:
             child_pid = os.fork()
 
@@ -314,6 +310,25 @@ class Worker(object):
                     'kwargs': task.kwargs,
             } for task in tasks])
 
+            # Attach a signal handler to SIGCHLD (sent when the child process
+            # exits) so we can capture it.
+            signal.signal(signal.SIGCHLD, sigchld_handler)
+
+            # Since newer Python versions retry interrupted system calls we can't
+            # rely on the fact that select() is interrupted with EINTR. Instead,
+            # we'll set up a wake-up file descriptor below.
+
+            # Create a new pipe and apply the non-blocking flag (required for
+            # set_wakeup_fd).
+            pipe_r, pipe_w = os.pipe()
+            flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
+            flags = flags | os.O_NONBLOCK
+            fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
+
+            # A byte will be written to pipe_w if a signal occurs (and can be
+            # read from pipe_r).
+            old_wakeup_fd = signal.set_wakeup_fd(pipe_w)
+
             def check_child_exit():
                 """
                 Do a non-blocking check to see if the child process exited.
@@ -336,18 +351,15 @@ class Worker(object):
             # Wait for the child to exit and perform a periodic heartbeat.
             # We check for the child twice in this loop so that we avoid
             # unnecessary waiting if the child exited just before entering
-            # the while loop or while renewing heartbeat/locks. Note that there
-            # is still a possible race condition where we unnecessarily wait
-            # for select() to complete if the child process exits right after
-            # waitpid(), but before select().
+            # the while loop or while renewing heartbeat/locks.
             while True:
                 return_code = check_child_exit()
                 if return_code is not None:
                     break
 
-                # Wait until the timeout or a syscall (child exit) occurs.
+                # Wait until the timeout or a signal / child exit occurs.
                 try:
-                    select.select([], [], [],
+                    select.select([pipe_r], [], [],
                                   self.config['ACTIVE_TASK_UPDATE_TIMER'])
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
@@ -367,7 +379,11 @@ class Worker(object):
                     if e.errno != errno.EINTR:
                         raise
 
+            # Restore signals / clean up
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+            signal.set_wakeup_fd(old_wakeup_fd)
+            os.close(pipe_r)
+            os.close(pipe_w)
 
             success = (return_code == 0)
             return success
