@@ -59,7 +59,7 @@ class TestCase(BaseTestCase):
     TaskTiger main test cases.
 
     Run a single test like this:
-    python -m unittest tests.TestCase.test_unique_task
+    python -m unittest tests.test_base.TestCase.test_unique_task
     """
 
     def test_simple_task(self):
