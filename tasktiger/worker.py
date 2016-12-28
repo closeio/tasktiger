@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import errno
+import fcntl
 import json
 import os
 import random
@@ -7,6 +8,7 @@ import select
 import signal
 import socket
 import sys
+import threading
 import time
 import traceback
 
@@ -21,8 +23,13 @@ from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
 
+def sigchld_handler(*args):
+    # Nothing to do here. This is just a dummy handler that we set up to catch
+    # the child process exiting.
+    pass
+
 class Worker(object):
-    def __init__(self, tiger, queues=None):
+    def __init__(self, tiger, queues=None, exclude_queues=None):
         """
         Internal method to initialize a worker.
         """
@@ -37,11 +44,18 @@ class Worker(object):
         self.stats_thread = None
 
         if queues:
-            self.queue_filter = queues
+            self.only_queues = set(queues)
         elif self.config['ONLY_QUEUES']:
-            self.queue_filter = self.config['ONLY_QUEUES']
+            self.only_queues = set(self.config['ONLY_QUEUES'])
         else:
-            self.queue_filter = None
+            self.only_queues = set()
+
+        if exclude_queues:
+            self.exclude_queues = set(exclude_queues)
+        elif self.config['EXCLUDE_QUEUES']:
+            self.exclude_queues = set(self.config['EXCLUDE_QUEUES'])
+        else:
+            self.exclude_queues = set()
 
         self._stop_requested = False
 
@@ -72,17 +86,17 @@ class Worker(object):
 
         def match(queue):
             """
-            Checks if any of the parts of the queue name match the filter.
+            Returns whether the given queue should be included by checking each
+            part of the queue name.
             """
-            for part in dotted_parts(queue):
-                if part in self.queue_filter:
+            for part in reversed_dotted_parts(queue):
+                if part in self.exclude_queues:
+                    return False
+                if part in self.only_queues:
                     return True
-            return False
+            return not self.only_queues
 
-        if self.queue_filter:
-            return [q for q in queues if match(q)]
-        else:
-            return queues
+        return [q for q in queues if match(q)]
 
     def _worker_queue_scheduled_tasks(self):
         """
@@ -228,7 +242,7 @@ class Worker(object):
             execution['log_error'] = exc.log_error
             execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = exc.exc_info or sys.exc_info()
-        except Exception as exc:
+        except (JobTimeoutException, Exception) as exc:
             execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = sys.exc_info()
         else:
@@ -272,22 +286,31 @@ class Worker(object):
         if task_func in self.tiger.periodic_task_funcs:
             tasks[0]._queue_for_next_period()
 
-        # Adapted from rq Worker.execute_job / Worker.main_work_horse
-        child_pid = os.fork()
+        with g_fork_lock:
+            child_pid = os.fork()
+
         if child_pid == 0:
             # Child process
             log = log.bind(child_pid=os.getpid())
 
-            # We need to reinitialize Redis' connection pool, otherwise the
-            # parent socket will be disconnected by the Redis library.
-            # TODO: We might only need this if the task fails.
-            pool = self.connection.connection_pool
-            pool.__init__(pool.connection_class, pool.max_connections,
-                          **pool.connection_kwargs)
+            # Disconnect the Redis connection inherited from the main process.
+            # Note that this doesn't disconnect the socket in the main process.
+            self.connection.connection_pool.disconnect()
 
             random.seed()
+
+            # Ignore Ctrl+C in the child so we don't abort the job -- the main
+            # process already takes care of a graceful shutdown.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
+
             success = self._execute_forked(tasks, log)
+
+            # Wait for any threads that might be running in the child, just
+            # like sys.exit() would. Note we don't call sys.exit() directly
+            # because it would perform additional cleanup (e.g. calling atexit
+            # handlers twice). See also: https://bugs.python.org/issue18966
+            threading._shutdown()
+
             os._exit(int(not success))
         else:
             # Main process
@@ -298,21 +321,83 @@ class Worker(object):
                     'kwargs': task.kwargs,
             } for task in tasks])
 
-            while True:
+            # Attach a signal handler to SIGCHLD (sent when the child process
+            # exits) so we can capture it.
+            signal.signal(signal.SIGCHLD, sigchld_handler)
+
+            # Since newer Python versions retry interrupted system calls we can't
+            # rely on the fact that select() is interrupted with EINTR. Instead,
+            # we'll set up a wake-up file descriptor below.
+
+            # Create a new pipe and apply the non-blocking flag (required for
+            # set_wakeup_fd).
+            pipe_r, pipe_w = os.pipe()
+            flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
+            flags = flags | os.O_NONBLOCK
+            fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
+
+            # A byte will be written to pipe_w if a signal occurs (and can be
+            # read from pipe_r).
+            old_wakeup_fd = signal.set_wakeup_fd(pipe_w)
+
+            def check_child_exit():
+                """
+                Do a non-blocking check to see if the child process exited.
+                Returns None if the process is still running, or the exit code
+                value of the child process.
+                """
                 try:
-                    with UnixSignalDeathPenalty(self.config['ACTIVE_TASK_UPDATE_TIMER']):
-                        _, return_code = os.waitpid(child_pid, 0)
-                        break
+                    pid, return_code = os.waitpid(child_pid, os.WNOHANG)
+                    if pid != 0: # The child process is done.
+                        return return_code
                 except OSError as e:
-                    if e.errno != errno.EINTR:
+                    # Of course EINTR can happen if the child process exits
+                    # while we're checking whether it exited. In this case it
+                    # should be safe to retry.
+                    if e.errno == errno.EINTR:
+                        return check_child_exit()
+                    else:
                         raise
-                except JobTimeoutException:
+
+            # Wait for the child to exit and perform a periodic heartbeat.
+            # We check for the child twice in this loop so that we avoid
+            # unnecessary waiting if the child exited just before entering
+            # the while loop or while renewing heartbeat/locks.
+            while True:
+                return_code = check_child_exit()
+                if return_code is not None:
+                    break
+
+                # Wait until the timeout or a signal / child exit occurs.
+                try:
+                    select.select([pipe_r], [], [],
+                                  self.config['ACTIVE_TASK_UPDATE_TIMER'])
+                except select.error as e:
+                    if e.args[0] != errno.EINTR:
+                        raise
+
+                return_code = check_child_exit()
+                if return_code is not None:
+                    break
+
+                try:
                     self._heartbeat(queue, all_task_ids)
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+                except OSError as e:
+                    # EINTR happens if the task completed. Since we're just
+                    # renewing locks/heartbeat it's okay if we get interrupted.
+                    if e.errno != errno.EINTR:
+                        raise
 
-            status = not return_code
-            return status
+            # Restore signals / clean up
+            signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+            signal.set_wakeup_fd(old_wakeup_fd)
+            os.close(pipe_r)
+            os.close(pipe_w)
+
+            success = (return_code == 0)
+            return success
 
     def _process_from_queue(self, queue):
         """
@@ -364,12 +449,19 @@ class Worker(object):
                 if serialized_task:
                     task_data = json.loads(serialized_task)
                 else:
-                    task_data = {}
+                    # In the rare case where we don't find the task which is
+                    # queued (see ReliabilityTestCase.test_task_disappears),
+                    # we log an error and remove the task below. We need to
+                    # at least initialize the Task object with an ID so we can
+                    # remove it.
+                    task_data = {'id': task_id}
+
                 task = Task(self.tiger, queue=queue, _data=task_data,
                             _state=ACTIVE, _ts=now)
-                if not task_data:
+
+                if not serialized_task:
+                    # Remove task as per comment above
                     log.error('not found', task_id=task_id)
-                    # Remove task
                     task._move()
                 elif task.id != task_id:
                     log.error('task ID mismatch', task_id=task_id)
@@ -497,7 +589,7 @@ class Worker(object):
             if execution:
                 execution = json.loads(execution)
 
-            if execution.get('retry'):
+            if execution and execution.get('retry'):
                 if 'retry_method' in execution:
                     retry_func, retry_args = execution['retry_method']
                 else:
@@ -529,7 +621,9 @@ class Worker(object):
 
             when = time.time()
 
-            log_context = {}
+            log_context = {
+                'func': task.serialized_func
+            }
 
             if should_retry:
                 retry_num = task.n_executions()
@@ -551,16 +645,21 @@ class Worker(object):
                     else:
                         state = SCHEDULED
 
-            if state == ERROR and should_log_error:
-                log_func = log.error
-            else:
-                log_func = log.warning
+            if execution:
+                if state == ERROR and should_log_error:
+                    log_func = log.error
+                else:
+                    log_func = log.warning
 
-            log_func(func=task.serialized_func,
-                     time_failed=execution.get('time_failed'),
-                     traceback=execution.get('traceback'),
-                     exception_name=execution.get('exception_name'),
-                     **log_context)
+                log_context.update({
+                    'time_failed': execution.get('time_failed'),
+                    'traceback': execution.get('traceback'),
+                    'exception_name': execution.get('exception_name'),
+                })
+
+                log_func(**log_context)
+            else:
+                log.error('execution not found', **log_context)
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
@@ -644,7 +743,8 @@ class Worker(object):
         then exit.
         """
 
-        self.log.info('ready', queues=self.queue_filter)
+        self.log.info('ready', queues=self.only_queues,
+                               exclude_queues=self.exclude_queues)
 
         if self.config['STATS_INTERVAL']:
             self.stats_thread = StatsThread(self)

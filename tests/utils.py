@@ -3,7 +3,30 @@ import redis
 import structlog
 from tasktiger import TaskTiger, Worker, fixed
 
-from .config import *
+from .config import DELAY, TEST_DB
+
+
+class Patch(object):
+    """
+    Simple context manager to patch a function, e.g.:
+
+    with Patch(module, 'func_name', mocked_func):
+        module.func_name() # will use mocked_func
+    module.func_name() # will use the original function
+
+    """
+    def __init__(self, orig_obj, func_name, new_func):
+        self.orig_obj = orig_obj
+        self.func_name = func_name
+        self.new_func = new_func
+
+    def __enter__(self):
+        self.orig_func = getattr(self.orig_obj, self.func_name)
+        setattr(self.orig_obj, self.func_name, self.new_func)
+
+    def __exit__(self, *args):
+        setattr(self.orig_obj, self.func_name, self.orig_func)
+
 
 def get_tiger():
     """
@@ -20,7 +43,9 @@ def get_tiger():
         # doing a single worker run.
         'SELECT_TIMEOUT': 0,
 
-        'LOCK_RETRY': DELAY*2.,
+        'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
+
+        'LOCK_RETRY': DELAY * 2.,
 
         'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
 
@@ -30,6 +55,7 @@ def get_tiger():
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger
+
 
 def external_worker(n=None):
     """

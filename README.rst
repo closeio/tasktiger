@@ -166,7 +166,7 @@ decorate and queue tasks. The constructor takes the following arguments:
 
   - ``ONLY_QUEUES``
 
-    If set to a non-empty list of queue names, a worker only processeses the
+    If set to a non-empty list of queue names, a worker only processes the
     given queues (and their subqueues), unless explicit queues are passed to
     the command line.
 
@@ -456,6 +456,16 @@ Workers support the following options:
   separated by comma. Any subqueues of the given queues will be also processed.
   For example, ``-q first,second`` will process items from ``first``,
   ``second``, and subqueues such as ``first.CUSTOMER1``, ``first.CUSTOMER2``.
+
+- ``-e``, ``--exclude-queues``
+
+  If specified, exclude the given queue(s) from processing. Multiple queues can
+  be separated by comma. Any subqueues of the given queues will also be
+  excluded unless a more specific queue is specified with the ``-q`` option.
+  For example, ``-q email,email.incoming.CUSTOMER1 -e email.incoming`` will
+  process items from the ``email`` queue and subqueues like
+  ``email.outgoing.CUSTOMER1`` or ``email.incoming.CUSTOMER1``, but not
+  ``email.incoming`` or ``email.incoming.CUSTOMER2``.
 
 - ``-m``, ``--module``
 

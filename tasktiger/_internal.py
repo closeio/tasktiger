@@ -5,6 +5,7 @@ import importlib
 import hashlib
 import json
 import os
+import threading
 
 from .exceptions import TaskImportError
 
@@ -14,6 +15,17 @@ QUEUED = 'queued'
 ACTIVE = 'active'
 SCHEDULED = 'scheduled'
 ERROR = 'error'
+
+# This lock is acquired in the main process when forking, and must be acquired
+# in any thread of the main process when performing an operation that triggers a
+# lock that a child process might want to acquire.
+#
+# Specifically, we use this lock when logging in the StatsThread to prevent a
+# deadlock in the child process when the child is forked while the stats thread
+# is logging a message. This issue happens because Python acquires a lock while
+# logging, so a child process could be stuck forever trying to acquire that
+# lock. See http://bugs.python.org/issue6721 for more details.
+g_fork_lock = threading.Lock()
 
 # Global task context. We store this globally (and not on the TaskTiger
 # instance) for consistent results just in case the user has multiple TaskTiger
@@ -68,6 +80,19 @@ def dotted_parts(s):
         idx = s.find('.', idx+1)
         if idx == -1:
             yield s
+            break
+        yield s[:idx]
+
+def reversed_dotted_parts(s):
+    """
+    For a string "a.b.c", yields "a.b.c", "a.b", "a".
+    """
+    idx = -1
+    if s:
+        yield s
+    while s:
+        idx = s.rfind('.', 0, idx)
+        if idx == -1:
             break
         yield s[:idx]
 

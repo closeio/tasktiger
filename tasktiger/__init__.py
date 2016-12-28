@@ -134,6 +134,9 @@ class TaskTiger(object):
             # How often to print stats.
             'STATS_INTERVAL': 60,
 
+            # Upper bound for the time it takes to queue all periodic tasks.
+            'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
+
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
             # run_worker() method).
@@ -141,8 +144,8 @@ class TaskTiger(object):
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
 
-            # Upper bound for the time it takes to queue all periodic tasks.
-            'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
+            # If non-empty, a worker excludes the given queues from processing.
+            'EXCLUDE_QUEUES': [],
         }
         if config:
             self.config.update(config)
@@ -219,7 +222,7 @@ class TaskTiger(object):
 
         def _delay(func):
             def _delay_inner(*args, **kwargs):
-                self.delay(func, args=args, kwargs=kwargs)
+                return self.delay(func, args=args, kwargs=kwargs)
             return _delay_inner
 
         # Periodic tasks are unique.
@@ -267,7 +270,7 @@ class TaskTiger(object):
         """
         run_worker(args=args, obj=self)
 
-    def run_worker(self, queues=None, module=None):
+    def run_worker(self, queues=None, module=None, exclude_queues=None):
         """
         Main worker entry point method.
 
@@ -282,7 +285,9 @@ class TaskTiger(object):
                 importlib.import_module(module_name)
                 self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self, queues.split(',') if queues else None)
+        worker = Worker(self,
+                        queues.split(',') if queues else None,
+                        exclude_queues.split(',') if exclude_queues else None)
         worker.run()
 
     def delay(self, func, args=None, kwargs=None, queue=None,
@@ -341,6 +346,10 @@ class TaskTiger(object):
                                      "reimported every time a task is forked. "
                                      "Multiple modules can be separated by "
                                      "comma.")
+@click.option('-e', '--exclude-queues', help='If specified, exclude the given '
+                                             'queue(s) from processing. '
+                                             'Multiple queues can be '
+                                             'separated by comma.')
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')

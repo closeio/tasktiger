@@ -1,3 +1,8 @@
+machine:
+  services:
+    - redis
+
 test:
   override:
+    - pyenv global 2.7.12 3.4.4 3.5.2
     - tox

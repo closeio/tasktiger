@@ -5,7 +5,7 @@ class TaskImportError(ImportError):
     Raised when a task could not be imported.
     """
 
-class JobTimeoutException(Exception):
+class JobTimeoutException(BaseException):
     """
     Raised when a job takes longer to complete than the allowed maximum timeout
     value.
@@ -16,7 +16,7 @@ class StopRetry(Exception):
     Raised by a retry function to indicate that the task shouldn't be retried.
     """
 
-class RetryException(Exception):
+class RetryException(BaseException):
     """
     Alternative to retry_on for retrying a task. If raised within a task, the
     task will be retried as long as the retry method permits. The default retry
