@@ -599,6 +599,32 @@ class TestCase(BaseTestCase):
 
         self._ensure_queues(queued={'b': 1, 'b.a': 1})
 
+    def test_exclude_queues(self):
+        """
+        Test combining ONLY_QUEUES and EXCLUDE_QUEUES, and precedence in case
+        of subqueues or overlaps.
+        """
+
+        self.tiger.config['ONLY_QUEUES'] = ['a', 'a.b.c', 'b', 'c']
+        self.tiger.config['EXCLUDE_QUEUES'] = ['a.b', 'b']
+
+        # Queues that should be processed
+        process_queues = ['a', 'a.a', 'a.b.c', 'c', 'c.a']
+
+        # Queues that should be excluded
+        ignore_queues = ['a.b', 'a.b.d', 'b', 'b.a', 'd', 'd.a']
+
+        all_queues = process_queues + ignore_queues
+
+        for queue in all_queues:
+            self.tiger.delay(simple_task, queue=queue)
+
+        self._ensure_queues(queued={q: 1 for q in all_queues})
+
+        Worker(self.tiger).run(once=True)
+
+        self._ensure_queues(queued={q: 1 for q in ignore_queues})
+
 
 class TaskTestCase(BaseTestCase):
     """

@@ -432,6 +432,16 @@ Workers support the following options:
   For example, ``-q first,second`` will process items from ``first``,
   ``second``, and subqueues such as ``first.CUSTOMER1``, ``first.CUSTOMER2``.
 
+- ``-e``, ``--exclude-queues``
+
+  If specified, exclude the given queue(s) from processing. Multiple queues can
+  be separated by comma. Any subqueues of the given queues will also be
+  excluded unless a more specific queue is specified with the ``-q`` option.
+  For example, ``-q email,email.incoming.CUSTOMER1 -e email.incoming`` will
+  process items from the ``email`` queue and subqueues like
+  ``email.outgoing.CUSTOMER1`` or ``email.incoming.CUSTOMER1``, but not
+  ``email.incoming`` or ``email.incoming.CUSTOMER2``.
+
 - ``-m``, ``--module``
 
   Module(s) to import when launching the worker. This improves task performance
