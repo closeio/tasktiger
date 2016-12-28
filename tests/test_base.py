@@ -9,14 +9,14 @@ import unittest
 from multiprocessing import Pool, Process
 
 from tasktiger import (StopRetry, Task, TaskNotFound, Worker, exponential,
-                       fixed, linear)
+                       fixed, linear, periodic)
 from tasktiger._internal import serialize_func_name
 
 from .config import DELAY
 from .tasks import (batch_task, decorated_task, exception_task, file_args_task,
                     locked_task, long_task_killed, long_task_ok,
                     non_batch_task, retry_task, retry_task_2, simple_task,
-                    sleep_task, task_on_other_queue, unique_task,
+                    sleep_task, task_on_other_queue, tiger, unique_task,
                     verify_current_task, verify_current_tasks)
 from .utils import Patch, external_worker, get_tiger
 
