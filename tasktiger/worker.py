@@ -236,7 +236,7 @@ class Worker(object):
             execution['log_error'] = exc.log_error
             execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = exc.exc_info or sys.exc_info()
-        except Exception as exc:
+        except (JobTimeoutException, Exception) as exc:
             execution['exception_name'] = serialize_func_name(exc.__class__)
             exc_info = sys.exc_info()
         else:
