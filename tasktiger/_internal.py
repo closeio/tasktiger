@@ -4,6 +4,7 @@ import datetime
 import importlib
 import hashlib
 import json
+import operator
 import os
 import threading
 
@@ -39,9 +40,10 @@ g = {
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
     try:
-        module_name, attribute = name.rsplit('.', 1)
+        sep = ':' if ':' in name else '.'  # Support ':' for future releases
+        module_name, attribute = name.rsplit(sep, 1)
         module = importlib.import_module(module_name)
-        return getattr(module, attribute)
+        return operator.attrgetter(attribute)(module)
     except (ValueError, ImportError, AttributeError) as e:
         raise TaskImportError(e)
 
