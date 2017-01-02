@@ -181,7 +181,7 @@ Example:
 
   import tasktiger
   from redis import Redis
-  conn = redis.Redis(db=1)
+  conn = Redis(db=1)
   tiger = tasktiger.TaskTiger(connection=conn, config={
       'BATCH_QUEUES': {
           # Batch up to 50 tasks that are queued in the my_batch_queue or any
