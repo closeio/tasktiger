@@ -137,7 +137,8 @@ decorate and queue tasks. The constructor takes the following arguments:
 
 - ``connection``
 
-  Redis connection object
+  Redis connection object. On python 3, decode_responses should be set to True to 
+  avoid encoding problems.
 
 - ``config``
 
@@ -181,7 +182,7 @@ Example:
 
   import tasktiger
   from redis import Redis
-  conn = Redis(db=1)
+  conn = Redis(db=1, decode_responses=True)
   tiger = tasktiger.TaskTiger(connection=conn, config={
       'BATCH_QUEUES': {
           # Batch up to 50 tasks that are queued in the my_batch_queue or any
