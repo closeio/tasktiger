@@ -5,8 +5,8 @@ import datetime
 import json
 import sqlite3
 
-from _internal import QUEUED, ACTIVE, SCHEDULED, ERROR
-from task import Task
+from ._internal import QUEUED, ACTIVE, SCHEDULED, ERROR
+from .task import Task
 
 
 class TaskTigerCLI(object):

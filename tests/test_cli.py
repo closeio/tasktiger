@@ -3,7 +3,7 @@ import shutil
 import sqlite3
 import tempfile
 
-from test_base import BaseTestCase
+from .test_base import BaseTestCase
 from tasktiger.cli import TaskTigerCLI
 
 from .tasks import simple_task
