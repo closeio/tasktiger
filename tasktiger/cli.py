@@ -4,10 +4,12 @@ import argparse
 import datetime
 import json
 import sqlite3
+import sys
 
 from ._internal import QUEUED, ACTIVE, SCHEDULED, ERROR
 from .task import Task
 
+MAX_ERRORS = 1000
 
 class TaskTigerCLI(object):
     """TaskTiger CLI class."""
@@ -79,22 +81,30 @@ class TaskTigerCLI(object):
         conn = sqlite3.connect(self.args.file)
         conn.execute('CREATE TABLE tasks (id text, data text)')
         conn.commit()
+
+        dump_count = 0
+        batch = 0
+        error_count = 0
+
         # Keep processing batches of tasks
         n_tasks, tasks = Task.tasks_from_queue(self.tiger, self.args.queue, self.args.state, limit=1000)
-        i = 0
-        batch = 0
-        while n_tasks > 0:
+        while n_tasks > 0 and error_count < MAX_ERRORS:
             for task in tasks:
-                i += 1
                 task_json = json.dumps(task.data)
-                conn.execute('INSERT INTO tasks (id, data) values (?,?)', (task.id, task_json))
-                conn.commit()
-                # Delete task
-                if not sample:
-                    task._move()
+                try:
+                    conn.execute('INSERT INTO tasks (id, data) values (?,?)', (task.id, task_json))
+                    # Delete task
+                    if not sample:
+                        task._move()
+                    conn.commit()
+                    dump_count += 1
+                except Exception as exception:
+                    error_count += 1
+                    print('Error dumping task %s:%s' % (task.id, exception))
+                    conn.rollback()
 
             batch += 1
-            print('%s Dumped %d tasks' % (datetime.datetime.now(), i))
+            print('%s Dumped %d tasks' % (datetime.datetime.now(), dump_count))
             if sample or batch == int(self.args.batches):
                 break
             n_tasks, tasks = Task.tasks_from_queue(self.tiger, self.args.queue, self.args.state, limit=1000)
