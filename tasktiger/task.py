@@ -418,11 +418,12 @@ class Task(object):
         """
         self._move(from_state=SCHEDULED)
 
-    def delete(self):
+    def delete(self, from_state=ERROR):
         """
-        Removes a task that's in the error queue.
+        Removes a task from a queue.
+        Defaults to only removing if in ERROR queue.  Passing None for from_state
+        will remove task from any queue.
 
-        Raises TaskNotFound if the task could not be found in the ERROR
-        queue.
+        Raises TaskNotFound if the task could not be found in the queue.
         """
-        self._move(from_state=ERROR)
+        self._move(from_state=from_state)

@@ -3,9 +3,9 @@ import shutil
 import sqlite3
 import tempfile
 
-from .test_base import BaseTestCase
 from tasktiger.cli import TaskTigerCLI
 
+from .test_base import BaseTestCase
 from .tasks import simple_task
 
 
@@ -46,6 +46,30 @@ class TestCLI(BaseTestCase):
         self.assertEqual(row[0], task.id)
         self.assertEqual(task_json['func'], 'tests.tasks.simple_task')
         self._ensure_queues(queued={'cli': 0})
+
+        cursor.close()
+        conn.close()
+
+    def test_sample_queue(self):
+        db_file = '%s/clitest.db' % self.test_dir
+
+        # Queue task
+        task = self.tiger.delay(simple_task, queue='cli')
+
+        # Dump queue to sqlite3 file
+        cli = TaskTigerCLI(self.tiger, ['sample_queue', '-f', db_file, '-q', 'cli', '-s', 'queued'])
+        cli.run()
+
+        # Verify contents of tasks table
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor().execute('select id, data from tasks where id=?', (task.id, ))
+        row = cursor.fetchone()
+        self.assertIsNotNone(row)
+        task_json = json.loads(row[1])
+
+        self.assertEqual(row[0], task.id)
+        self.assertEqual(task_json['func'], 'tests.tasks.simple_task')
+        self._ensure_queues(queued={'cli': 1})
 
         cursor.close()
         conn.close()

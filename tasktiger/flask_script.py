@@ -46,12 +46,17 @@ class TaskTigerCLICommand(TaskTigerCommand):
         Dump all tasks to /tmp/tasks.db file and clear queue:
             manage.py tasktigercli dump_queue -f /tmp/tasks.db -q default -s queued
 
-        Dump 1,000 tasks to /tmp/tasks.db but leave them on queue:
+        Dump all tasks in queue and do not save them to sqlite3 database:
+            manage.py tasktigercli dump_queue -p -q default -s queued
+
+        Dump a batch of tasks to /tmp/tasks.db but leave them on queue:
             manage.py tasktigercli sample_queue -f /tmp/tasks.db -q default -s queued
 
         Count number of tasks dumped to sqlite3 database:
             sqlite3 /tmp/tasks.db 'select count(*) from tasks;'
 
+        View dump info in db file:
+            sqlite3 /tmp/tasks.db 'select * from stats;'
     """
 
     capture_all_args = True
