@@ -54,10 +54,10 @@ class TestCLI(BaseTestCase):
         db_file = '%s/clitest.db' % self.test_dir
 
         # Queue task
-        task = self.tiger.delay(simple_task, queue='cli')
+        task = self.tiger.delay(simple_task, queue='clisample')
 
         # Dump queue to sqlite3 file
-        cli = TaskTigerCLI(self.tiger, ['sample_queue', '-f', db_file, '-q', 'cli', '-s', 'queued'])
+        cli = TaskTigerCLI(self.tiger, ['sample_queue', '-f', db_file, '-q', 'clisample', '-s', 'queued'])
         cli.run()
 
         # Verify contents of tasks table
@@ -69,7 +69,9 @@ class TestCLI(BaseTestCase):
 
         self.assertEqual(row[0], task.id)
         self.assertEqual(task_json['func'], 'tests.tasks.simple_task')
-        self._ensure_queues(queued={'cli': 1})
+
+        # This is the important one to confirm the task was not removed from queue for a sample
+        self._ensure_queues(queued={'clisample': 1})
 
         cursor.close()
         conn.close()
