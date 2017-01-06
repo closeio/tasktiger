@@ -18,6 +18,34 @@ class TaskTigerCLI(object):
         self.tiger = tiger
         self._parse_args(args)
 
+    def _create_database(self):
+        """Create Sqlite3 database and return connection."""
+
+        if self.args.purge:
+            return None
+        else:
+            conn = sqlite3.connect(self.args.file)
+            conn.execute('CREATE TABLE tasks (id text, data text)')
+            conn.commit()
+            return conn
+
+    def _dump_batch(self, tasks, conn, delete_task):
+        """Dump a batch of tasks."""
+
+        for task in tasks:
+            task_json = json.dumps(task.data)
+            try:
+                conn.execute('INSERT INTO tasks (id, data) values (?,?)', (task.id, task_json))
+                # Delete task
+                if delete_task:
+                    task._move()
+                conn.commit()
+                dump_count += 1
+            except Exception as exception:
+                error_count += 1
+                print('Error dumping task %s:%s' % (task.id, exception))
+                conn.rollback()
+
     def _parse_args(self, args):
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest='command')
@@ -32,11 +60,15 @@ class TaskTigerCLI(object):
         dq_parser = subparsers.add_parser('dump_queue', help='Dump tasks to sqlite database and clear queue.',
                                           parents=[common_parser])
         dq_parser.add_argument('-q', '--queue', help='Queue name', required=True)
-        dq_parser.add_argument('-f', '--file', help='Sqlite3 file name', required=True)
         dq_parser.add_argument('-s', '--state', help='Task state (default=queued)',
                                required=False,  choices=[QUEUED, SCHEDULED], default='queued')
         dq_parser.add_argument('-b', '--batches', help='Number of batches to dump, defaults to all tasks',
                                required=False, default=-1)
+
+        purge_group = dq_parser.add_mutually_exclusive_group(required=True)
+        purge_group.add_argument('-f', '--file', help='Sqlite3 file name')
+        purge_group.add_argument('-p', '--purge', help='Purge tasks not saving them to Sqlite3 database',
+                                 action='store_true')
 
         # Sample queue command
         sq_parser = subparsers.add_parser('sample_queue',
@@ -78,9 +110,7 @@ class TaskTigerCLI(object):
 
         print('%s queue:%s to file:%s' % ('Sampling' if sample else 'Dumping', self.args.queue, self.args.file))
 
-        conn = sqlite3.connect(self.args.file)
-        conn.execute('CREATE TABLE tasks (id text, data text)')
-        conn.commit()
+        conn = self._create_database()
 
         dump_count = 0
         batch = 0
@@ -89,19 +119,7 @@ class TaskTigerCLI(object):
         # Keep processing batches of tasks
         n_tasks, tasks = Task.tasks_from_queue(self.tiger, self.args.queue, self.args.state, limit=1000)
         while n_tasks > 0 and error_count < MAX_ERRORS:
-            for task in tasks:
-                task_json = json.dumps(task.data)
-                try:
-                    conn.execute('INSERT INTO tasks (id, data) values (?,?)', (task.id, task_json))
-                    # Delete task
-                    if not sample:
-                        task._move()
-                    conn.commit()
-                    dump_count += 1
-                except Exception as exception:
-                    error_count += 1
-                    print('Error dumping task %s:%s' % (task.id, exception))
-                    conn.rollback()
+            self._dump_batch(tasks, conn, not sample)
 
             batch += 1
             print('%s Dumped %d tasks' % (datetime.datetime.now(), dump_count))
