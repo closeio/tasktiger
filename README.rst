@@ -137,8 +137,8 @@ decorate and queue tasks. The constructor takes the following arguments:
 
 - ``connection``
 
-  Redis connection object. On python 3, decode_responses should be set to True to 
-  avoid encoding problems.
+  Redis connection object. The connection should be initialized with
+  ``decode_responses=True`` to avoid encoding problems on Python 3.
 
 - ``config``
 
