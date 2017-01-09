@@ -151,28 +151,41 @@ class Worker(object):
         heartbeat until we reached a timeout) and puts them back into the
         QUEUED queue for re-execution.
         """
-        active_queues = self.connection.smembers(self._key(ACTIVE))
-        now = time.time()
-        for queue in active_queues:
-            # Move expired items from the ACTIVE queue to the QUEUED queue and
-            # update the active and queued sets (remove the affected queue from
-            # the ACTIVE set if there are no more items, and add it to the
-            # QUEUED set if any items were moved). If items already exist in
-            # the QUEUED queue, don't change their queue time.
-            result = self.scripts.zpoppush(
-                self._key(ACTIVE, queue),
-                self._key(QUEUED, queue),
-                self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
+
+        # Note that we use the lock both to unnecessarily prevent multiple
+        # workers from requeueing expired tasks, as well as to space out
+        # this task (i.e. we don't release the lock unless we've exhausted our
+        # batch size, which will hopefully never happen)
+        lock = Lock(self.connection, self._key('lock', 'queue_expired_tasks'),
+                    timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'])
+
+        acquired = lock.acquire(blocking=False)
+        if acquired:
+            now = time.time()
+
+            # Get a batch of expired tasks.
+            task_data = self.scripts.get_expired_tasks(
+                self.config['REDIS_PREFIX'],
                 now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
-                now,
-                if_exists=('noupdate',),
-                on_success=('update_sets', queue,
-                            self._key(ACTIVE), self._key(QUEUED)),
+                self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']
             )
-            # XXX: Ideally this would be atomic with the operation above.
-            if result:
-                self.log.info('queueing expired tasks', task_ids=result)
-                self.connection.publish(self._key('activity'), queue)
+
+            # Move expired items from the ACTIVE queue to the QUEUED queue. If
+            # items already exist in the QUEUED queue, don't change their queue
+            # time.
+            for (queue, task_id) in task_data:
+                self.log.info('queueing expired task',
+                              task_id=task_id, queue=queue)
+                task = Task(self.tiger, queue=queue, _data={'id': task_id})
+                task._move(from_state=ACTIVE,
+                           to_state=QUEUED,
+                           when=now,
+                           mode='nx')
+
+            # Keep requeueing if we've exhausted our batch size, otherwise
+            # don't release the lock -- it will expire automatically.
+            if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
+                lock.release()
 
     def _execute_forked(self, tasks, log):
         """

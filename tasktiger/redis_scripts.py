@@ -230,6 +230,39 @@ FAIL_IF_NOT_IN_ZSET = """
     assert(redis.call('zscore', KEYS[1], ARGV[1]), '<FAIL_IF_NOT_IN_ZSET>')
 """
 
+# KEYS = { }
+# ARGV = { key_prefix, time, batch_size }
+GET_EXPIRED_TASKS = """
+    local key_prefix = ARGV[1]
+    local time = ARGV[2]
+    local batch_size = ARGV[3]
+    local active_queues = redis.call('smembers', key_prefix .. ':' .. 'active')
+    local result = {}
+    local result_n = 1
+
+    for i=1, #active_queues do
+        local queue_name = active_queues[i]
+        local queue_key = key_prefix .. ':' .. 'active' ..
+                                        ':' .. queue_name
+
+        local members = redis.call('zrangebyscore',
+                                   queue_key, 0, time, 'LIMIT', 0, batch_size)
+
+        for j=1, #members do
+            result[result_n] = queue_name
+            result[result_n + 1] = members[j]
+            result_n = result_n + 2
+        end
+
+        batch_size = batch_size - #members
+        if batch_size <= 0 then
+            break
+        end
+    end
+
+    return result
+"""
+
 class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
@@ -252,6 +285,9 @@ class RedisScripts(object):
 
         self._fail_if_not_in_zset = redis.register_script(
             FAIL_IF_NOT_IN_ZSET)
+
+        self._get_expired_tasks = redis.register_script(
+            GET_EXPIRED_TASKS)
 
     def zadd(self, key, score, member, mode, client=None):
         """
@@ -388,3 +424,15 @@ class RedisScripts(object):
         execution otherwise.
         """
         self._fail_if_not_in_zset(keys=[key], args=[member], client=client)
+
+    def get_expired_tasks(self, key_prefix, time, batch_size, client=None):
+        """
+        Returns a list of expired tasks (older than ``time``) by looking at all
+        active queues. The list is capped at ``batch_size``. The list contains
+        tuples (queue, task_id).
+        """
+        result = self._get_expired_tasks(args=[key_prefix, time, batch_size],
+                                         client=client)
+
+        # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
+        return list(zip(result[::2], result[1::2]))
