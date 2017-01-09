@@ -123,7 +123,5 @@ def sleep_task(delay=10):
 
 @tiger.task()
 def wait_task(signal_file):
-    print 'Waiting for file %s to appear' % signal_file
     while not os.path.isfile(signal_file):
         time.sleep(.2)
-    print 'Found signal file, exiting task'
