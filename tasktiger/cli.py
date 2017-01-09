@@ -1,82 +1,26 @@
 """TaskTiger CLI."""
 
-import argparse
 import datetime
 import json
+import os.path
 import signal
 import sqlite3
 
+import click
 from ._internal import QUEUED, ACTIVE, SCHEDULED, ERROR
 from .exceptions import TaskNotFound
 from .task import Task
+from .click_helper import MutuallyExclusiveOption
 
 
-class TaskTigerCLI(object):
-    """TaskTiger CLI class."""
-
-    def __init__(self, tiger, args):
+class QueueLoader(object):
+    def __init__(self, tiger, queue):
         self.tiger = tiger
-        self._parse_args(args)
+        self.queue = queue
 
-    def _parse_args(self, args):
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest='command')
-
-        common_parser = argparse.ArgumentParser(add_help=False)
-
-        # Queue stats command
-        subparsers.add_parser('queue_stats', help='Print queue statistics.',
-                              parents=[common_parser])
-
-        # Dump queue command
-        dq_parser = subparsers.add_parser('dump_queue', help='Dump tasks to sqlite database and clear queue.',
-                                          parents=[common_parser])
-        dq_parser.add_argument('-q', '--queue', help='Queue name', required=True)
-        dq_parser.add_argument('-s', '--state', help='Task state (default=%s)' % QUEUED,
-                               required=False, choices=[QUEUED, SCHEDULED], default=QUEUED)
-        dq_parser.add_argument('-b', '--batches', help='Number of batches to dump, defaults to all tasks',
-                               required=False, default=-1)
-
-        purge_group = dq_parser.add_mutually_exclusive_group(required=True)
-        purge_group.add_argument('-f', '--file', help='Sqlite file name')
-        purge_group.add_argument('-p', '--purge', help='Purge tasks without saving them to Sqlite database',
-                                 action='store_true')
-
-        # Sample queue command
-        sq_parser = subparsers.add_parser('sample_queue',
-                                          help='Dump one batch of tasks to sqlite database. Do not delete any tasks from queue.',
-                                          parents=[common_parser])
-        sq_parser.add_argument('-q', '--queue', help='Queue name', required=True)
-        sq_parser.add_argument('-f', '--file', help='Sqlite file name', required=True)
-        sq_parser.add_argument('-s', '--state', help='Task state (default=%s)' % QUEUED,
-                               required=False, choices=[QUEUED, SCHEDULED, ACTIVE, ERROR], default=QUEUED)
-
-        # Load queue command
-        sq_parser = subparsers.add_parser('load_queue',
-                                          help='Load queue from sqlite database.', parents=[common_parser])
-        sq_parser.add_argument('-q', '--queue', help='Queue name', required=True)
-        sq_parser.add_argument('-f', '--file', help='Sqlite file name', required=True)
-
-        # Parse arguments
-        self.args = parser.parse_args(args)
-        self.command = self.args.command
-
-    def _queue_stats(self):
-        """Get queue statistics."""
-
-        queue_stats = self.tiger.get_queue_stats()
-
-        print('{:^64} {:^8s} {:^8s} {:^8s} {:^8s}'.format('Name', QUEUED, ACTIVE, SCHEDULED, ERROR))
-        for queue in sorted(queue_stats):
-            print('{:>64} {:8d} {:8d} {:8d} {:8d}'.format(queue,
-                                                          queue_stats[queue].get(QUEUED) or 0,
-                                                          queue_stats[queue].get(ACTIVE) or 0,
-                                                          queue_stats[queue].get(SCHEDULED) or 0,
-                                                          queue_stats[queue].get(ERROR) or 0))
-
-    def load_queue(self):
+    def load_queue(self, filename):
         """Load queue from db file."""
-        conn = sqlite3.connect(self.args.file)
+        conn = sqlite3.connect(filename)
 
         cursor = conn.cursor().execute('select count(*) from tasks')
         row = cursor.fetchone()
@@ -92,23 +36,6 @@ class TaskTigerCLI(object):
             row = cursor.fetchone()
         cursor.close()
         conn.close()
-
-    def run(self):
-        """Run CLI command."""
-
-        if self.command == 'queue_stats':
-            self._queue_stats()
-        elif self.command == 'dump_queue':
-            queue_dumper = QueueDumper(self.tiger, self.args.queue, self.args.state)
-            if self.args.purge:
-                queue_dumper.dump_queue(None, batches=self.args.batches)
-            else:
-                queue_dumper.dump_queue(self.args.file, batches=self.args.batches)
-        elif self.command == 'sample_queue':
-            queue_dumper = QueueDumper(self.tiger, self.args.queue, self.args.state)
-            queue_dumper.dump_queue(self.args.file, sample=True)
-        elif self.command == 'load_queue':
-            self.load_queue()
 
 
 class QueueDumper(object):
@@ -142,12 +69,14 @@ class QueueDumper(object):
         if self.db_filename:
             self.conn = sqlite3.connect(self.db_filename)
             self.conn.execute('CREATE TABLE tasks (id text, data text)')
+            self.conn.commit()
 
+            # Add dump info to stats table
             self.conn.execute('CREATE TABLE stats (info text, data text)')
             self.conn.execute('INSERT INTO stats (info, data) values (?,?)', ('start_time', datetime.datetime.utcnow()))
             self.conn.execute('INSERT INTO stats (info, data) values (?,?)', ('queue', self.queue))
             self.conn.execute('INSERT INTO stats (info, data) values (?,?)', ('state', self.state))
-
+            self.conn.execute('INSERT INTO stats (info, data) values (?,?)', ('sample', str(self.sample)))
             self.conn.commit()
 
     def _delete_task(self, task):
@@ -211,6 +140,9 @@ class QueueDumper(object):
         self.sample = sample
         self.batches = batches
 
+        if self.db_filename and os.path.exists(self.db_filename):
+            raise ValueError('File %s already exists' % self.db_filename)
+
         # Catch ctrl-c
         signal.signal(signal.SIGINT, self._signal_handler)
 
@@ -233,3 +165,73 @@ class QueueDumper(object):
 
         print('Total tasks dumped:%d' % dump_count)
         print('Total tasks not found:%d' % self.tasks_not_found)
+
+
+def run_with_args(tiger, args):
+    cli(args=args, obj=tiger)
+
+
+@click.group()
+def cli():
+    pass
+
+
+@click.command()
+@click.pass_context
+def queue_stats(context):
+    queue_stats_array = context.obj.get_queue_stats()
+
+    print('{:^64} {:^8s} {:^8s} {:^8s} {:^8s}'.format('Name', QUEUED, ACTIVE, SCHEDULED, ERROR))
+    for queue in sorted(queue_stats_array):
+        print('{:>64} {:8d} {:8d} {:8d} {:8d}'.format(queue,
+                                                      queue_stats_array[queue].get(QUEUED) or 0,
+                                                      queue_stats_array[queue].get(ACTIVE) or 0,
+                                                      queue_stats_array[queue].get(SCHEDULED) or 0,
+                                                      queue_stats_array[queue].get(ERROR) or 0))
+
+
+dump_mutex_group = ["filename", "purge"]
+@click.command()
+@click.option('--queue', '-q', help='Queue name', required=True)
+@click.option('--state', '-s', help='Task state (default=%s)' % QUEUED,
+              required=False, type=click.Choice([QUEUED, SCHEDULED, ERROR]), default=QUEUED)
+@click.option('--batches', '-b', help='Number of batches to dump, defaults to all tasks',
+              required=False, default=-1)
+@click.option('-f', '--filename', cls=MutuallyExclusiveOption, mutex_group=dump_mutex_group,
+              help='Sqlite file name')
+@click.option('-p', '--purge', cls=MutuallyExclusiveOption, mutex_group=dump_mutex_group,
+              help='Purge tasks without saving them to Sqlite database', is_flag=True)
+@click.pass_context
+def dump_queue(context, queue, state, batches, filename, purge):
+    queue_dumper = QueueDumper(context.obj, queue, state)
+    if purge:
+        queue_dumper.dump_queue(None, batches=batches)
+    else:
+        queue_dumper.dump_queue(filename, batches=batches)
+
+
+@click.command()
+@click.option('--queue', '-q', help='Queue name', required=True)
+@click.option('--state', '-s', help='Task state (default=%s)' % QUEUED,
+              required=False, type=click.Choice([QUEUED, SCHEDULED, ACTIVE, ERROR]), default=QUEUED)
+@click.option('--filename', '-f', help='Sqlite file name', required=True)
+@click.pass_context
+def sample_queue(context, queue, state, filename):
+    queue_dumper = QueueDumper(context.obj, queue, state)
+    queue_dumper.dump_queue(filename, sample=True)
+
+
+@click.command()
+#TODO: Should probably default to loading back into same queue stored in stats table
+@click.option('--queue', '-q', help='Queue name', required=True)
+@click.option('--filename', '-f', help='Sqlite file name', required=True)
+@click.pass_context
+def load_queue(context, queue, filename):
+    queue_loader = QueueLoader(context.obj, queue)
+    queue_loader.load_queue(filename)
+
+
+cli.add_command(queue_stats)
+cli.add_command(dump_queue)
+cli.add_command(load_queue)
+cli.add_command(sample_queue)

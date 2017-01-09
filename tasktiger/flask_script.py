@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import argparse
 from flask.ext.script import Command
 
-from .cli import TaskTigerCLI
+import tasktiger.cli
 
 class TaskTigerCommand(Command):
     capture_all_args = True
@@ -64,5 +64,4 @@ class TaskTigerCLICommand(TaskTigerCommand):
 
     def run(self, args):
         self.setup()
-        cli = TaskTigerCLI(self.tiger, args)
-        cli.run()
+        tasktiger.cli.run_with_args(self.tiger, args)
