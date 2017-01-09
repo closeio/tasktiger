@@ -1,4 +1,5 @@
 import json
+import os.path
 import time
 
 import redis
@@ -118,3 +119,11 @@ def verify_current_tasks(tasks):
 @tiger.task()
 def sleep_task(delay=10):
     time.sleep(delay)
+
+
+@tiger.task()
+def wait_task(signal_file):
+    print 'Waiting for file %s to appear' % signal_file
+    while not os.path.isfile(signal_file):
+        time.sleep(.2)
+    print 'Found signal file, exiting task'

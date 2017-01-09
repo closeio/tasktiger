@@ -14,11 +14,9 @@ class TestCLI(BaseTestCase):
 
     def setUp(self):
         super(TestCLI, self).setUp()
-        self.test_dir = tempfile.mkdtemp()
 
     def tearDown(self):
         super(TestCLI, self).tearDown()
-        shutil.rmtree(self.test_dir)
 
     def test_queue_stats(self):
         cli = TaskTigerCLI(self.tiger, ['queue_stats'])

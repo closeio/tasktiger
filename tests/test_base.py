@@ -2,22 +2,22 @@ import datetime
 import json
 import os
 import pytest
+import shutil
 import signal
 import tempfile
 import time
 import unittest
 from multiprocessing import Pool, Process
 
-from tasktiger import (StopRetry, Task, TaskNotFound, Worker, exponential,
+from tasktiger import (InvalidState, StopRetry, Task, TaskNotFound, Worker, exponential,
                        fixed, linear)
-from tasktiger._internal import serialize_func_name
-
+from tasktiger._internal import ACTIVE, SCHEDULED, serialize_func_name
 from .config import DELAY
 from .tasks import (batch_task, decorated_task, exception_task, file_args_task,
                     locked_task, long_task_killed, long_task_ok,
                     non_batch_task, retry_task, retry_task_2, simple_task,
                     sleep_task, task_on_other_queue, unique_task,
-                    verify_current_task, verify_current_tasks)
+                    verify_current_task, verify_current_tasks, wait_task)
 from .utils import Patch, external_worker, get_tiger
 
 
@@ -26,9 +26,11 @@ class BaseTestCase(unittest.TestCase):
         self.tiger = get_tiger()
         self.conn = self.tiger.connection
         self.conn.flushdb()
+        self.test_dir = tempfile.mkdtemp()
 
     def tearDown(self):
         self.conn.flushdb()
+        shutil.rmtree(self.test_dir)
 
     def _ensure_queues(self, queued=None, active=None, error=None,
                        scheduled=None):
@@ -636,20 +638,22 @@ class TaskTestCase(BaseTestCase):
         task.delay()
         self._ensure_queues(queued={'default': 1})
 
-        # Canceling only works for scheduled tasks.
-        pytest.raises(TaskNotFound, task.cancel)
+        # Confirm deleting queued task fails when specifying scheduled.
+        with pytest.raises(TaskNotFound):
+            task.delete(from_state=SCHEDULED)
 
     def test_delay_scheduled(self):
         task = Task(self.tiger, simple_task, queue='a')
         task.delay(when=datetime.timedelta(minutes=5))
         self._ensure_queues(scheduled={'a': 1})
 
-        # Test canceling a scheduled task.
-        task.cancel()
+        # Test deleting a scheduled task.
+        task.delete(from_state=SCHEDULED)
         self._ensure_queues()
 
-        # Canceling again raises an error
-        pytest.raises(TaskNotFound, task.cancel)
+        # Deleting again raises an error
+        with pytest.raises(TaskNotFound):
+            task.delete(from_state=SCHEDULED)
 
     def test_delay_scheduled_2(self):
         task = Task(self.tiger, simple_task, queue='a')
@@ -660,13 +664,14 @@ class TaskTestCase(BaseTestCase):
 
         # We can't look up a non-unique task by recreating it.
         task = Task(self.tiger, simple_task, queue='a')
-        pytest.raises(TaskNotFound, task.cancel)
+        with pytest.raises(TaskNotFound):
+            task.delete(from_state=SCHEDULED)
 
         # We can look up a task by its ID.
         fetch_task = lambda: Task.from_id(self.tiger, 'a', 'scheduled', task_id)
 
         task = fetch_task()
-        task.cancel()
+        task.delete(from_state=SCHEDULED)
         self._ensure_queues()
 
         # Task.from_id raises if it doesn't exist.
@@ -679,7 +684,7 @@ class TaskTestCase(BaseTestCase):
 
         # We can look up a unique task by recreating it.
         task = Task(self.tiger, simple_task, unique=True)
-        task.cancel()
+        task.delete(from_state=SCHEDULED)
         self._ensure_queues()
 
     def test_update_scheduled_time(self):
@@ -749,6 +754,27 @@ class TaskTestCase(BaseTestCase):
         task = Task(self.tiger, simple_task)
         task.delay(when=datetime.timedelta(seconds=5))
         self._ensure_queues(scheduled={'default': 1})
+
+    def test_delete_active(self):
+        signal_file = self.test_dir + '/test.dat'
+
+        # Queue task that stays active
+        worker = Process(target=external_worker)
+        worker.start()
+        task = Task(self.tiger, wait_task, queue='da', kwargs={'signal_file': signal_file})
+        task.delay()
+        time.sleep(DELAY)
+        self._ensure_queues(active={'da': 1})
+
+        # Get currently active task
+        active_task = Task.from_id(self.tiger, 'da', ACTIVE, task.id)
+        # Confirm deleting active task fails.
+        with pytest.raises(InvalidState):
+            active_task.delete(from_state=None)
+
+        # Signal task to exit
+        open(signal_file, 'w').close()
+        worker.join()
 
 
 class CurrentTaskTestCase(BaseTestCase):

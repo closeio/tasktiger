@@ -4,7 +4,7 @@ import redis
 import time
 
 from ._internal import *
-from .exceptions import TaskNotFound
+from .exceptions import InvalidState, TaskNotFound
 
 __all__ = ['Task']
 
@@ -411,6 +411,8 @@ class Task(object):
 
     def cancel(self):
         """
+        DEPRECATED: Use delete(from_state=SCHEDULED) as the replacement
+
         Cancels a task that is queued in the SCHEDULED queue.
 
         Raises TaskNotFound if the task could not be found in the SCHEDULED
@@ -421,9 +423,17 @@ class Task(object):
     def delete(self, from_state=ERROR):
         """
         Removes a task from a queue.
-        Defaults to only removing if in ERROR queue.  Passing None for from_state
-        will remove task from any queue.
+        Default is to remove if in ERROR queue.  Passing None for from_state
+        will remove task from any queue except the ACTIVE queue.
 
+        Raises InvalidState if the task is in an active state.
         Raises TaskNotFound if the task could not be found in the queue.
         """
+
+        from_state = from_state or self.state
+
+        # Do not delete active tasks
+        if from_state not in (QUEUED, SCHEDULED, ERROR):
+            raise InvalidState('%s state is not allowed' % from_state)
+
         self._move(from_state=from_state)
