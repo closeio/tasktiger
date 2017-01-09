@@ -12,12 +12,6 @@ from .tasks import simple_task
 class TestCLI(BaseTestCase):
     """Test TaskTiger CLI commands."""
 
-    def setUp(self):
-        super(TestCLI, self).setUp()
-
-    def tearDown(self):
-        super(TestCLI, self).tearDown()
-
     def test_queue_stats(self):
         cli = TaskTigerCLI(self.tiger, ['queue_stats'])
         cli.run()
