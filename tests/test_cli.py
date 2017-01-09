@@ -40,11 +40,11 @@ class TestCLI(BaseTestCase):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor().execute('select id, data from tasks where id=?', (task.id, ))
         row = cursor.fetchone()
-        self.assertIsNotNone(row)
+        assert row is not None
         task_json = json.loads(row[1])
 
-        self.assertEqual(row[0], task.id)
-        self.assertEqual(task_json['func'], 'tests.tasks.simple_task')
+        assert row[0] == task.id
+        assert task_json['func'] == 'tests.tasks.simple_task'
         self._ensure_queues(queued={'cli': 0})
 
         cursor.close()
@@ -64,13 +64,13 @@ class TestCLI(BaseTestCase):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor().execute('select id, data from tasks where id=?', (task.id, ))
         row = cursor.fetchone()
-        self.assertIsNotNone(row)
+        assert row is not None
         task_json = json.loads(row[1])
 
-        self.assertEqual(row[0], task.id)
-        self.assertEqual(task_json['func'], 'tests.tasks.simple_task')
+        assert row[0] == task.id
+        assert task_json['func'] == 'tests.tasks.simple_task'
 
-        # This is the important one to confirm the task was not removed from queue for a sample
+        # This is the important one to confirm the task was not removed from the queue for a sample
         self._ensure_queues(queued={'clisample': 1})
 
         cursor.close()
