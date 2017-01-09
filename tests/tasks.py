@@ -3,7 +3,7 @@ import time
 
 import redis
 
-from tasktiger import RetryException
+from tasktiger import JobTimeoutException, RetryException
 from tasktiger.retry import fixed
 
 from .config import DELAY, TEST_DB
@@ -115,6 +115,6 @@ def verify_current_tasks(tasks):
         conn.rpush('task_ids', *[t.id for t in tasks])
 
 
-@tiger.task()
+@tiger.task(retry_on=[JobTimeoutException])
 def sleep_task(delay=10):
     time.sleep(delay)

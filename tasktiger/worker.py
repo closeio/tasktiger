@@ -15,7 +15,7 @@ import traceback
 from .redis_lock import Lock
 
 from ._internal import *
-from .exceptions import RetryException
+from .exceptions import RetryException, TaskNotFound
 from .retry import *
 from .stats import StatsThread
 from .task import Task
@@ -174,13 +174,35 @@ class Worker(object):
             # items already exist in the QUEUED queue, don't change their queue
             # time.
             for (queue, task_id) in task_data:
-                self.log.info('queueing expired task',
-                              task_id=task_id, queue=queue)
-                task = Task(self.tiger, queue=queue, _data={'id': task_id})
-                task._move(from_state=ACTIVE,
-                           to_state=QUEUED,
-                           when=now,
-                           mode='nx')
+                try:
+                    task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
+                    if task.should_retry_on(JobTimeoutException):
+                        self.log.info('queueing expired task',
+                                      queue=queue, task_id=task_id)
+
+                        # Task is idempotent / can be retried.
+                        task._move(from_state=ACTIVE,
+                                   to_state=QUEUED,
+                                   when=now,
+                                   mode='nx')
+                    else:
+                        self.log.error('failing expired task',
+                                       queue=queue, task_id=task_id)
+
+                        # Assume the task can't be retried and move it to the error
+                        # queue.
+                        task._move(from_state=ACTIVE, to_state=ERROR, when=now)
+                except TaskNotFound:
+                    # Either the task was requeued by another worker, or we
+                    # have a task without a task object.
+
+                    # XXX: Ideally, the following block should be atomic.
+                    if not self.connection.get(self._key('task', task_id)):
+                        self.log.error('not found',
+                                       queue=queue, task_id=task_id)
+                        task = Task(self.tiger, queue=queue,
+                                    _data={'id': task_id}, _state=ACTIVE)
+                        task._move()
 
             # Keep requeueing if we've exhausted our batch size, otherwise
             # don't release the lock -- it will expire automatically.
@@ -610,10 +632,8 @@ class Worker(object):
                             log.error('could not import exception',
                                       exception_name=exception_name)
                         else:
-                            for n in task.retry_on:
-                                if issubclass(exception_class, import_attribute(n)):
-                                    should_retry = True
-                                    break
+                            if task.should_retry_on(exception_class):
+                                should_retry = True
                 else:
                     should_retry = True
 
