@@ -149,7 +149,9 @@ class Worker(object):
         """
         Helper method that takes expired tasks (where we didn't get a
         heartbeat until we reached a timeout) and puts them back into the
-        QUEUED queue for re-execution.
+        QUEUED queue for re-execution if they're idempotent, i.e. retriable
+        on JobTimeoutException. Otherwise, tasks are moved to the ERROR queue
+        and an exception is logged.
         """
 
         # Note that we use the lock both to unnecessarily prevent multiple
@@ -170,9 +172,6 @@ class Worker(object):
                 self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']
             )
 
-            # Move expired items from the ACTIVE queue to the QUEUED queue. If
-            # items already exist in the QUEUED queue, don't change their queue
-            # time.
             for (queue, task_id) in task_data:
                 try:
                     task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
@@ -180,7 +179,9 @@ class Worker(object):
                         self.log.info('queueing expired task',
                                       queue=queue, task_id=task_id)
 
-                        # Task is idempotent / can be retried.
+                        # Task is idempotent and can be requeued. If the task
+                        # already exists in the QUEUED queue, don't change its
+                        # time.
                         task._move(from_state=ACTIVE,
                                    to_state=QUEUED,
                                    when=now,
