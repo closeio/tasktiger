@@ -115,6 +115,6 @@ def verify_current_tasks(tasks):
         conn.rpush('task_ids', *[t.id for t in tasks])
 
 
-@tiger.task(retry_on=[JobTimeoutException])
+@tiger.task()
 def sleep_task(delay=10):
     time.sleep(delay)

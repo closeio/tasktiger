@@ -148,7 +148,7 @@ class Task(object):
         """
         Whether this task should be retried when the given exception occurs.
         """
-        for n in self.retry_on:
+        for n in (self.retry_on or []):
             if issubclass(exception_class, import_attribute(n)):
                 return True
         return False

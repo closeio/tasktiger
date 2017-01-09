@@ -8,8 +8,8 @@ import time
 import unittest
 from multiprocessing import Pool, Process
 
-from tasktiger import (StopRetry, Task, TaskNotFound, Worker, exponential,
-                       fixed, linear)
+from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
+                       Worker, exponential, fixed, linear)
 from tasktiger._internal import serialize_func_name
 
 from .config import DELAY
@@ -786,6 +786,46 @@ class CurrentTaskTestCase(BaseTestCase):
 
 class ReliabilityTestCase(BaseTestCase):
     """ Test behavior if things go wrong. """
+
+    def _test_expired_task(self, task, expected_state):
+        """
+        Ensure the given task ends up in the expected state if the worker is
+        killed prematurely.
+        """
+        task.delay()
+        self._ensure_queues(queued={'default': 1})
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # Kill the worker while it's still processing the task.
+        os.kill(worker.pid, signal.SIGKILL)
+
+        self._ensure_queues(active={'default': 1})
+
+        time.sleep(2 * DELAY)
+
+        Worker(self.tiger).run(once=True)
+
+        self._ensure_queues(**{expected_state: {'default': 1}})
+
+    def test_discard_expired_task(self):
+        """
+        Ensure a non-retriable task ends up in "error" state if the worker is
+        killed prematurely.
+        """
+        task = Task(self.tiger, sleep_task)
+        self._test_expired_task(task, 'error')
+
+    def test_requeue_expired_task(self):
+        """
+        Ensure a retriable task ends up in "queued" state if the worker is
+        killed prematurely.
+        """
+        task = Task(self.tiger, sleep_task, retry_on=[JobTimeoutException])
+        self._test_expired_task(task, 'queued')
 
     def test_killed_child_process(self):
         """
