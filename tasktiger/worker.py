@@ -138,21 +138,12 @@ class Worker(object):
         the activity channel were read.
         """
 
-        # Pubsub messages generator
-        gen = self._pubsub.listen()
-        while True:
-            # Since Redis' listen method blocks, we use select to inspect the
-            # underlying socket to see if there is activity.
-            fileno = self._pubsub.connection._sock.fileno()
-            r, w, x = select.select([fileno], [], [],
-                                    0 if self._queue_set else timeout)
-            if fileno in r: # or not self._queue_set:
-                message = next(gen)
-                if message['type'] == 'message':
-                    for queue in self._filter_queues([message['data']]):
-                        self._queue_set.add(queue)
-            else:
-                break
+        message = self._pubsub.get_message(timeout=0 if self._queue_set else timeout)
+        while message:
+            if message['type'] == 'message':
+                for queue in self._filter_queues([message['data']]):
+                    self._queue_set.add(queue)
+            message = self._pubsub.get_message()
 
     def _worker_queue_expired_tasks(self):
         """
