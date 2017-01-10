@@ -162,53 +162,54 @@ class Worker(object):
                     timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'])
 
         acquired = lock.acquire(blocking=False)
-        if acquired:
-            now = time.time()
+        if not acquired:
+            return
 
-            # Get a batch of expired tasks.
-            task_data = self.scripts.get_expired_tasks(
-                self.config['REDIS_PREFIX'],
-                now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
-                self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']
-            )
+        now = time.time()
 
-            for (queue, task_id) in task_data:
-                try:
-                    task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
-                    if task.should_retry_on(JobTimeoutException):
-                        self.log.info('queueing expired task',
-                                      queue=queue, task_id=task_id)
+        # Get a batch of expired tasks.
+        task_data = self.scripts.get_expired_tasks(
+            self.config['REDIS_PREFIX'],
+            now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
+            self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']
+        )
 
-                        # Task is idempotent and can be requeued. If the task
-                        # already exists in the QUEUED queue, don't change its
-                        # time.
-                        task._move(from_state=ACTIVE,
-                                   to_state=QUEUED,
-                                   when=now,
-                                   mode='nx')
-                    else:
-                        self.log.error('failing expired task',
-                                       queue=queue, task_id=task_id)
+        for (queue, task_id) in task_data:
+            try:
+                task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
+                if task.should_retry_on(JobTimeoutException):
+                    self.log.info('queueing expired task',
+                                  queue=queue, task_id=task_id)
 
-                        # Assume the task can't be retried and move it to the error
-                        # queue.
-                        task._move(from_state=ACTIVE, to_state=ERROR, when=now)
-                except TaskNotFound:
-                    # Either the task was requeued by another worker, or we
-                    # have a task without a task object.
+                    # Task is idempotent and can be requeued. If the task
+                    # already exists in the QUEUED queue, don't change its
+                    # time.
+                    task._move(from_state=ACTIVE,
+                               to_state=QUEUED,
+                               when=now,
+                               mode='nx')
+                else:
+                    self.log.error('failing expired task',
+                                   queue=queue, task_id=task_id)
 
-                    # XXX: Ideally, the following block should be atomic.
-                    if not self.connection.get(self._key('task', task_id)):
-                        self.log.error('not found',
-                                       queue=queue, task_id=task_id)
-                        task = Task(self.tiger, queue=queue,
-                                    _data={'id': task_id}, _state=ACTIVE)
-                        task._move()
+                    # Assume the task can't be retried and move it to the error
+                    # queue.
+                    task._move(from_state=ACTIVE, to_state=ERROR, when=now)
+            except TaskNotFound:
+                # Either the task was requeued by another worker, or we
+                # have a task without a task object.
 
-            # Keep requeueing if we've exhausted our batch size, otherwise
-            # don't release the lock -- it will expire automatically.
-            if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
-                lock.release()
+                # XXX: Ideally, the following block should be atomic.
+                if not self.connection.get(self._key('task', task_id)):
+                    self.log.error('not found', queue=queue, task_id=task_id)
+                    task = Task(self.tiger, queue=queue,
+                                _data={'id': task_id}, _state=ACTIVE)
+                    task._move()
+
+        # Keep requeueing if we've exhausted our batch size, otherwise
+        # don't release the lock -- it will expire automatically.
+        if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
+            lock.release()
 
     def _execute_forked(self, tasks, log):
         """
