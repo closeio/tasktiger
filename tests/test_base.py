@@ -785,7 +785,9 @@ class CurrentTaskTestCase(BaseTestCase):
 
 
 class ReliabilityTestCase(BaseTestCase):
-    """ Test behavior if things go wrong. """
+    """
+    Test behavior if things go wrong.
+    """
 
     def _test_expired_task(self, task, expected_state):
         """
