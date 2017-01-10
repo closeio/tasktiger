@@ -206,8 +206,9 @@ class Worker(object):
                                 _data={'id': task_id}, _state=ACTIVE)
                     task._move()
 
-        # Keep requeueing if we've exhausted our batch size, otherwise
-        # don't release the lock -- it will expire automatically.
+        # Release the lock immediately if we processed a full batch. This way,
+        # another process will be able to pick up another batch immediately
+        # without waiting for the lock to time out.
         if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
             lock.release()
 

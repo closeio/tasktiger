@@ -790,7 +790,8 @@ class ReliabilityTestCase(BaseTestCase):
     def _test_expired_task(self, task, expected_state):
         """
         Ensure the given task ends up in the expected state if the worker is
-        killed prematurely.
+        killed prematurely. The task needs to run for longer than DELAY for
+        this test to work.
         """
         task.delay()
         self._ensure_queues(queued={'default': 1})
@@ -805,6 +806,7 @@ class ReliabilityTestCase(BaseTestCase):
 
         self._ensure_queues(active={'default': 1})
 
+        # Wait for (at least) ACTIVE_TASK_UPDATE_TIMEOUT
         time.sleep(2 * DELAY)
 
         Worker(self.tiger).run(once=True)
