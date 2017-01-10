@@ -3,7 +3,7 @@ import time
 
 import redis
 
-from tasktiger import JobTimeoutException, RetryException
+from tasktiger import RetryException
 from tasktiger.retry import fixed
 
 from .config import DELAY, TEST_DB
