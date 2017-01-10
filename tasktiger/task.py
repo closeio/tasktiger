@@ -144,6 +144,15 @@ class Task(object):
     def retry_on(self):
         return self._data.get('retry_on')
 
+    def should_retry_on(self, exception_class):
+        """
+        Whether this task should be retried when the given exception occurs.
+        """
+        for n in (self.retry_on or []):
+            if issubclass(exception_class, import_attribute(n)):
+                return True
+        return False
+
     @property
     def func(self):
         if not self._func:

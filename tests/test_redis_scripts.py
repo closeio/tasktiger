@@ -261,3 +261,23 @@ class RedisScriptsTestCase(unittest.TestCase):
             ['z1', 'z2'])
         assert result == 0
         assert self.conn.exists('key') == 1
+
+    def test_get_expired_tasks(self):
+        self.conn.sadd('t:active', 'q1', 'q2', 'q3', 'q4')
+        self.conn.zadd('t:active:q1', 't1', 500)
+        self.conn.zadd('t:active:q1', 't2', 1000)
+        self.conn.zadd('t:active:q1', 't3', 1500)
+        self.conn.zadd('t:active:q2', 't4', 1200)
+        self.conn.zadd('t:active:q3', 't5', 1800)
+        self.conn.zadd('t:active:q4', 't6', 200)
+
+        expired_task_set = set([('q1', 't1'), ('q1', 't2'), ('q4', 't6')])
+
+        result = self.scripts.get_expired_tasks('t', 1000, 10)
+        assert len(result) == 3
+        assert set(result) == expired_task_set
+
+        for batch_size in range(1, 4):
+            result = self.scripts.get_expired_tasks('t', 1000, batch_size)
+            assert len(result) == batch_size
+            assert set(result) & expired_task_set == set(result)

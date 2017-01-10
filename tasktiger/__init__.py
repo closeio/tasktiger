@@ -106,13 +106,18 @@ class TaskTiger(object):
             'DEFAULT_HARD_TIMEOUT': 300,
 
             # The timer specifies how often the worker updates the task's
-            # timestamp in the active queue. Tasks exceeding the timeout value
-            # are requeued. Note that no delay is necessary before the retry
-            # since this condition happens when the worker crashes, and not
-            # when there is an exception in the task itself.
+            # timestamp in the active queue (in seconds). Tasks exceeding the
+            # timeout value are requeued periodically. This may happen when a
+            # worker crashes or is killed.
             'ACTIVE_TASK_UPDATE_TIMER': 10,
             'ACTIVE_TASK_UPDATE_TIMEOUT': 60,
-            'ACTIVE_TASK_EXPIRED_BATCH_SIZE': 10,
+
+            # How often we requeue expired tasks (in seconds), and how many
+            # expired tasks we requeue at a time. The interval also determines
+            # the lock timeout, i.e. it should be large enough to have enough
+            # time to requeue a batch of tasks.
+            'REQUEUE_EXPIRED_TASKS_INTERVAL': 30,
+            'REQUEUE_EXPIRED_TASKS_BATCH_SIZE': 10,
 
             # Set up queues that will be processed in batch, i.e. multiple jobs
             # are taken out of the queue at the same time and passed as a list
