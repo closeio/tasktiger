@@ -15,7 +15,7 @@ import traceback
 from .redis_lock import Lock
 
 from ._internal import *
-from .exceptions import RetryException
+from .exceptions import RetryException, TaskNotFound
 from .retry import *
 from .stats import StatsThread
 from .task import Task
@@ -138,50 +138,79 @@ class Worker(object):
         the activity channel were read.
         """
 
-        # Pubsub messages generator
-        gen = self._pubsub.listen()
-        while True:
-            # Since Redis' listen method blocks, we use select to inspect the
-            # underlying socket to see if there is activity.
-            fileno = self._pubsub.connection._sock.fileno()
-            r, w, x = select.select([fileno], [], [],
-                                    0 if self._queue_set else timeout)
-            if fileno in r: # or not self._queue_set:
-                message = next(gen)
-                if message['type'] == 'message':
-                    for queue in self._filter_queues([message['data']]):
-                        self._queue_set.add(queue)
-            else:
-                break
+        message = self._pubsub.get_message(timeout=0 if self._queue_set else timeout)
+        while message:
+            if message['type'] == 'message':
+                for queue in self._filter_queues([message['data']]):
+                    self._queue_set.add(queue)
+            message = self._pubsub.get_message()
 
     def _worker_queue_expired_tasks(self):
         """
         Helper method that takes expired tasks (where we didn't get a
         heartbeat until we reached a timeout) and puts them back into the
-        QUEUED queue for re-execution.
+        QUEUED queue for re-execution if they're idempotent, i.e. retriable
+        on JobTimeoutException. Otherwise, tasks are moved to the ERROR queue
+        and an exception is logged.
         """
-        active_queues = self.connection.smembers(self._key(ACTIVE))
+
+        # Note that we use the lock both to unnecessarily prevent multiple
+        # workers from requeueing expired tasks, as well as to space out
+        # this task (i.e. we don't release the lock unless we've exhausted our
+        # batch size, which will hopefully never happen)
+        lock = Lock(self.connection, self._key('lock', 'queue_expired_tasks'),
+                    timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'])
+
+        acquired = lock.acquire(blocking=False)
+        if not acquired:
+            return
+
         now = time.time()
-        for queue in active_queues:
-            # Move expired items from the ACTIVE queue to the QUEUED queue and
-            # update the active and queued sets (remove the affected queue from
-            # the ACTIVE set if there are no more items, and add it to the
-            # QUEUED set if any items were moved). If items already exist in
-            # the QUEUED queue, don't change their queue time.
-            result = self.scripts.zpoppush(
-                self._key(ACTIVE, queue),
-                self._key(QUEUED, queue),
-                self.config['ACTIVE_TASK_EXPIRED_BATCH_SIZE'],
-                now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
-                now,
-                if_exists=('noupdate',),
-                on_success=('update_sets', queue,
-                            self._key(ACTIVE), self._key(QUEUED)),
-            )
-            # XXX: Ideally this would be atomic with the operation above.
-            if result:
-                self.log.info('queueing expired tasks', task_ids=result)
-                self.connection.publish(self._key('activity'), queue)
+
+        # Get a batch of expired tasks.
+        task_data = self.scripts.get_expired_tasks(
+            self.config['REDIS_PREFIX'],
+            now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
+            self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']
+        )
+
+        for (queue, task_id) in task_data:
+            try:
+                task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
+                if task.should_retry_on(JobTimeoutException):
+                    self.log.info('queueing expired task',
+                                  queue=queue, task_id=task_id)
+
+                    # Task is idempotent and can be requeued. If the task
+                    # already exists in the QUEUED queue, don't change its
+                    # time.
+                    task._move(from_state=ACTIVE,
+                               to_state=QUEUED,
+                               when=now,
+                               mode='nx')
+                else:
+                    self.log.error('failing expired task',
+                                   queue=queue, task_id=task_id)
+
+                    # Assume the task can't be retried and move it to the error
+                    # queue.
+                    task._move(from_state=ACTIVE, to_state=ERROR, when=now)
+            except TaskNotFound:
+                # Either the task was requeued by another worker, or we
+                # have a task without a task object.
+
+                # XXX: Ideally, the following block should be atomic.
+                if not self.connection.get(self._key('task', task_id)):
+                    self.log.error('not found', queue=queue, task_id=task_id)
+                    task = Task(self.tiger, queue=queue,
+                                _data={'id': task_id}, _state=ACTIVE)
+                    task._move()
+
+        # Release the lock immediately if we processed a full batch. This way,
+        # another process will be able to pick up another batch immediately
+        # without waiting for the lock to time out.
+        if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
+            lock.release()
 
     def _execute_forked(self, tasks, log):
         """
@@ -610,10 +639,8 @@ class Worker(object):
                             log.error('could not import exception',
                                       exception_name=exception_name)
                         else:
-                            for n in task.retry_on:
-                                if issubclass(exception_class, import_attribute(n)):
-                                    should_retry = True
-                                    break
+                            if task.should_retry_on(exception_class):
+                                should_retry = True
                 else:
                     should_retry = True
 

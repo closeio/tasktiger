@@ -119,11 +119,11 @@ Queue the task using the ``delay`` method.
   In [2]: tiger = tasktiger.TaskTiger()
   In [3]: tiger.delay(tasks.my_task)
 
-Run a worker.
+Run a worker (make sure the task code can be found, e.g. using ``PYTHONPATH``).
 
 .. code:: bash
 
-  % tasktiger
+  % PYTHONPATH=. tasktiger
   {"timestamp": "2015-08-27T21:00:09.135344Z", "queues": null, "pid": 69840, "event": "ready", "level": "info"}
   {"task_id": "6fa07a91642363593cddef7a9e0c70ae3480921231710aa7648b467e637baa79", "level": "debug", "timestamp": "2015-08-27T21:03:56.727051Z", "pid": 69840, "queue": "default", "child_pid": 70171, "event": "processing"}
   Hello
@@ -138,7 +138,8 @@ decorate and queue tasks. The constructor takes the following arguments:
 
 - ``connection``
 
-  Redis connection object
+  Redis connection object. The connection should be initialized with
+  ``decode_responses=True`` to avoid encoding problems on Python 3.
 
 - ``config``
 
@@ -182,7 +183,7 @@ Example:
 
   import tasktiger
   from redis import Redis
-  conn = redis.Redis(db=1)
+  conn = Redis(db=1, decode_responses=True)
   tiger = tasktiger.TaskTiger(connection=conn, config={
       'BATCH_QUEUES': {
           # Batch up to 50 tasks that are queued in the my_batch_queue or any

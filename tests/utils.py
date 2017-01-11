@@ -45,13 +45,15 @@ def get_tiger():
 
         'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
 
+        'REQUEUE_EXPIRED_TASKS_INTERVAL': DELAY,
+
         'LOCK_RETRY': DELAY * 2.,
 
         'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
 
         'BATCH_QUEUES': {
             'batch': 3,
-        }
+        },
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger
