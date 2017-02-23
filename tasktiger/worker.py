@@ -720,8 +720,8 @@ class Worker(object):
         then exit.
         """
 
-        self.log.info('ready', queues=self.only_queues,
-                               exclude_queues=self.exclude_queues)
+        self.log.info('ready', queues=sorted(self.only_queues),
+                               exclude_queues=sorted(self.exclude_queues))
 
         if self.config['STATS_INTERVAL']:
             self.stats_thread = StatsThread(self)
