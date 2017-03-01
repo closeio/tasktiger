@@ -263,6 +263,63 @@ GET_EXPIRED_TASKS = """
     return result
 """
 
+# KEYS = { }
+# ARGV = { n_commands
+#          [, cmd_1_n_args, cmd_1_name, [cmd_1_arg_1 , ..., cmd_1_arg_n]
+#            [, ...
+#              [, cmd_n_n_args, cmd_n_name, [cmd_n_arg_1 ..., cmd_1_arg_n]]]]}
+#
+# Example: ARGV = { 2, 1, "GET", "key", 0, "INFO" }
+EXECUTE_PIPELINE = """
+    local argv = ARGV
+    local n_cmds = argv[1]
+    local cmd_ptr = 2
+    local n_args
+    local results = {}
+
+    -- Returns a subrange of the given table, from (and including) the first
+    -- index, to (and including) the last index.
+    local function subrange(t, first, last)
+      local sub = {}
+      for i=first,last do
+        sub[#sub + 1] = t[i]
+      end
+      return sub
+    end
+
+    for cmd_n=1, n_cmds do
+        -- Execute command cmd_n
+        n_args = argv[cmd_ptr]
+
+        local cmd_name = argv[cmd_ptr+1]
+
+        if cmd_name == 'EVALSHA' then
+            -- Script execution needs special treatment: Scripts are registered
+            -- under the global _G variable (as 'f_'+sha) and need the KEYS and
+            -- ARGV prepopulated.
+            local sha = argv[cmd_ptr+2]
+            local numkeys = argv[cmd_ptr+3]
+            local result
+            KEYS = subrange(argv, cmd_ptr+4, cmd_ptr+4+numkeys-1)
+            ARGV = subrange(argv, cmd_ptr+4+numkeys, cmd_ptr+n_args+1)
+            result = _G['f_' .. sha]()
+            if result == nil then
+                -- The table is truncated if we have nil values
+                results[cmd_n] = false
+            else
+                results[cmd_n] = result
+            end
+        else
+            results[cmd_n] = redis.call(unpack(subrange(argv, cmd_ptr+1,
+                                                        cmd_ptr+n_args+1)))
+        end
+
+        cmd_ptr = cmd_ptr + 1 + n_args + 1
+    end
+
+    return results
+"""
+
 class RedisScripts(object):
     def __init__(self, redis):
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
@@ -288,6 +345,8 @@ class RedisScripts(object):
 
         self._get_expired_tasks = redis.register_script(
             GET_EXPIRED_TASKS)
+
+        self._execute_pipeline = redis.register_script(EXECUTE_PIPELINE)
 
     def zadd(self, key, score, member, mode, client=None):
         """
@@ -436,3 +495,48 @@ class RedisScripts(object):
 
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
+
+    def execute_pipeline(self, pipeline, client=None):
+        """
+        Executes the given Redis pipeline as a Lua script. When an error
+        occurs, the transaction stops executing, and an exception is raised.
+        This differs from Redis transactions, where execution continues after an
+        error. On success, a list of results is returned. The pipeline is
+        cleared after execution and can no longer be reused.
+
+        Example:
+
+        p = conn.pipeline()
+        p.lrange('x', 0, -1)
+        p.set('success', 1)
+
+        # If "x" is empty or a list, an array [[...], True] is returned.
+        # Otherwise, ResponseError is raised and "success" is not set.
+        results = redis_scripts.execute_pipeline(p)
+        """
+
+        try:
+            # Prepare args
+            stack = pipeline.command_stack
+            script_args = [len(stack)]
+            for args, options in stack:
+                script_args += [len(args)-1] + list(args)
+
+            # Run the pipeline
+            raw_results = self._execute_pipeline(args=script_args,
+                                                 client=client)
+
+            # Run response callbacks on results.
+            results = []
+            response_callbacks = pipeline.response_callbacks
+            for ((args, options), result) in zip(stack, raw_results):
+                command_name = args[0]
+                if command_name in response_callbacks:
+                    result = response_callbacks[command_name](result,
+                                                              **options)
+                results.append(result)
+
+            return results
+
+        finally:
+            pipeline.reset()
