@@ -1,3 +1,5 @@
+import pytest
+import redis
 import unittest
 
 from .utils import get_tiger
@@ -281,3 +283,26 @@ class RedisScriptsTestCase(unittest.TestCase):
             result = self.scripts.get_expired_tasks('t', 1000, batch_size)
             assert len(result) == batch_size
             assert set(result) & expired_task_set == set(result)
+
+    def test_execute_pipeline_1(self):
+        p = self.conn.pipeline()
+        # Test basic commands
+        p.lpush('x', 'a')
+        p.lpush('x', 'b')
+        p.lrange('x', 0, -1)
+        p.zadd('src', a=1, b=2, c=3, d=4)
+        # Ensure custom scripts work (ZPOPPUSH has both KEYS and ARGS)
+        self.scripts.zpoppush('src', 'dst', 3, None, 10, client=p)
+        # Ensure raw responses ('OK') are converted into Python values (True)
+        p.set('y', 1)
+        results = self.scripts.execute_pipeline(p)
+        assert results == [1, 2, ['b', 'a'], 4, ['a', 'b', 'c'], True]
+
+    def test_execute_pipeline_2(self):
+        p = self.conn.pipeline()
+        p.set('x', 1)
+        p.lrange('x', 0, -1)
+        p.set('y', 1)
+        pytest.raises(redis.ResponseError, self.scripts.execute_pipeline, p)
+        assert self.conn.get('x') == '1'
+        assert self.conn.get('y') is None

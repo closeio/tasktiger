@@ -682,6 +682,26 @@ class TaskTestCase(BaseTestCase):
         task.cancel()
         self._ensure_queues()
 
+    def test_delete_failed_task(self):
+        """
+        Ensure we can delete a task that's in the error queue.
+        """
+        task = self.tiger.delay(exception_task)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={'default': 1})
+        task.delete()
+        self._ensure_queues()
+
+    def test_cancel_failed_task_2(self):
+        """
+        Ensure we can't cancel a task that's in the error queue.
+        """
+        task = self.tiger.delay(exception_task)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={'default': 1})
+        pytest.raises(TaskNotFound, task.cancel)
+        self._ensure_queues(error={'default': 1})
+
     def test_update_scheduled_time(self):
         task = Task(self.tiger, simple_task, unique=True)
         task.delay(when=datetime.timedelta(minutes=5))

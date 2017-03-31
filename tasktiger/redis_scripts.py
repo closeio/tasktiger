@@ -1,3 +1,6 @@
+import os
+
+
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
     if {condition} redis.call('zscore', {key}, {member}) then
@@ -263,8 +266,11 @@ GET_EXPIRED_TASKS = """
     return result
 """
 
+
 class RedisScripts(object):
     def __init__(self, redis):
+        self.redis = redis
+
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
         self._zadd_update_existing = redis.register_script(ZADD_UPDATE_EXISTING)
         self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
@@ -288,6 +294,12 @@ class RedisScripts(object):
 
         self._get_expired_tasks = redis.register_script(
             GET_EXPIRED_TASKS)
+
+        self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
+
+    def register_script_from_file(self, filename):
+        return self.redis.register_script(open(os.path.join(os.path.dirname(
+            os.path.realpath(__file__)), filename)).read())
 
     def zadd(self, key, score, member, mode, client=None):
         """
@@ -436,3 +448,48 @@ class RedisScripts(object):
 
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
+
+    def execute_pipeline(self, pipeline, client=None):
+        """
+        Executes the given Redis pipeline as a Lua script. When an error
+        occurs, the transaction stops executing, and an exception is raised.
+        This differs from Redis transactions, where execution continues after an
+        error. On success, a list of results is returned. The pipeline is
+        cleared after execution and can no longer be reused.
+
+        Example:
+
+        p = conn.pipeline()
+        p.lrange('x', 0, -1)
+        p.set('success', 1)
+
+        # If "x" is empty or a list, an array [[...], True] is returned.
+        # Otherwise, ResponseError is raised and "success" is not set.
+        results = redis_scripts.execute_pipeline(p)
+        """
+
+        try:
+            # Prepare args
+            stack = pipeline.command_stack
+            script_args = [len(stack)]
+            for args, options in stack:
+                script_args += [len(args)-1] + list(args)
+
+            # Run the pipeline
+            raw_results = self._execute_pipeline(args=script_args,
+                                                 client=client)
+
+            # Run response callbacks on results.
+            results = []
+            response_callbacks = pipeline.response_callbacks
+            for ((args, options), result) in zip(stack, raw_results):
+                command_name = args[0]
+                if command_name in response_callbacks:
+                    result = response_callbacks[command_name](result,
+                                                              **options)
+                results.append(result)
+
+            return results
+
+        finally:
+            pipeline.reset()

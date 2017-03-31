@@ -237,7 +237,7 @@ class Task(object):
             pipeline.publish(_key('activity'), queue)
 
         try:
-            pipeline.execute()
+            scripts.execute_pipeline(pipeline)
         except redis.ResponseError as e:
             if '<FAIL_IF_NOT_IN_ZSET>' in e.args[0]:
                 raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
