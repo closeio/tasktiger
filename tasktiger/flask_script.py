@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import argparse
-from flask.ext.script import Command
+from flask_script import Command
 
 class TaskTigerCommand(Command):
     capture_all_args = True
@@ -29,5 +29,8 @@ class TaskTigerCommand(Command):
         """
 
     def run(self, args):
+        # Allow passing a callable that returns the TaskTiger instance.
+        if callable(self.tiger):
+            self.tiger = self.tiger()
         self.setup()
         self.tiger.run_worker_with_args(args)
