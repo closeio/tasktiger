@@ -815,4 +815,6 @@ class Worker(object):
                 self.stats_thread.stop()
                 self.stats_thread = None
 
+            # Free up Redis connection
+            self._pubsub.reset()
             self.log.info('done')
