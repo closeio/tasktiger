@@ -997,28 +997,39 @@ class PeriodicTaskTestCase(BaseTestCase):
         # therefore use `tiger` from the tasks module instead of `self.tiger`.
         self._ensure_queues()
         Worker(tiger).run(once=True)
-        self._ensure_queues(scheduled={'periodic': 1})
 
-        # Within less than a second, the task will be processed.
-        for n in range(10):
-            time.sleep(0.1)
+        # NOTE: When the worker is started just before the second elapses,
+        # it's possible that the periodic task is in "queued" state instead
+        # of "scheduled" to ensure immediate execution. We capture this
+        # condition by running the task, and retry.
+        try:
+            self._ensure_queues(scheduled={'periodic': 1})
+        except AssertionError:
             Worker(tiger).run(once=True)
-            if self.conn.get('period_count'):
-                break
+            assert int(self.conn.get('period_count')) == 1
+            self.conn.delete('period_count')
+            self._ensure_queues(scheduled={'periodic': 1})
 
-        assert int(self.conn.get('period_count')) == 1
+        def ensure_run(n):
+            # Run worker twice (once to move from scheduled to queued, and once
+            # to execute the task)
+            Worker(tiger).run(once=True)
+            self._ensure_queues(queued={'periodic': 1})
+            Worker(tiger).run(once=True)
+            self._ensure_queues(scheduled={'periodic': 1})
 
-        # The task is requeued for the next period
-        self._ensure_queues(scheduled={'periodic': 1})
+            assert int(self.conn.get('period_count')) == n
 
-        # Within less than a second, the task will be processed.
+            # The task is requeued for the next period
+            self._ensure_queues(scheduled={'periodic': 1})
+
+        # Sleep until the next second
+        now = datetime.datetime.utcnow()
+        time.sleep(1-now.microsecond/10.**6)
+
+        ensure_run(1)
+
+        # Within less than a second, the task will be processed again.
         time.sleep(1)
 
-        # Run worker twice (once to move from scheduled to queued, and once to
-        # execute the task)
-        Worker(tiger).run(once=True)
-        Worker(tiger).run(once=True)
-        assert int(self.conn.get('period_count')) == 2
-
-        # The task is requeued for the next period
-        self._ensure_queues(scheduled={'periodic': 1})
+        ensure_run(2)
