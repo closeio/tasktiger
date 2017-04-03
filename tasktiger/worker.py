@@ -684,7 +684,7 @@ class Worker(object):
                     'exception_name': execution.get('exception_name'),
                 })
 
-                log_func(**log_context)
+                log_func('task error', **log_context)
             else:
                 log.error('execution not found', **log_context)
 
