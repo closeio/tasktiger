@@ -266,10 +266,10 @@ class Task(object):
     def delay(self, when=None):
         tiger = self.tiger
 
+        ts = get_timestamp(when)
+
         now = time.time()
         self._data['time_last_queued'] = now
-
-        ts = get_timestamp(when)
 
         if not ts or ts <= now:
             # Immediately queue if the timestamp is in the past.
