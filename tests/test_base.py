@@ -754,9 +754,14 @@ class TaskTestCase(BaseTestCase):
         pytest.raises(Exception, task.delay)
         self._ensure_queues()
 
-        # Even when we specify "when" in the past.
+        # Even when we specify "when" in the past
         task = Task(self.tiger, simple_task)
         task.delay(when=datetime.timedelta(seconds=-5))
+        self._ensure_queues()
+
+        # or with a zero timedelta.
+        task = Task(self.tiger, simple_task)
+        task.delay(when=datetime.timedelta(seconds=0))
         self._ensure_queues()
 
         # Ensure there is an exception if we can't serialize the task.
