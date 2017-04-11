@@ -1,3 +1,5 @@
+import operator
+import sys
 import binascii
 import calendar
 import datetime
@@ -40,7 +42,7 @@ g = {
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
     try:
-        sep = ':' if ':' in name else '.'  # Support ':' for future releases
+        sep = ':' if ':' in name else '.'  # For backwards compatibility
         module_name, attribute = name.rsplit(sep, 1)
         module = importlib.import_module(module_name)
         return operator.attrgetter(attribute)(module)
@@ -71,7 +73,12 @@ def serialize_func_name(func):
     if func.__module__ == '__main__':
         raise ValueError('Functions from the __main__ module cannot be '
                          'processed by workers.')
-    return '.'.join([func.__module__, func.__name__])
+    try:
+        # This will only work on Python 3.3 or above, but it will allow us to use static/classmethods
+        func_name = func.__qualname__
+    except AttributeError:
+        func_name = func.__name__
+    return ':'.join([func.__module__, func_name])
 
 def dotted_parts(s):
     """

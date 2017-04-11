@@ -125,3 +125,9 @@ def sleep_task(delay=10):
 def periodic_task():
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
     conn.incr('period_count', 1)
+
+
+class StaticTask(object):
+    @staticmethod
+    def task():
+        pass
