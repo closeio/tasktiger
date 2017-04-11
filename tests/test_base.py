@@ -16,8 +16,8 @@ from .config import DELAY
 from .tasks import (batch_task, decorated_task, exception_task, file_args_task,
                     locked_task, long_task_killed, long_task_ok,
                     non_batch_task, retry_task, retry_task_2, simple_task,
-                    sleep_task, task_on_other_queue, tiger, unique_task,
-                    verify_current_task, verify_current_tasks)
+                    sleep_task, StaticTask, task_on_other_queue, tiger,
+                    unique_task, verify_current_task, verify_current_tasks)
 from .utils import Patch, external_worker, get_tiger
 
 
@@ -225,7 +225,7 @@ class TestCase(BaseTestCase):
         assert len(executions) == 1
         execution = json.loads(executions[0])
         exception_name = execution['exception_name']
-        assert exception_name == 'tasktiger.exceptions.JobTimeoutException'
+        assert exception_name == 'tasktiger.exceptions:JobTimeoutException'
         assert not execution['success']
 
     def test_unique_task(self):
