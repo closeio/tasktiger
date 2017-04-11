@@ -12,6 +12,8 @@ class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
                  hard_timeout=None, unique=None, lock=None, lock_key=None,
                  retry=None, retry_on=None, retry_method=None,
+
+                 # internal variables
                  _data=None, _state=None, _ts=None, _executions=None):
         """
         Queues a task. See README.rst for an explanation of the options.
@@ -435,3 +437,16 @@ class Task(object):
         queue.
         """
         self._move(from_state=ERROR)
+
+    def _queue_for_next_period(self):
+        now = datetime.datetime.utcnow()
+        schedule = self.func._task_schedule
+        if callable(schedule):
+            schedule_func = schedule
+            schedule_args = ()
+        else:
+            schedule_func, schedule_args = schedule
+        when = schedule_func(now, *schedule_args)
+        if when:
+            self.delay(when=when)
+        return when

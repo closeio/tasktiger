@@ -5,6 +5,7 @@ import redis
 
 from tasktiger import RetryException
 from tasktiger.retry import fixed
+from tasktiger.schedule import periodic
 
 from .config import DELAY, TEST_DB
 from .utils import get_tiger
@@ -118,3 +119,9 @@ def verify_current_tasks(tasks):
 @tiger.task()
 def sleep_task(delay=10):
     time.sleep(delay)
+
+
+@tiger.task(schedule=periodic(seconds=1), queue='periodic')
+def periodic_task():
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn.incr('period_count', 1)

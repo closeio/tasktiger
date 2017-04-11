@@ -67,9 +67,10 @@ Features
   your task function can process multiple sets of arguments at the same time,
   which can improve performance. The batch size is configurable.
 
-- Scheduled tasks
+- Scheduled and periodic tasks
 
-  Tasks can be scheduled for execution at a specific time.
+  Tasks can be scheduled for execution at a specific time. Tasks can also be
+  executed periodically (e.g. every five seconds).
 
 - Structured logging
 
@@ -336,6 +337,30 @@ The following options can be only specified in the task decorator:
   has set up ``BATCH_QUEUES`` for the specific queue (see the *Configuration*
   section).
 
+- ``schedule``
+
+  If given, makes a task execute periodically. Pass either:
+
+  - a function that takes the current datetime as an argument.
+  - a tuple ``(f, args)``, where ``f`` takes the current datetime as the first
+    argument, followed by the additional args.
+
+  The schedule function must return the next task execution datetime, or
+  ``None`` to prevent periodic execution. The function is executed to determine
+  the initial taks execution date when a worker is initialized, and to determine
+  the next execution date when the task is about to get executed.
+
+  For most common scenarios, the ``periodic`` built-in function can be passed:
+
+  - ``periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
+    end_date=None)``
+
+    Use equal, periodic intervals, starting from ``start_date`` (defaults to
+    ``2000-01-01T00:00Z``, a Saturday, if not given), ending at ``end_date`` (or
+    never, if not given). For example, to run a task every five minutes
+    indefinitely, use ``schedule=periodic(minutes=5)``. To run a task every
+    every Sunday at 4am UTC, you could use
+    ``schedule=periodic(weeks=1, start_date=datetime.datetime(2000, 1, 2, 4))``.
 
 Custom retrying
 ---------------

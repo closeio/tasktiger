@@ -1,4 +1,4 @@
-# The retry logic is documented in the delay() method.
+# The retry logic is documented in the README.
 from .exceptions import StopRetry
 
 def _fixed(retry, delay, max_retries):
