@@ -3,9 +3,9 @@ import json
 import os
 import pytest
 import signal
+import sys
 import tempfile
 import time
-import unittest
 from multiprocessing import Pool, Process
 
 from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
@@ -21,13 +21,13 @@ from .tasks import (batch_task, decorated_task, exception_task, file_args_task,
 from .utils import Patch, external_worker, get_tiger
 
 
-class BaseTestCase(unittest.TestCase):
-    def setUp(self):
+class BaseTestCase:
+    def setup_method(self, method):
         self.tiger = get_tiger()
         self.conn = self.tiger.connection
         self.conn.flushdb()
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.conn.flushdb()
 
     def _ensure_queues(self, queued=None, active=None, error=None,
@@ -59,7 +59,7 @@ class TestCase(BaseTestCase):
     TaskTiger main test cases.
 
     Run a single test like this:
-    python -m unittest tests.test_base.TestCase.test_unique_task
+    pytest tests/test_base.py::TestCase::test_unique_task
     """
 
     def test_simple_task(self):
@@ -72,18 +72,17 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
         assert not self.conn.exists('t:task:%s' % task['id'])
 
+    @pytest.mark.skip(sys.version_info < (3, 3),
+                      reason='__qualname__ unavailable')
     def test_staticmethod_task(self):
-        if hasattr(StaticTask.task, '__qualname__'):
-            # This functionality only works on versions of python (3.3+) that support __qualname__
-            assert self.__qualname__ == self.__name__
-            self.tiger.delay(StaticTask.task)
-            queues = self._ensure_queues(queued={'default': 1})
-            task = queues['queued']['default'][0]
-            assert task['func'] == 'tests.tasks:StaticTask.task'
+        self.tiger.delay(StaticTask.task)
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        assert task['func'] == 'tests.tasks:StaticTask.task'
 
-            Worker(self.tiger).run(once=True)
-            self._ensure_queues(queued={'default': 0})
-            assert not self.conn.exists('t:task:%s' % task['id'])
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0})
+        assert not self.conn.exists('t:task:%s' % task['id'])
 
     def test_task_delay(self):
         decorated_task.delay(1, 2, a=3, b=4)

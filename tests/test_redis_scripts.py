@@ -1,18 +1,17 @@
 import pytest
 import redis
-import unittest
 
 from .utils import get_tiger
 
 
-class RedisScriptsTestCase(unittest.TestCase):
-    def setUp(self):
+class RedisScriptsTestCase:
+    def setup_method(self, method):
         self.tiger = get_tiger()
         self.conn = self.tiger.connection
         self.conn.flushdb()
         self.scripts = self.tiger.scripts
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.conn.flushdb()
 
     def _test_zadd(self, mode):
