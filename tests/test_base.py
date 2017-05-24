@@ -926,8 +926,8 @@ class ReliabilityTestCase(BaseTestCase):
             # Since ACTIVE_TASK_UPDATE_TIMEOUT hasn't elapsed yet, re-running
             # the worker at this time won't change anything. (run twice to move
             # from scheduled to queued)
-            Worker(self.tiger, task_check_interval=-1).run(once=True)
-            Worker(self.tiger, task_check_interval=-1).run(once=True)
+            Worker(self.tiger).run(once=True)
+            Worker(self.tiger).run(once=True)
 
             assert len(errors) == 0
             assert self.conn.scard('t:queued') == 0
@@ -937,12 +937,12 @@ class ReliabilityTestCase(BaseTestCase):
 
             # After waiting and re-running the worker, queues will clear.
             time.sleep(2 * DELAY)
-            Worker(self.tiger, task_check_interval=-1).run(once=True)
-            Worker(self.tiger, task_check_interval=-1).run(once=True)
+            Worker(self.tiger).run(once=True)
+            Worker(self.tiger).run(once=True)
 
             self._ensure_queues()
             assert len(errors) == 1
-            assert "event='not found'" in errors[0]
+            assert "not found" in errors[0]
 
 
 class PeriodicTaskTestCase(BaseTestCase):

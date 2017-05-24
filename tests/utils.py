@@ -64,5 +64,5 @@ def external_worker(n=None):
     Runs a worker. To be used with multiprocessing.Pool.map.
     """
     tiger = get_tiger()
-    worker = Worker(tiger, task_check_interval=-1)
+    worker = Worker(tiger)
     worker.run(once=True)
