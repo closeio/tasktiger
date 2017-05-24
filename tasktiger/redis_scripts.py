@@ -302,7 +302,6 @@ class RedisScripts(object):
                                filename)) as f:
             return self.redis.register_script(f.read())
 
-
     def zadd(self, key, score, member, mode, client=None):
         """
         Like ZADD, but supports different score update modes, in case the
