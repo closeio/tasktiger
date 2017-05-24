@@ -298,8 +298,9 @@ class RedisScripts(object):
         self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
 
     def register_script_from_file(self, filename):
-        return self.redis.register_script(open(os.path.join(os.path.dirname(
-            os.path.realpath(__file__)), filename)).read())
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                               filename)) as f:
+            return self.redis.register_script(f.read())
 
     def zadd(self, key, score, member, mode, client=None):
         """
