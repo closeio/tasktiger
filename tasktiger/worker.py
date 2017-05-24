@@ -718,8 +718,7 @@ class Worker(object):
             if self._stop_requested:
                 break
 
-        if time.time() - self._last_task_check > self._task_check_interval and \
-           not self._stop_requested:
+        if not self._stop_requested:
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
             self._last_task_check = time.time()
