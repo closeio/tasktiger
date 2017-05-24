@@ -13,7 +13,7 @@ tests_require = install_requires + [
 
 setup(
     name='tasktiger',
-    version='0.8.5',
+    version='0.9',
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
