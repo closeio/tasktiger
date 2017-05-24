@@ -36,6 +36,7 @@ setup(
     packages=[
         'tasktiger',
     ],
+    package_data={'tasktiger': ['lua/*.lua']},
     entry_points={
         'console_scripts': [
             'tasktiger = tasktiger:run_worker',
