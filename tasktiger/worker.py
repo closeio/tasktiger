@@ -474,6 +474,7 @@ class Worker(object):
                         self._key(ACTIVE), self._key(SCHEDULED))
         )
 
+        processed_num = 0
         if task_ids:
             # Get all tasks
             serialized_tasks = self.connection.mget([
@@ -523,10 +524,11 @@ class Worker(object):
             for tasks in tasks_by_func.values():
                 success, processed_tasks = self._execute_task_group(queue,
                         tasks, valid_task_ids)
+                processed_num = processed_num + len(processed_tasks)
                 for task in processed_tasks:
                     self._finish_task_processing(queue, task, success)
 
-        return task_ids
+        return task_ids, processed_num
 
     def _execute_task_group(self, queue, tasks, all_task_ids):
         """
@@ -718,9 +720,11 @@ class Worker(object):
 
         did_work = False
         for queue in queues:
-            if not self._process_from_queue(queue):
+            task_ids, processed_num = self._process_from_queue(queue)
+            if not task_ids:
                 self._queue_set.remove(queue)
-            else:
+
+            if processed_num:
                 did_work = True
             if self._stop_requested:
                 break
