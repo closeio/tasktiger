@@ -813,7 +813,7 @@ class Worker(object):
                 # on processing a specific queue.
                 new_queues = self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
 
-                if did_work or new_queues or time.time() - last_work > 1:
+                if did_work or new_queues or time.time() - last_work > 2:
                     self._install_signal_handlers()
                     did_work = self._worker_run()
                     self._uninstall_signal_handlers()
