@@ -142,12 +142,16 @@ class Worker(object):
         the activity channel were read.
         """
 
+        new_queues = 0
         message = self._pubsub.get_message(timeout=0 if self._queue_set else timeout)
         while message:
             if message['type'] == 'message':
                 for queue in self._filter_queues([message['data']]):
                     self._queue_set.add(queue)
+                    new_queues = new_queues + 1
             message = self._pubsub.get_message()
+
+        return new_queues
 
     def _worker_queue_expired_tasks(self):
         """
@@ -712,9 +716,12 @@ class Worker(object):
         queues = list(self._queue_set)
         random.shuffle(queues)
 
+        did_work = False
         for queue in queues:
             if not self._process_from_queue(queue):
                 self._queue_set.remove(queue)
+            else:
+                did_work = True
             if self._stop_requested:
                 break
 
@@ -723,6 +730,8 @@ class Worker(object):
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
             self._last_task_check = time.time()
+
+        return did_work
 
     def _queue_periodic_tasks(self):
         # If we can acquire the lock, queue any periodic tasks that are not
@@ -797,18 +806,24 @@ class Worker(object):
                 self.connection.smembers(self._key(QUEUED))))
 
         try:
+            did_work = True
+            last_work = time.time()
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
-                self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
+                new_queues = self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
 
-                self._install_signal_handlers()
-                self._worker_run()
-                self._uninstall_signal_handlers()
+                if did_work or new_queues or time.time() - last_work > 1:
+                    self._install_signal_handlers()
+                    did_work = self._worker_run()
+                    self._uninstall_signal_handlers()
+                    last_work = time.time()
+
                 if once and not self._queue_set:
                     break
                 if self._stop_requested:
                     raise KeyboardInterrupt()
+
         except KeyboardInterrupt:
             pass
 
