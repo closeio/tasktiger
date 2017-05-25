@@ -597,12 +597,6 @@ class Worker(object):
 
         def _mark_done():
             # Remove the task from active queue
-            if task.unique:
-                # For unique tasks we need to check if they're in use in
-                # another queue since they share the task ID.
-                remove_task = 'check'
-            else:
-                remove_task = 'always'
             task._move(from_state=ACTIVE)
             log.debug('done')
 
