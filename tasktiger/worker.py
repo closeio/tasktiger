@@ -141,28 +141,32 @@ class Worker(object):
 
     def _update_queue_set(self, timeout=0):
         """
+        Check activity channel and sleep as necessary.
+
         This method checks the activity channel for any new queues that have
-        activities and updates the queue_set. If there are no queues in the
-        queue_set, this method blocks until there is activity or the timeout
-        elapses. Otherwise, this method returns as soon as all messages from
-        the activity channel were read.
+        activities and updates the queue_set.
+
+        This method is also used to slow down the main processing loop as much
+        as possible.  Execution will remain in this method for at least timeout
+        unless a new queue is identified via the activity channel or the
+        last worker loop resulted in _did_work to be True.  This method assumes
+        if the last worker execution loop did not process any tasks then there
+        is no need to immediately run the execution loop again.
         """
 
+        run_first = True
         new_queue = False
-        run_once = True
         if self._did_work:
             sleep_until = time.time()
         else:
             sleep_until = time.time() + timeout
 
-        # Did work??? 0 if self._queue_set and self._did_work else timeout
-        while (not new_queue and time.time() - sleep_until < 0) or run_once:
-            run_once = False
-            pubsub_sleep = sleep_until - time.time()
-            if pubsub_sleep < 0:
-                pubsub_sleep = 0
+        while (not new_queue and time.time() - sleep_until < 0) or run_first:
+            run_first = False
 
-            message = self._pubsub.get_message(timeout=pubsub_sleep)
+            pubsub_sleep = sleep_until - time.time()
+            message = self._pubsub.get_message(timeout=0 if pubsub_sleep < 0
+                                               else pubsub_sleep)
 
             while message:
                 if message['type'] == 'message':
@@ -171,7 +175,9 @@ class Worker(object):
                             self._queue_set.add(queue)
                             new_queue = True
                             self.log.debug('new queue', queue=queue)
+
                 message = self._pubsub.get_message()
+
 
     def _worker_queue_expired_tasks(self):
         """
@@ -483,14 +489,17 @@ class Worker(object):
             if part in self.single_worker_queues:
                 log.debug('single worker queue')
                 single_worker = True
+                break
 
+        # Single worker queues require us to acquire a queue lock before
+        # moving tasks
         if single_worker:
-            lock_id = gen_unique_id('swq', 'queue', queue,)
-            queue_lock = Lock(self.connection, self._key('lock', lock_id),
+            queue_lock = Lock(self.connection, self._key('qlock', queue),
                               timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
             acquired = queue_lock.acquire(blocking=False)
             if not acquired:
-                return ['fake'], 0  # FIX MEE!!!!
+                # Indicate we didn't attempt to execute any tasks
+                return [], -1
             log.debug('acquired swq lock')
         else:
             queue_lock = None
@@ -764,11 +773,13 @@ class Worker(object):
 
         for queue in queues:
             task_ids, processed_num = self._process_from_queue(queue)
-            if not task_ids:
+            # Remove queue if queue was checked and was empty
+            if not task_ids and processed_num != -1:
                 self._queue_set.remove(queue)
+
             if self._stop_requested:
                 break
-            if processed_num:
+            if processed_num > 0:
                 self._did_work = True
 
         if not self._stop_requested:
