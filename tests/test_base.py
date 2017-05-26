@@ -1102,3 +1102,5 @@ class TestSingleWorkerQueue(BaseTestCase):
 
         # Queues should be empty
         self._ensure_queues(ignore_queues=['periodic'])
+
+        worker.join()
