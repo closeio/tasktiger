@@ -954,7 +954,7 @@ class TestReliability(BaseTestCase):
 
             self._ensure_queues()
             assert len(errors) == 1
-            assert "event='not found'" in errors[0]
+            assert "not found" in errors[0]
 
 
 class TestPeriodicTasks(BaseTestCase):
