@@ -155,16 +155,18 @@ class Worker(object):
         """
 
         run_first = True
-        new_queue = False
-        if self._did_work:
-            sleep_until = time.time()
-        else:
-            sleep_until = time.time() + timeout
+        new_queue_found = False
 
-        while (not new_queue and time.time() - sleep_until < 0) or run_first:
+        # If the last execution loop did work then do not stay in this method
+        if self._did_work:
+            stay_until = time.time()
+        else:
+            stay_until = time.time() + timeout
+
+        while (not new_queue_found and time.time() - stay_until < 0) or run_first:
             run_first = False
 
-            pubsub_sleep = sleep_until - time.time()
+            pubsub_sleep = stay_until - time.time()
             message = self._pubsub.get_message(timeout=0 if pubsub_sleep < 0
                                                else pubsub_sleep)
 
@@ -173,7 +175,7 @@ class Worker(object):
                     for queue in self._filter_queues([message['data']]):
                         if queue not in self._queue_set:
                             self._queue_set.add(queue)
-                            new_queue = True
+                            new_queue_found = True
                             self.log.debug('new queue', queue=queue)
 
                 message = self._pubsub.get_message()
@@ -484,21 +486,22 @@ class Worker(object):
             if part in batch_queues:
                 batch_size = batch_queues[part]
 
-        single_worker = False
+        # Check if this is single worker queue
+        single_worker_queue = False
         for part in dotted_parts(queue):
             if part in self.single_worker_queues:
                 log.debug('single worker queue')
-                single_worker = True
+                single_worker_queue = True
                 break
 
-        # Single worker queues require us to acquire a queue lock before
+        # Single worker queues require us to get a queue lock before
         # moving tasks
-        if single_worker:
+        if single_worker_queue:
             queue_lock = Lock(self.connection, self._key('qlock', queue),
                               timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
             acquired = queue_lock.acquire(blocking=False)
             if not acquired:
-                # Indicate we didn't attempt to execute any tasks
+                # Indicate we didn't attempt to process any tasks
                 return [], -1
             log.debug('acquired swq lock')
         else:
@@ -528,7 +531,7 @@ class Worker(object):
         log.debug('moved tasks', src_queue=QUEUED, dest_queue=ACTIVE,
                   qty=len(task_ids))
 
-        processed_num = 0
+        processed_count = 0
         if task_ids:
             # Get all tasks
             serialized_tasks = self.connection.mget([
@@ -578,8 +581,9 @@ class Worker(object):
             for tasks in tasks_by_func.values():
                 success, processed_tasks = self._execute_task_group(queue,
                         tasks, valid_task_ids, queue_lock)
-                processed_num = processed_num + len(processed_tasks)
-                log.debug('processed', attempted=len(tasks), processed=processed_num)
+                processed_count = processed_count + len(processed_tasks)
+                log.debug('processed', attempted=len(tasks),
+                          processed=processed_count)
                 for task in processed_tasks:
                     self._finish_task_processing(queue, task, success)
 
@@ -587,7 +591,7 @@ class Worker(object):
             queue_lock.release()
             log.debug('released swq lock')
 
-        return task_ids, processed_num
+        return task_ids, processed_count
 
     def _execute_task_group(self, queue, tasks, all_task_ids, queue_lock):
         """
@@ -772,14 +776,14 @@ class Worker(object):
         random.shuffle(queues)
 
         for queue in queues:
-            task_ids, processed_num = self._process_from_queue(queue)
-            # Remove queue if queue was checked and was empty
-            if not task_ids and processed_num != -1:
+            task_ids, processed_count = self._process_from_queue(queue)
+            # Remove queue if queue was processed and was empty
+            if not task_ids and processed_count != -1:
                 self._queue_set.remove(queue)
 
             if self._stop_requested:
                 break
-            if processed_num > 0:
+            if processed_count > 0:
                 self._did_work = True
 
         if not self._stop_requested:

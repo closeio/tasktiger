@@ -143,10 +143,11 @@ class TaskTiger(object):
             'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
 
             # Single worker queues can reduce redis activity in some use cases
-            # by locking at the queue level instead of task or task groups.
-            # These queues will only allow a single worker to access the queue
-            # at a time.  Useful in environments with large queues and many
-            # worker processes.
+            # by locking at the queue level instead of just at the task or task
+            # group level. These queues will only allow a single worker to
+            # access the queue at a time.  This can be useful in environments
+            # with large queues and many worker processes that need agressive
+            # locking techniques.
             'SINGLE_WORKER_QUEUES': [],
 
             # The following settings are only considered if no explicit queues
