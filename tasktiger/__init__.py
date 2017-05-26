@@ -142,6 +142,13 @@ class TaskTiger(object):
             # Upper bound for the time it takes to queue all periodic tasks.
             'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
 
+            # Single worker queues can reduce redis activity in some use cases
+            # by locking at the queue level instead of task or task groups.
+            # These queues will only allow a single worker to access the queue
+            # at a time.  Useful in environments with large queues and many
+            # worker processes.
+            'SINGLE_WORKER_QUEUES': [],
+
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
             # run_worker() method).
@@ -151,8 +158,6 @@ class TaskTiger(object):
 
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
-
-            'SINGLE_WORKER_QUEUES': [],
         }
         if config:
             self.config.update(config)
