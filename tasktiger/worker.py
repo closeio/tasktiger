@@ -139,7 +139,7 @@ class Worker(object):
                 self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
 
-    def _update_queue_set(self, timeout=0):
+    def _wait_for_new_tasks(self, timeout=0):
         """
         Check activity channel and sleep as necessary.
 
@@ -871,7 +871,7 @@ class Worker(object):
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
-                self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
+                self._wait_for_new_tasks(timeout=self.config['SELECT_TIMEOUT'])
 
                 self._install_signal_handlers()
                 self._did_work = False
