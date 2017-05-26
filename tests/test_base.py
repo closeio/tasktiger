@@ -638,7 +638,7 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={q: 1 for q in ignore_queues})
 
 
-class TaskTestCase(BaseTestCase):
+class TestTasks(BaseTestCase):
     """
     Task class test cases.
     """
@@ -788,7 +788,7 @@ class TaskTestCase(BaseTestCase):
         self._ensure_queues(scheduled={'default': 1})
 
 
-class CurrentTaskTestCase(BaseTestCase):
+class TestCurrentTask(BaseTestCase):
     def test_current_task(self):
         task = Task(self.tiger, verify_current_task)
         task.delay()
@@ -821,7 +821,7 @@ class CurrentTaskTestCase(BaseTestCase):
         assert self.conn.lrange('task_ids', 0, -1) == [task.id]
 
 
-class ReliabilityTestCase(BaseTestCase):
+class TestReliability(BaseTestCase):
     """
     Test behavior if things go wrong.
     """
@@ -957,7 +957,7 @@ class ReliabilityTestCase(BaseTestCase):
             assert "event='not found'" in errors[0]
 
 
-class PeriodicTaskTestCase(BaseTestCase):
+class TestPeriodicTasks(BaseTestCase):
     def test_periodic_schedule(self):
         """
         Test the periodic() schedule function.
