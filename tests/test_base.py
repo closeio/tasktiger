@@ -31,12 +31,17 @@ class BaseTestCase:
         self.conn.flushdb()
 
     def _ensure_queues(self, queued=None, active=None, error=None,
-                       scheduled=None):
+                       scheduled=None, ignore_queues=[]):
 
-        def _ensure_queue(typ, data):
+        def _ensure_queue(typ, data, ignore_queues):
             data = data or {}
-            data_names = set(name for name, n in data.items() if n)
-            assert self.conn.smembers('t:%s' % typ) == data_names
+
+            data_names = set(name for name, n in data.items()
+                             if n and name not in ignore_queues)
+            filtered_queues = set(name for name in
+                                  self.conn.smembers('t:%s' % typ)
+                                  if name not in ignore_queues)
+            assert filtered_queues == data_names
             ret = {}
             for name, n in data.items():
                 task_ids = self.conn.zrange('t:%s:%s' % (typ, name), 0, -1)
@@ -47,10 +52,10 @@ class BaseTestCase:
             return ret
 
         return {
-            'queued': _ensure_queue('queued', queued),
-            'active': _ensure_queue('active', active),
-            'error': _ensure_queue('error', error),
-            'scheduled': _ensure_queue('scheduled', scheduled),
+            'queued': _ensure_queue('queued', queued, ignore_queues),
+            'active': _ensure_queue('active', active, ignore_queues),
+            'error': _ensure_queue('error', error, ignore_queues),
+            'scheduled': _ensure_queue('scheduled', scheduled, ignore_queues),
         }
 
 
@@ -1050,3 +1055,50 @@ class TestPeriodicTasks(BaseTestCase):
         time.sleep(1)
 
         ensure_run(2)
+
+
+class TestSingleWorkerQueue(BaseTestCase):
+    """Single Worker Queue tests."""
+
+    def test_single_worker_queue(self):
+        """Test Single Worker Queue."""
+
+        # Queue two tasks
+        task = Task(self.tiger, long_task_ok, queue='swq')
+        task.delay()
+        task = Task(self.tiger, long_task_ok, queue='swq')
+        task.delay()
+        self._ensure_queues(queued={'swq': 2}, ignore_queues=['periodic'])
+
+        # Start a worker and wait until it starts processing.
+        # It should start processing one task and hold a lock on the queue
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # This worker should fail to get the queue lock and exit immediately
+        Worker(tiger).run(once=True, force_once=True)
+        self._ensure_queues(active={'swq': 1}, queued={'swq': 1},
+                            ignore_queues=['periodic'])
+        # Wait for external worker
+        worker.join()
+
+        # Retest using a non-single worker queue
+        # Queue two tasks
+        task = Task(self.tiger, long_task_ok, queue='not_swq')
+        task.delay()
+        task = Task(self.tiger, long_task_ok, queue='not_swq')
+        task.delay()
+        self._ensure_queues(queued={'not_swq': 2}, ignore_queues=['periodic'])
+
+        # Start a worker and wait until it starts processing.
+        # It should start processing one task
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # This worker should process the second task
+        Worker(tiger).run(once=True, force_once=True)
+
+        # Queues should be empty
+        self._ensure_queues(ignore_queues=['periodic'])

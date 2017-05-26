@@ -54,6 +54,8 @@ def get_tiger():
         'BATCH_QUEUES': {
             'batch': 3,
         },
+
+        'SINGLE_WORKER_QUEUES': ['swq'],
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger

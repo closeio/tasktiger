@@ -779,6 +779,7 @@ class Worker(object):
         # If we can acquire the lock, queue any periodic tasks that are not
         # queued yet. Otherwise, assume another worker is doing this.
         funcs = self.tiger.periodic_task_funcs.values()
+
         if not funcs:
             return
 
@@ -821,10 +822,13 @@ class Worker(object):
         finally:
             lock.release()
 
-    def run(self, once=False):
+    def run(self, once=False, force_once=False):
         """
-        Main loop of the worker. Use once=True to execute any queued tasks and
-        then exit.
+        Main loop of the worker.
+
+        Use once=True to execute any queued tasks and then exit.
+        Use force_once=True with once=True to always exit after one processing
+        loop even if tasks remain queued.
         """
 
         self.log.info('ready', queues=sorted(self.only_queues),
@@ -858,7 +862,7 @@ class Worker(object):
                 self._did_work = False
                 self._worker_run()
                 self._uninstall_signal_handlers()
-                if once and not self._queue_set:
+                if once and (not self._queue_set or force_once):
                     break
                 if self._stop_requested:
                     raise KeyboardInterrupt()
