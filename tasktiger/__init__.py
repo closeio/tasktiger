@@ -151,6 +151,8 @@ class TaskTiger(object):
 
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
+
+            'SINGLE_WORKER_QUEUES': [],
         }
         if config:
             self.config.update(config)

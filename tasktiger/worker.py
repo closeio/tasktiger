@@ -29,7 +29,8 @@ def sigchld_handler(*args):
     pass
 
 class Worker(object):
-    def __init__(self, tiger, queues=None, exclude_queues=None):
+    def __init__(self, tiger, queues=None, exclude_queues=None,
+                 single_worker_queues=None):
         """
         Internal method to initialize a worker.
         """
@@ -40,7 +41,7 @@ class Worker(object):
         self.scripts = tiger.scripts
         self.config = tiger.config
         self._key = tiger._key
-
+        self._did_work = True
         self.stats_thread = None
 
         if queues:
@@ -56,6 +57,13 @@ class Worker(object):
             self.exclude_queues = set(self.config['EXCLUDE_QUEUES'])
         else:
             self.exclude_queues = set()
+
+        if single_worker_queues:
+            self.single_worker_queues = set(single_worker_queues)
+        elif self.config['SINGLE_WORKER_QUEUES']:
+            self.single_worker_queues = set(self.config['SINGLE_WORKER_QUEUES'])
+        else:
+            self.single_worker_queues = set()
 
         self._stop_requested = False
 
@@ -106,6 +114,7 @@ class Worker(object):
         """
         queues = set(self._filter_queues(self.connection.smembers(
                 self._key(SCHEDULED))))
+
         now = time.time()
         for queue in queues:
             # Move due items from the SCHEDULED queue to the QUEUED queue. If
@@ -123,13 +132,14 @@ class Worker(object):
                 on_success=('update_sets', queue,
                             self._key(SCHEDULED), self._key(QUEUED)),
             )
-
+            self.log.debug('scheduled tasks', queue=queue, qty=len(result))
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
                 self.connection.publish(self._key('activity'), queue)
+                self._did_work = True
 
-    def _update_queue_set(self, timeout=None):
+    def _update_queue_set(self, timeout=0):
         """
         This method checks the activity channel for any new queues that have
         activities and updates the queue_set. If there are no queues in the
@@ -138,12 +148,30 @@ class Worker(object):
         the activity channel were read.
         """
 
-        message = self._pubsub.get_message(timeout=0 if self._queue_set else timeout)
-        while message:
-            if message['type'] == 'message':
-                for queue in self._filter_queues([message['data']]):
-                    self._queue_set.add(queue)
-            message = self._pubsub.get_message()
+        new_queue = False
+        run_once = True
+        if self._did_work:
+            sleep_until = time.time()
+        else:
+            sleep_until = time.time() + timeout
+
+        # Did work??? 0 if self._queue_set and self._did_work else timeout
+        while (not new_queue and time.time() - sleep_until < 0) or run_once:
+            run_once = False
+            pubsub_sleep = sleep_until - time.time()
+            if pubsub_sleep < 0:
+                pubsub_sleep = 0
+
+            message = self._pubsub.get_message(timeout=pubsub_sleep)
+
+            while message:
+                if message['type'] == 'message':
+                    for queue in self._filter_queues([message['data']]):
+                        if queue not in self._queue_set:
+                            self._queue_set.add(queue)
+                            new_queue = True
+                            self.log.debug('new queue', queue=queue)
+                message = self._pubsub.get_message()
 
     def _worker_queue_expired_tasks(self):
         """
@@ -175,6 +203,8 @@ class Worker(object):
         )
 
         for (queue, task_id) in task_data:
+            self.log.debug('expiring task', queue=queue, task_id=task_id)
+            self._did_work = True
             try:
                 task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
                 if task.should_retry_on(JobTimeoutException):
@@ -300,7 +330,7 @@ class Worker(object):
         self.connection.zadd(self._key(ACTIVE, queue),
                              **{task_id: now for task_id in task_ids})
 
-    def _execute(self, queue, tasks, log, locks, all_task_ids):
+    def _execute(self, queue, tasks, log, locks, queue_lock, all_task_ids):
         """
         Executes the given tasks. Returns a boolean indicating whether
         the tasks were executed succesfully.
@@ -413,6 +443,8 @@ class Worker(object):
                     self._heartbeat(queue, all_task_ids)
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+                    if queue_lock:
+                        queue_lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
                 except OSError as e:
                     # EINTR happens if the task completed. Since we're just
                     # renewing locks/heartbeat it's okay if we get interrupted.
@@ -446,6 +478,24 @@ class Worker(object):
             if part in batch_queues:
                 batch_size = batch_queues[part]
 
+        single_worker = False
+        for part in dotted_parts(queue):
+            if part in self.single_worker_queues:
+                log.debug('single worker queue')
+                single_worker = True
+
+        if single_worker:
+            lock_id = gen_unique_id('swq', 'queue', queue,)
+            queue_lock = Lock(self.connection, self._key('lock', lock_id),
+                              timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+            acquired = queue_lock.acquire(blocking=False)
+            if not acquired:
+                return ['fake'], 0  # FIX MEE!!!!
+            log.debug('acquired swq lock')
+        else:
+            queue_lock = None
+
+
         # Move an item to the active queue, if available.
         # We need to be careful when moving unique tasks: We currently don't
         # support concurrent processing of multiple unique tasks. If the task
@@ -455,6 +505,7 @@ class Worker(object):
         # queued instance of the task always gets executed no earlier than it
         # was queued.
         later = time.time() + self.config['LOCK_RETRY']
+
         task_ids = self.scripts.zpoppush(
             self._key(QUEUED, queue),
             self._key(ACTIVE, queue),
@@ -465,7 +516,10 @@ class Worker(object):
             on_success=('update_sets', queue, self._key(QUEUED),
                         self._key(ACTIVE), self._key(SCHEDULED))
         )
+        log.debug('moved tasks', src_queue=QUEUED, dest_queue=ACTIVE,
+                  qty=len(task_ids))
 
+        processed_num = 0
         if task_ids:
             # Get all tasks
             serialized_tasks = self.connection.mget([
@@ -514,13 +568,19 @@ class Worker(object):
             # Execute tasks for each task func
             for tasks in tasks_by_func.values():
                 success, processed_tasks = self._execute_task_group(queue,
-                        tasks, valid_task_ids)
+                        tasks, valid_task_ids, queue_lock)
+                processed_num = processed_num + len(processed_tasks)
+                log.debug('processed', attempted=len(tasks), processed=processed_num)
                 for task in processed_tasks:
                     self._finish_task_processing(queue, task, success)
 
-        return task_ids
+        if queue_lock:
+            queue_lock.release()
+            log.debug('released swq lock')
 
-    def _execute_task_group(self, queue, tasks, all_task_ids):
+        return task_ids, processed_num
+
+    def _execute_task_group(self, queue, tasks, all_task_ids, queue_lock):
         """
         Executes the given tasks in the queue. Updates the heartbeat for task
         IDs passed in all_task_ids. This internal method is only meant to be
@@ -578,7 +638,7 @@ class Worker(object):
 
         if self.stats_thread:
             self.stats_thread.report_task_start()
-        success = self._execute(queue, ready_tasks, log, locks, all_task_ids)
+        success = self._execute(queue, ready_tasks, log, locks, queue_lock, all_task_ids)
         if self.stats_thread:
             self.stats_thread.report_task_end()
 
@@ -703,10 +763,13 @@ class Worker(object):
         random.shuffle(queues)
 
         for queue in queues:
-            if not self._process_from_queue(queue):
+            task_ids, processed_num = self._process_from_queue(queue)
+            if not task_ids:
                 self._queue_set.remove(queue)
             if self._stop_requested:
                 break
+            if processed_num:
+                self._did_work = True
 
         if not self._stop_requested:
             self._worker_queue_scheduled_tasks()
@@ -765,7 +828,8 @@ class Worker(object):
         """
 
         self.log.info('ready', queues=sorted(self.only_queues),
-                               exclude_queues=sorted(self.exclude_queues))
+                               exclude_queues=sorted(self.exclude_queues),
+                               single_worker_queues=sorted(self.single_worker_queues))
 
         if self.config['STATS_INTERVAL']:
             self.stats_thread = StatsThread(self)
@@ -791,6 +855,7 @@ class Worker(object):
                 self._update_queue_set(timeout=self.config['SELECT_TIMEOUT'])
 
                 self._install_signal_handlers()
+                self._did_work = False
                 self._worker_run()
                 self._uninstall_signal_handlers()
                 if once and not self._queue_set:
