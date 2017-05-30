@@ -4,7 +4,7 @@ import redis
 from .utils import get_tiger
 
 
-class RedisScriptsTestCase:
+class TestRedisScripts:
     def setup_method(self, method):
         self.tiger = get_tiger()
         self.conn = self.tiger.connection

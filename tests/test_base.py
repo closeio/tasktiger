@@ -72,7 +72,7 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
         assert not self.conn.exists('t:task:%s' % task['id'])
 
-    @pytest.mark.skip(sys.version_info < (3, 3),
+    @pytest.mark.skipif(sys.version_info < (3, 3),
                       reason='__qualname__ unavailable')
     def test_staticmethod_task(self):
         self.tiger.delay(StaticTask.task)
@@ -638,7 +638,7 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={q: 1 for q in ignore_queues})
 
 
-class TaskTestCase(BaseTestCase):
+class TestTasks(BaseTestCase):
     """
     Task class test cases.
     """
@@ -788,7 +788,7 @@ class TaskTestCase(BaseTestCase):
         self._ensure_queues(scheduled={'default': 1})
 
 
-class CurrentTaskTestCase(BaseTestCase):
+class TestCurrentTask(BaseTestCase):
     def test_current_task(self):
         task = Task(self.tiger, verify_current_task)
         task.delay()
@@ -821,7 +821,7 @@ class CurrentTaskTestCase(BaseTestCase):
         assert self.conn.lrange('task_ids', 0, -1) == [task.id]
 
 
-class ReliabilityTestCase(BaseTestCase):
+class TestReliability(BaseTestCase):
     """
     Test behavior if things go wrong.
     """
@@ -954,10 +954,10 @@ class ReliabilityTestCase(BaseTestCase):
 
             self._ensure_queues()
             assert len(errors) == 1
-            assert "event='not found'" in errors[0]
+            assert "not found" in errors[0]
 
 
-class PeriodicTaskTestCase(BaseTestCase):
+class TestPeriodicTasks(BaseTestCase):
     def test_periodic_schedule(self):
         """
         Test the periodic() schedule function.
