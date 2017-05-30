@@ -29,7 +29,7 @@ def sigchld_handler(*args):
     pass
 
 class Worker(object):
-    def __init__(self, tiger, queues=None, exclude_queues=None):
+    def __init__(self, tiger, queues=None, exclude_queues=None, task_check_interval=2):
         """
         Internal method to initialize a worker.
         """
@@ -40,6 +40,10 @@ class Worker(object):
         self.scripts = tiger.scripts
         self.config = tiger.config
         self._key = tiger._key
+
+        # Interval (seconds) to check for scheduled and expired tasks
+        self._task_check_interval = task_check_interval
+        self._last_task_check = 0
 
         self.stats_thread = None
 
@@ -708,9 +712,11 @@ class Worker(object):
             if self._stop_requested:
                 break
 
-        if not self._stop_requested:
+        if time.time() - self._last_task_check > self._task_check_interval and \
+           not self._stop_requested:
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
+            self._last_task_check = time.time()
 
     def _queue_periodic_tasks(self):
         # If we can acquire the lock, queue any periodic tasks that are not
