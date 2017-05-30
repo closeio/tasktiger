@@ -72,7 +72,7 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
         assert not self.conn.exists('t:task:%s' % task['id'])
 
-    @pytest.mark.skip(sys.version_info < (3, 3),
+    @pytest.mark.skipif(sys.version_info < (3, 3),
                       reason='__qualname__ unavailable')
     def test_staticmethod_task(self):
         self.tiger.delay(StaticTask.task)
