@@ -479,7 +479,7 @@ class Worker(object):
             Task IDs:   List of tasks that were processed (even if there was an
                         error so that client code can assume the queue is empty
                         if nothing was returned)
-            Count:      The number of tasks that were successfully processed
+            Count:      The number of tasks that were attemped to be executed
         """
         now = time.time()
 
