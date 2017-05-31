@@ -470,9 +470,16 @@ class Worker(object):
 
     def _process_from_queue(self, queue):
         """
-        Internal method to processes a task batch from the given queue. Returns
-        the task IDs that were processed (even if there was an error so that
-        client code can assume the queue is empty if nothing was returned).
+        Internal method to process a task batch from the given queue.
+
+        Args:
+            queue: Queue name to be processed
+
+        Returns:
+            Task IDs:   List of tasks that were processed (even if there was an
+                        error so that client code can assume the queue is empty
+                        if nothing was returned)
+            Count:      The number of tasks that were successfully processed
         """
         now = time.time()
 
