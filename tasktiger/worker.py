@@ -42,6 +42,7 @@ class Worker(object):
         self.config = tiger.config
         self._key = tiger._key
         self._did_work = True
+        self._last_task_check = 0
         self.stats_thread = None
 
         if queues:
@@ -793,9 +794,12 @@ class Worker(object):
             if processed_count > 0:
                 self._did_work = True
 
-        if not self._stop_requested:
+        # No need to execute these more than once per second
+        if time.time() - self._last_task_check > 1 and \
+           not self._stop_requested:
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
+            self._last_task_check = time.time()
 
     def _queue_periodic_tasks(self):
         # If we can acquire the lock, queue any periodic tasks that are not
