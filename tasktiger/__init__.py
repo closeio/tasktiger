@@ -89,8 +89,12 @@ class TaskTiger(object):
             'DEFAULT_QUEUE': 'default',
 
             # After how many seconds time out on listening on the activity
-            # channel and check for scheduled or expired items.
+            # channel and check for scheduled or expired items.  The batch
+            # timeout will delay the specified seconds after the first message
+            # to wait for additional messages, useful for very active systems.
+            # Appropriate values: 0 > SELECT_BATCH_TIMEOUT > SELECT_TIMEOUT
             'SELECT_TIMEOUT': 1,
+            'SELECT_BATCH_TIMEOUT': 0,
 
             # If this is True, all tasks except future tasks (when=a future
             # time) will be executed locally by blocking until the task

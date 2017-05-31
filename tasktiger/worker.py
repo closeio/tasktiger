@@ -140,7 +140,7 @@ class Worker(object):
                 self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
 
-    def _wait_for_new_tasks(self, timeout=0):
+    def _wait_for_new_tasks(self, timeout=0, batch_timeout=0):
         """
         Check activity channel and sleep as necessary.
 
@@ -155,31 +155,37 @@ class Worker(object):
         is no need to immediately run the execution loop again.
         """
 
-        run_first = True
         new_queue_found = False
-
-        # If the last execution loop did work then do not stay in this method
-        if self._did_work:
-            stay_until = time.time()
-        else:
-            stay_until = time.time() + timeout
-
-        while (not new_queue_found and time.time() - stay_until < 0) or run_first:
-            run_first = False
-
-            pubsub_sleep = stay_until - time.time()
-            message = self._pubsub.get_message(timeout=0 if pubsub_sleep < 0
+        start_time = batch_exit = time.time()
+        while True:
+            if batch_exit > start_time:
+                pubsub_sleep = batch_exit - time.time()
+            else:
+                pubsub_sleep = start_time + timeout - time.time()
+            message = self._pubsub.get_message(timeout=0 if pubsub_sleep < 0 or
+                                               self._did_work
                                                else pubsub_sleep)
 
             while message:
                 if message['type'] == 'message':
                     for queue in self._filter_queues([message['data']]):
                         if queue not in self._queue_set:
+                            if not new_queue_found:
+                                new_queue_found = True
+                                batch_exit = time.time() + batch_timeout
                             self._queue_set.add(queue)
-                            new_queue_found = True
                             self.log.debug('new queue', queue=queue)
 
                 message = self._pubsub.get_message()
+
+            if self._did_work:
+                break   # Exit immediately if we did work during the last
+                        # execution loop
+            elif time.time() >= batch_exit and new_queue_found:
+                break   # After finding a new queue stay here a little
+                        # longer to batch up further new queue messages
+            elif time.time() - start_time > timeout:
+                break   # Exit after our maximum delay time
 
 
     def _worker_queue_expired_tasks(self):
@@ -881,7 +887,8 @@ class Worker(object):
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
-                self._wait_for_new_tasks(timeout=self.config['SELECT_TIMEOUT'])
+                self._wait_for_new_tasks(timeout=self.config['SELECT_TIMEOUT'],
+                            batch_timeout=self.config['SELECT_BATCH_TIMEOUT'])
 
                 self._install_signal_handlers()
                 self._did_work = False
