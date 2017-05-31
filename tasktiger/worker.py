@@ -794,8 +794,7 @@ class Worker(object):
             if processed_count > 0:
                 self._did_work = True
 
-        # No need to execute these more than once per second
-        if time.time() - self._last_task_check > 1 and \
+        if time.time() - self._last_task_check > self.config['SELECT_TIMEOUT'] and \
            not self._stop_requested:
             self._worker_queue_scheduled_tasks()
             self._worker_queue_expired_tasks()
