@@ -105,7 +105,7 @@ class TaskTiger(object):
             # task, use the following default method.
             'DEFAULT_RETRY_METHOD': fixed(60, 3),
 
-            # After how many seconds a task that can't require a lock is
+            # After how many seconds a task that can't acquire a lock is
             # retried.
             'LOCK_RETRY': 1,
 
