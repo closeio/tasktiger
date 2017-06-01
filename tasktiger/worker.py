@@ -145,7 +145,7 @@ class Worker(object):
         Check activity channel and wait as necessary.
 
         This method is also used to slow down the main processing loop to reduce
-        the affects of rapidly sending Redis commands.  This method will exit
+        the effects of rapidly sending Redis commands.  This method will exit
         for any of these conditions:
            1. _did_work is True, suggests there could be more work pending
            2. Found new queue and after batch timeout. Note batch timeout
