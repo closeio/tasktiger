@@ -339,6 +339,48 @@ class Worker(object):
 
         return success
 
+    def _get_queue_batch_size(self, queue):
+        """Get queue batch size."""
+
+        # Fetch one item unless this is a batch queue.
+        # XXX: It would be more efficient to loop in reverse order and break.
+        batch_queues = self.config['BATCH_QUEUES']
+        batch_size = 1
+        for part in dotted_parts(queue):
+            if part in batch_queues:
+                batch_size = batch_queues[part]
+
+        return batch_size
+
+    def _get_queue_lock(self, queue, log):
+        """Get queue lock for single worker queues.
+
+        For single worker queues it returns a Lock if acquired and whether
+        it failed to acquire the lock.
+        """
+
+        # Check if this is single worker queue
+        single_worker_queue = False
+        for part in dotted_parts(queue):
+            if part in self.single_worker_queues:
+                log.debug('single worker queue')
+                single_worker_queue = True
+                break
+
+        # Single worker queues require us to get a queue lock before
+        # moving tasks
+        if single_worker_queue:
+            queue_lock = Lock(self.connection, self._key('qlock', queue),
+                              timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+            acquired = queue_lock.acquire(blocking=False)
+            if not acquired:
+                return None, True
+            log.debug('acquired swq lock')
+        else:
+            queue_lock = None
+
+        return queue_lock, False
+
     def _heartbeat(self, queue, task_ids):
         """
         Updates the heartbeat for the given task IDs to prevent them from
@@ -478,6 +520,67 @@ class Worker(object):
             success = (return_code == 0)
             return success
 
+    def _process_queue_tasks(self, queue, queue_lock, task_ids, now, log):
+        """Process tasks in queue."""
+
+        processed_count = 0
+
+        # Get all tasks
+        serialized_tasks = self.connection.mget([
+            self._key('task', task_id) for task_id in task_ids
+        ])
+
+        # Parse tasks
+        tasks = []
+        for task_id, serialized_task in zip(task_ids, serialized_tasks):
+            if serialized_task:
+                task_data = json.loads(serialized_task)
+            else:
+                # In the rare case where we don't find the task which is
+                # queued (see ReliabilityTestCase.test_task_disappears),
+                # we log an error and remove the task below. We need to
+                # at least initialize the Task object with an ID so we can
+                # remove it.
+                task_data = {'id': task_id}
+
+            task = Task(self.tiger, queue=queue, _data=task_data,
+                        _state=ACTIVE, _ts=now)
+
+            if not serialized_task:
+                # Remove task as per comment above
+                log.error('not found', task_id=task_id)
+                task._move()
+            elif task.id != task_id:
+                log.error('task ID mismatch', task_id=task_id)
+                # Remove task
+                task._move()
+            else:
+                tasks.append(task)
+
+        # List of task IDs that exist and we will update the heartbeat on.
+        valid_task_ids = set(task.id for task in tasks)
+
+        # Group by task func
+        tasks_by_func = OrderedDict()
+        for task in tasks:
+            func = task.serialized_func
+            if func in tasks_by_func:
+                tasks_by_func[func].append(task)
+            else:
+                tasks_by_func[func] = [task]
+
+        # Execute tasks for each task func
+        for tasks in tasks_by_func.values():
+            success, processed_tasks = self._execute_task_group(queue,
+                    tasks, valid_task_ids, queue_lock)
+            processed_count = processed_count + len(processed_tasks)
+            log.debug('processed', attempted=len(tasks),
+                      processed=processed_count)
+            for task in processed_tasks:
+                self._finish_task_processing(queue, task, success)
+
+        return processed_count
+
     def _process_from_queue(self, queue):
         """
         Internal method to process a task batch from the given queue.
@@ -495,35 +598,11 @@ class Worker(object):
 
         log = self.log.bind(queue=queue)
 
-        # Fetch one item unless this is a batch queue.
-        # XXX: It would be more efficient to loop in reverse order and break.
-        batch_queues = self.config['BATCH_QUEUES']
-        batch_size = 1
-        for part in dotted_parts(queue):
-            if part in batch_queues:
-                batch_size = batch_queues[part]
+        batch_size = self._get_queue_batch_size(queue)
 
-        # Check if this is single worker queue
-        single_worker_queue = False
-        for part in dotted_parts(queue):
-            if part in self.single_worker_queues:
-                log.debug('single worker queue')
-                single_worker_queue = True
-                break
-
-        # Single worker queues require us to get a queue lock before
-        # moving tasks
-        if single_worker_queue:
-            queue_lock = Lock(self.connection, self._key('qlock', queue),
-                              timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
-            acquired = queue_lock.acquire(blocking=False)
-            if not acquired:
-                # Indicate we didn't attempt to process any tasks
-                return [], -1
-            log.debug('acquired swq lock')
-        else:
-            queue_lock = None
-
+        queue_lock, failed_to_acquire = self._get_queue_lock(queue, log)
+        if failed_to_acquire:
+            return [], -1
 
         # Move an item to the active queue, if available.
         # We need to be careful when moving unique tasks: We currently don't
@@ -550,59 +629,8 @@ class Worker(object):
 
         processed_count = 0
         if task_ids:
-            # Get all tasks
-            serialized_tasks = self.connection.mget([
-                self._key('task', task_id) for task_id in task_ids
-            ])
-
-            # Parse tasks
-            tasks = []
-            for task_id, serialized_task in zip(task_ids, serialized_tasks):
-                if serialized_task:
-                    task_data = json.loads(serialized_task)
-                else:
-                    # In the rare case where we don't find the task which is
-                    # queued (see ReliabilityTestCase.test_task_disappears),
-                    # we log an error and remove the task below. We need to
-                    # at least initialize the Task object with an ID so we can
-                    # remove it.
-                    task_data = {'id': task_id}
-
-                task = Task(self.tiger, queue=queue, _data=task_data,
-                            _state=ACTIVE, _ts=now)
-
-                if not serialized_task:
-                    # Remove task as per comment above
-                    log.error('not found', task_id=task_id)
-                    task._move()
-                elif task.id != task_id:
-                    log.error('task ID mismatch', task_id=task_id)
-                    # Remove task
-                    task._move()
-                else:
-                    tasks.append(task)
-
-            # List of task IDs that exist and we will update the heartbeat on.
-            valid_task_ids = set(task.id for task in tasks)
-
-            # Group by task func
-            tasks_by_func = OrderedDict()
-            for task in tasks:
-                func = task.serialized_func
-                if func in tasks_by_func:
-                    tasks_by_func[func].append(task)
-                else:
-                    tasks_by_func[func] = [task]
-
-            # Execute tasks for each task func
-            for tasks in tasks_by_func.values():
-                success, processed_tasks = self._execute_task_group(queue,
-                        tasks, valid_task_ids, queue_lock)
-                processed_count = processed_count + len(processed_tasks)
-                log.debug('processed', attempted=len(tasks),
-                          processed=processed_count)
-                for task in processed_tasks:
-                    self._finish_task_processing(queue, task, success)
+            processed_count = self._process_queue_tasks(queue, queue_lock,
+                                                        task_ids, now, log)
 
         if queue_lock:
             queue_lock.release()
