@@ -142,22 +142,22 @@ class Worker(object):
 
     def _wait_for_new_tasks(self, timeout=0, batch_timeout=0):
         """
-        Check activity channel and sleep as necessary.
+        Check activity channel and wait as necessary.
 
-        This method checks the activity channel for any new queues that have
-        activities and updates the queue_set.
-
-        This method is also used to slow down the main processing loop as much
-        as possible.  Execution will remain in this method for at least timeout
-        unless a new queue is identified via the activity channel or the
-        last worker loop resulted in _did_work to be True.  This method assumes
-        if the last worker execution loop did not process any tasks then there
-        is no need to immediately run the execution loop again.
+        This method is also used to slow down the main processing loop to reduce
+        the affects of rapidly sending Redis commands.  This method will exit
+        for any of these conditions:
+           1. _did_work is True, suggests there could be more work pending
+           2. Found new queue and after batch timeout. Note batch timeout
+              can be zero so it will exit immediately.
+           3. Timeout seconds have passed, this is the maximum time to stay in
+              this method
         """
 
         new_queue_found = False
         start_time = batch_exit = time.time()
         while True:
+            # Check to see if batch_exit has been updated
             if batch_exit > start_time:
                 pubsub_sleep = batch_exit - time.time()
             else:
@@ -166,6 +166,7 @@ class Worker(object):
                                                self._did_work
                                                else pubsub_sleep)
 
+            # Pull remaining messages off of channel
             while message:
                 if message['type'] == 'message':
                     for queue in self._filter_queues([message['data']]):
@@ -180,12 +181,12 @@ class Worker(object):
 
             if self._did_work:
                 break   # Exit immediately if we did work during the last
-                        # execution loop
+                        # execution loop because there might be more work to do
             elif time.time() >= batch_exit and new_queue_found:
-                break   # After finding a new queue stay here a little
-                        # longer to batch up further new queue messages
+                break   # After finding a new queue we can wait until the
+                        # batch timeout expires
             elif time.time() - start_time > timeout:
-                break   # Exit after our maximum delay time
+                break   # Always exit after our maximum wait time
 
 
     def _worker_queue_expired_tasks(self):
