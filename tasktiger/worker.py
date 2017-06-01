@@ -174,6 +174,8 @@ class Worker(object):
                             if not new_queue_found:
                                 new_queue_found = True
                                 batch_exit = time.time() + batch_timeout
+                                if batch_exit > start_time + timeout:
+                                    batch_exit = start_time + timeout
                             self._queue_set.add(queue)
                             self.log.debug('new queue', queue=queue)
 
