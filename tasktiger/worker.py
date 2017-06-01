@@ -679,7 +679,7 @@ class Worker(object):
 
     def _finish_task_processing(self, queue, task, success):
         """
-        After a task is executed, this method is calling and ensures that
+        After a task is executed, this method is called and ensures that
         the task gets properly removed from the ACTIVE queue and, in case of an
         error, retried or marked as failed.
         """
