@@ -169,15 +169,10 @@ class Worker(object):
             # Pull remaining messages off of channel
             while message:
                 if message['type'] == 'message':
-                    for queue in self._filter_queues([message['data']]):
-                        if queue not in self._queue_set:
-                            if not new_queue_found:
-                                new_queue_found = True
-                                batch_exit = time.time() + batch_timeout
-                                if batch_exit > start_time + timeout:
-                                    batch_exit = start_time + timeout
-                            self._queue_set.add(queue)
-                            self.log.debug('new queue', queue=queue)
+                    new_queue_found, batch_exit = self._process_queue_message(
+                        message['data'], new_queue_found, batch_exit,
+                        start_time, timeout, batch_timeout
+                    )
 
                 message = self._pubsub.get_message()
 
@@ -519,6 +514,23 @@ class Worker(object):
 
             success = (return_code == 0)
             return success
+
+    def _process_queue_message(self, message_queue, new_queue_found, batch_exit,
+                               start_time, timeout, batch_timeout):
+        """Process a queue message from activity channel."""
+
+        for queue in self._filter_queues([message_queue]):
+            if queue not in self._queue_set:
+                if not new_queue_found:
+                    new_queue_found = True
+                    batch_exit = time.time() + batch_timeout
+                    # Limit batch_exit to max timeout
+                    if batch_exit > start_time + timeout:
+                        batch_exit = start_time + timeout
+                self._queue_set.add(queue)
+                self.log.debug('new queue', queue=queue)
+
+        return new_queue_found, batch_exit
 
     def _process_queue_tasks(self, queue, queue_lock, task_ids, now, log):
         """Process tasks in queue."""
