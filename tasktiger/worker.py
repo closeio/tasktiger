@@ -429,11 +429,9 @@ class Worker(object):
         else:
             # Main process
             log = log.bind(child_pid=child_pid)
-            log.debug('processing', func=task_func, params=[{
-                    'task_id': task.id,
-                    'args': task.args,
-                    'kwargs': task.kwargs,
-            } for task in tasks])
+            for task in tasks:
+                log.info('processing', func=task_func, task_id=task.id,
+                         params={'args': task.args, 'kwargs': task.kwargs})
 
             # Attach a signal handler to SIGCHLD (sent when the child process
             # exits) so we can capture it.
@@ -728,7 +726,7 @@ class Worker(object):
         def _mark_done():
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
-            log.debug('done')
+            log.info('done')
 
         if success:
             _mark_done()
