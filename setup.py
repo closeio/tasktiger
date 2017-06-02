@@ -3,7 +3,8 @@ from setuptools import setup
 install_requires = [
     'click',
     'redis',
-    'structlog'
+    'structlog',
+    'croniter'
 ]
 
 tests_require = install_requires + [

@@ -1,6 +1,7 @@
 import datetime
+import croniter
 
-__all__ = ['periodic']
+__all__ = ['periodic', 'cron_expr']
 
 def _periodic(dt, period, start_date, end_date):
     if end_date and dt >= end_date:
@@ -39,3 +40,6 @@ def periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
         # Saturday at midnight
         start_date = datetime.datetime(2000, 1, 1)
     return (_periodic, (period, start_date, end_date))
+
+def cron_expr(expr_format):
+    return lambda dt, expr: croniter.croniter(expr, start_time=dt).get_next(ret_type=datetime.datetime), (expr_format, )
