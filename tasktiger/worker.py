@@ -298,7 +298,7 @@ class Worker(object):
         """
         now = time.time()
         self.connection.zadd(self._key(ACTIVE, queue),
-                             **{task_id: now for task_id in task_ids})
+                             **dict((task_id, now) for task_id in task_ids))
 
     def _execute(self, queue, tasks, log, locks, all_task_ids):
         """
@@ -541,7 +541,7 @@ class Worker(object):
                     lock_id = gen_unique_id(
                         task.serialized_func,
                         None,
-                        {key: kwargs.get(key) for key in task.lock_key},
+                        dict((key, kwargs.get(key)) for key in task.lock_key),
                     )
                 else:
                     lock_id = gen_unique_id(
