@@ -4,7 +4,9 @@ install_requires = [
     'click',
     'redis',
     'structlog',
-    'croniter'
+    'croniter',
+    'pytz',
+    'tzlocal',
 ]
 
 tests_require = install_requires + [
