@@ -295,17 +295,21 @@ class TaskTiger(object):
         click options.
         """
 
-        module_names = module or ''
-        for module_name in module_names.split(','):
-            module_name = module_name.strip()
-            if module_name:
-                importlib.import_module(module_name)
-                self.log.debug('imported module', module_name=module_name)
+        try:
+            module_names = module or ''
+            for module_name in module_names.split(','):
+                module_name = module_name.strip()
+                if module_name:
+                    importlib.import_module(module_name)
+                    self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self,
-                        queues.split(',') if queues else None,
-                        exclude_queues.split(',') if exclude_queues else None)
-        worker.run()
+            worker = Worker(self,
+                            queues.split(',') if queues else None,
+                            exclude_queues.split(',') if exclude_queues else None)
+            worker.run()
+        except Exception:
+            self.log.exception('Unhandled exception')
+            raise
 
     def delay(self, func, args=None, kwargs=None, queue=None,
               hard_timeout=None, unique=None, lock=None, lock_key=None,
