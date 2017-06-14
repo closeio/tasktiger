@@ -10,12 +10,12 @@ class TaskTigerTestMixin(object):
     Unit test mixin for tests that use TaskTiger.
     """
 
-    def run_worker(self, tiger, raise_on_errors=True):
+    def run_worker(self, tiger, raise_on_errors=True, **kwargs):
         # A worker run processes queued tasks, and then queues scheduled tasks.
         # We therefore need to run the worker twice to execute due scheduled
         # tasks.
-        Worker(tiger).run(once=True)
-        Worker(tiger).run(once=True)
+        Worker(tiger, **kwargs).run(once=True)
+        Worker(tiger, **kwargs).run(once=True)
 
         # Print any TaskTiger failures for debugging purposes.
         prefix = tiger.config['REDIS_PREFIX']
