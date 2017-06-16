@@ -602,7 +602,8 @@ class Worker(object):
             Task IDs:   List of tasks that were processed (even if there was an
                         error so that client code can assume the queue is empty
                         if nothing was returned)
-            Count:      The number of tasks that were attemped to be executed
+            Count:      The number of tasks that were attemped to be executed or
+                        -1 if the queue lock couldn't be acquired.
         """
         now = time.time()
 
