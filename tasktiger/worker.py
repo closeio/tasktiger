@@ -912,20 +912,20 @@ class Worker(object):
             self.stats_thread = StatsThread(self)
             self.stats_thread.start()
 
-        # Queue any periodic tasks that are not queued yet.
-        self._queue_periodic_tasks()
-
-        # First scan all the available queues for new items until they're empty.
-        # Then, listen to the activity channel.
-        # XXX: This can get inefficient when having lots of queues.
-
-        self._pubsub = self.connection.pubsub()
-        self._pubsub.subscribe(self._key('activity'))
-
-        self._queue_set = set(self._filter_queues(
-                self.connection.smembers(self._key(QUEUED))))
-
         try:
+            # Queue any periodic tasks that are not queued yet.
+            self._queue_periodic_tasks()
+
+            # First scan all the available queues for new items until they're empty.
+            # Then, listen to the activity channel.
+            # XXX: This can get inefficient when having lots of queues.
+
+            self._pubsub = self.connection.pubsub()
+            self._pubsub.subscribe(self._key('activity'))
+
+            self._queue_set = set(self._filter_queues(
+                    self.connection.smembers(self._key(QUEUED))))
+
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
