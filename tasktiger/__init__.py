@@ -89,8 +89,12 @@ class TaskTiger(object):
             'DEFAULT_QUEUE': 'default',
 
             # After how many seconds time out on listening on the activity
-            # channel and check for scheduled or expired items.
+            # channel and check for scheduled or expired items.  The batch
+            # timeout will delay the specified seconds after the first message
+            # to wait for additional messages, useful for very active systems.
+            # Appropriate values: 0 <= SELECT_BATCH_TIMEOUT <= SELECT_TIMEOUT
             'SELECT_TIMEOUT': 1,
+            'SELECT_BATCH_TIMEOUT': 0,
 
             # If this is True, all tasks except future tasks (when=a future
             # time) will be executed locally by blocking until the task
@@ -101,7 +105,7 @@ class TaskTiger(object):
             # task, use the following default method.
             'DEFAULT_RETRY_METHOD': fixed(60, 3),
 
-            # After how many seconds a task that can't require a lock is
+            # After how many seconds a task that can't acquire a lock is
             # retried.
             'LOCK_RETRY': 1,
 
@@ -141,6 +145,14 @@ class TaskTiger(object):
 
             # Upper bound for the time it takes to queue all periodic tasks.
             'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
+
+            # Single worker queues can reduce redis activity in some use cases
+            # by locking at the queue level instead of just at the task or task
+            # group level. These queues will only allow a single worker to
+            # access the queue at a time.  This can be useful in environments
+            # with large queues and many worker processes that need agressive
+            # locking techniques.
+            'SINGLE_WORKER_QUEUES': [],
 
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
@@ -283,17 +295,21 @@ class TaskTiger(object):
         click options.
         """
 
-        module_names = module or ''
-        for module_name in module_names.split(','):
-            module_name = module_name.strip()
-            if module_name:
-                importlib.import_module(module_name)
-                self.log.debug('imported module', module_name=module_name)
+        try:
+            module_names = module or ''
+            for module_name in module_names.split(','):
+                module_name = module_name.strip()
+                if module_name:
+                    importlib.import_module(module_name)
+                    self.log.debug('imported module', module_name=module_name)
 
-        worker = Worker(self,
-                        queues.split(',') if queues else None,
-                        exclude_queues.split(',') if exclude_queues else None)
-        worker.run()
+            worker = Worker(self,
+                            queues.split(',') if queues else None,
+                            exclude_queues.split(',') if exclude_queues else None)
+            worker.run()
+        except Exception:
+            self.log.exception('Unhandled exception')
+            raise
 
     def delay(self, func, args=None, kwargs=None, queue=None,
               hard_timeout=None, unique=None, lock=None, lock_key=None,

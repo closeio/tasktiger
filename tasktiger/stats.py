@@ -13,6 +13,7 @@ class StatsThread(threading.Thread):
         self._time_start = time.time()
         self._time_busy = 0
         self._task_start_time = None
+        self.daemon = True  # Exit process if main thread exits unexpectedly
 
         # Lock that protects stats computations from interleaving. For example,
         # we don't want report_task_start() to run at the same time as
