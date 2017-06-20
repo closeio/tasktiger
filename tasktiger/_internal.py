@@ -1,5 +1,3 @@
-import operator
-import sys
 import binascii
 import calendar
 import datetime
