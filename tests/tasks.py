@@ -21,6 +21,12 @@ def decorated_task(*args, **kwargs):
     pass
 
 
+# This decorator below must not contain parenthesis
+@tiger.task
+def decorated_task_simple_func(*args, **kwargs):
+    pass
+
+
 def exception_task():
     raise Exception('this failed')
 
