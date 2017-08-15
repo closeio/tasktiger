@@ -239,7 +239,7 @@ class TaskTiger(object):
 
         def _delay(func):
             def _delay_inner(*args, **kwargs):
-                return self.delay(func, args=args, kwargs=kwargs)
+                return self.delay(func, when=kwargs.pop('when', None), args=args, kwargs=kwargs)
             return _delay_inner
 
         # Periodic tasks are unique.
