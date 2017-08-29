@@ -476,6 +476,10 @@ class RedisScripts(object):
             for args, options in stack:
                 script_args += [len(args)-1] + list(args)
 
+            # Load scripts before executing
+            if pipeline.scripts:
+                pipeline.load_scripts()
+
             # Run the pipeline
             raw_results = self._execute_pipeline(args=script_args,
                                                  client=client)
