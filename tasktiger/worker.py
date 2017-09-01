@@ -944,7 +944,7 @@ class Worker(object):
             pass
 
         except Exception as e:
-            self.log.exception()
+            self.log.exception(event='exception')
             raise
 
         finally:
