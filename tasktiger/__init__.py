@@ -150,7 +150,7 @@ class TaskTiger(object):
             # by locking at the queue level instead of just at the task or task
             # group level. These queues will only allow a single worker to
             # access the queue at a time.  This can be useful in environments
-            # with large queues and many worker processes that need agressive
+            # with large queues and many worker processes that need aggressive
             # locking techniques.
             'SINGLE_WORKER_QUEUES': [],
 

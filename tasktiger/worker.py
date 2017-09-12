@@ -388,7 +388,7 @@ class Worker(object):
     def _execute(self, queue, tasks, log, locks, queue_lock, all_task_ids):
         """
         Executes the given tasks. Returns a boolean indicating whether
-        the tasks were executed succesfully.
+        the tasks were executed successfully.
         """
 
         # The tasks must use the same function.
@@ -602,7 +602,7 @@ class Worker(object):
             Task IDs:   List of tasks that were processed (even if there was an
                         error so that client code can assume the queue is empty
                         if nothing was returned)
-            Count:      The number of tasks that were attemped to be executed or
+            Count:      The number of tasks that were attempted to be executed or
                         -1 if the queue lock couldn't be acquired.
         """
         now = time.time()
