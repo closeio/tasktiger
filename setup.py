@@ -1,5 +1,8 @@
 from setuptools import setup
 
+with open('README.rst') as file:
+    long_description = file.read()
+
 install_requires = [
     'click',
     'redis',
@@ -13,10 +16,11 @@ tests_require = install_requires + [
 
 setup(
     name='tasktiger',
-    version='0.9.1',
+    version='0.9.2',
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
+    long_description=long_description,
     test_suite='tests',
     tests_require=tests_require,
     platforms='any',
