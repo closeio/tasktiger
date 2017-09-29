@@ -177,6 +177,23 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'other': 0})
 
+    def test_when_decorated(self):
+        decorated_task.delay(when=datetime.timedelta(seconds=DELAY))
+        self._ensure_queues(queued={'default': 0}, scheduled={'default': 1})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0}, scheduled={'default': 1})
+
+        time.sleep(DELAY)
+
+        # Two runs: The first one picks the task up from the "scheduled" queue,
+        # the second one processes it.
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 1}, scheduled={'default': 0})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0}, scheduled={'default': 0})
+
     def test_when(self):
         self.tiger.delay(simple_task, when=datetime.timedelta(seconds=DELAY))
         self._ensure_queues(queued={'default': 0}, scheduled={'default': 1})
