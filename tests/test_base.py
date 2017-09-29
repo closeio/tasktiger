@@ -13,11 +13,12 @@ from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
 from tasktiger._internal import serialize_func_name
 
 from .config import DELAY
-from .tasks import (batch_task, decorated_task, exception_task, file_args_task,
-                    locked_task, long_task_killed, long_task_ok,
-                    non_batch_task, retry_task, retry_task_2, simple_task,
-                    sleep_task, StaticTask, task_on_other_queue, tiger,
-                    unique_task, verify_current_task, verify_current_tasks)
+from .tasks import (batch_task, decorated_task, decorated_task_simple_func,
+                    exception_task, file_args_task, locked_task,
+                    long_task_killed, long_task_ok, non_batch_task, retry_task,
+                    retry_task_2, simple_task, sleep_task, StaticTask,
+                    task_on_other_queue, tiger, unique_task,
+                    verify_current_task, verify_current_tasks)
 from .utils import Patch, external_worker, get_tiger
 
 
@@ -61,6 +62,14 @@ class TestCase(BaseTestCase):
     Run a single test like this:
     pytest tests/test_base.py::TestCase::test_unique_task
     """
+
+    def test_task_decorated_simple_func(self):
+        decorated_task_simple_func.delay(1, 2, a=3, b=4)
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        assert task['func'] == 'tests.tasks:decorated_task_simple_func'
+        assert task['args'] == [1, 2]
+        assert task['kwargs'] == {'a': 3, 'b': 4}
 
     def test_simple_task(self):
         self.tiger.delay(simple_task)

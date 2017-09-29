@@ -222,9 +222,9 @@ class TaskTiger(object):
         """
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
-    def task(self, queue=None, hard_timeout=None, unique=None, lock=None,
-             lock_key=None, retry=None, retry_on=None, retry_method=None,
-             schedule=None, batch=False):
+    def task(self, _fn=None, queue=None, hard_timeout=None, unique=None,
+             lock=None, lock_key=None, retry=None, retry_on=None,
+             retry_method=None, schedule=None, batch=False):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -274,7 +274,7 @@ class TaskTiger(object):
 
             return func
 
-        return _wrap
+        return _wrap if _fn is None else _wrap(_fn)
 
     def run_worker_with_args(self, args):
         """
