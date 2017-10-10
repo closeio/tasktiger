@@ -450,7 +450,7 @@ class RedisScripts(object):
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
 
-    def execute_pipeline(self, pipeline, client=None):
+    def execute_pipeline(self, pipeline):
         """
         Executes the given Redis pipeline as a Lua script. When an error
         occurs, the transaction stops executing, and an exception is raised.
@@ -469,20 +469,26 @@ class RedisScripts(object):
         results = redis_scripts.execute_pipeline(p)
         """
 
+        executing_pipeline = None
         try:
+            executing_pipeline = self.redis.pipeline()
+
+            # Load scripts
+            executing_pipeline.script_load(self._execute_pipeline.script)
+            for s in pipeline.scripts:
+                executing_pipeline.script_load(s.script)
+
             # Prepare args
             stack = pipeline.command_stack
             script_args = [len(stack)]
             for args, options in stack:
                 script_args += [len(args)-1] + list(args)
 
-            # Make sure scripts exist
-            if pipeline.scripts:
-                pipeline.load_scripts()
+            # Run actual pipeline lua script
+            self._execute_pipeline(args=script_args, client=executing_pipeline)
 
-            # Run the pipeline
-            raw_results = self._execute_pipeline(args=script_args,
-                                                 client=client)
+            # Run the pipeline: always load all scripts and run actual pipeline lua script
+            raw_results = executing_pipeline.execute()[-1]
 
             # Run response callbacks on results.
             results = []
@@ -497,4 +503,6 @@ class RedisScripts(object):
             return results
 
         finally:
+            if executing_pipeline:
+                executing_pipeline.reset()
             pipeline.reset()
