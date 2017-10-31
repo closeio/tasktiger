@@ -8,9 +8,12 @@ import tempfile
 import time
 from multiprocessing import Pool, Process
 
+from decimal import Decimal
+
 from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
                        Worker, exponential, fixed, linear)
 from tasktiger._internal import serialize_func_name
+from tasktiger.test_helpers import custom_serializer
 
 from .config import DELAY
 from .tasks import (batch_task, decorated_task, decorated_task_simple_func,
@@ -23,8 +26,10 @@ from .utils import Patch, external_worker, get_tiger
 
 
 class BaseTestCase:
+    CONFIG =  {}
+
     def setup_method(self, method):
-        self.tiger = get_tiger()
+        self.tiger = get_tiger(**self.CONFIG)
         self.conn = self.tiger.connection
         self.conn.flushdb()
 
@@ -1012,3 +1017,32 @@ class TestSingleWorkerQueue(BaseTestCase):
         self._ensure_queues()
 
         worker.join()
+
+
+class TestCustomSerializer(BaseTestCase):
+
+    CONFIG = {
+        'SERIALIZER': custom_serializer
+    }
+
+    def test_task(self):
+        tmpfile = tempfile.NamedTemporaryFile()
+        task_args = (tmpfile.name, 'test', 5)
+        task_kwargs = dict(a=datetime.datetime.now(),
+                           b=Decimal("5.05"))
+
+        self.tiger.delay(file_args_task, args=task_args, kwargs=task_kwargs)
+        queues = self._ensure_queues(queued={'default': 1})
+        task = queues['queued']['default'][0]
+        assert task['func'] == 'tests.tasks:file_args_task'
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0})
+        json_data = tmpfile.read().decode('utf8')
+        assert json.loads(json_data) == {
+            'args': ['test', 5],
+            'kwargs': {
+                'a': task_kwargs['a'].isoformat(),
+                'b': str(task_kwargs['b'])
+            }
+        }

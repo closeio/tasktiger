@@ -159,6 +159,13 @@ class TaskTiger(object):
 
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
+
+            # Serializer / Deserilaizer to use for serializing/deserializing tasks
+
+            'SERIALIZER': json.dumps,
+
+            'DESERIALIZER': json.loads
+
         }
         if config:
             self.config.update(config)
@@ -192,6 +199,9 @@ class TaskTiger(object):
 
         # List of task functions that are executed periodically.
         self.periodic_task_funcs = {}
+
+        self._serialize = self.config['SERIALIZER']
+        self._deserialize = self.config['DESERIALIZER']
 
     def _get_current_task(self):
         if g['current_tasks'] is None:

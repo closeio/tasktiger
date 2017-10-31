@@ -1,3 +1,7 @@
+import json
+import datetime
+import decimal
+
 from .task import Task
 from .worker import Worker
 
@@ -30,3 +34,28 @@ class TaskTigerTestMixin(object):
                 has_errors = True
         if has_errors and raise_on_errors:
             raise Exception('One or more tasks have failed.')
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    """
+    A JSON encoder that allows for more common Python data types.
+
+    In addition to the defaults handled by ``json``, this also supports:
+
+        * ``datetime.datetime``
+        * ``datetime.date``
+        * ``datetime.time``
+        * ``decimal.Decimal``
+
+    """
+    def default(self, data):
+        if isinstance(data, (datetime.datetime, datetime.date, datetime.time)):
+            return data.isoformat()
+        elif isinstance(data, decimal.Decimal):
+            return str(data)
+        else:
+            return super(CustomJSONEncoder, self).default(data)
+
+
+def custom_serializer(obj):
+    return json.dumps(obj, cls=CustomJSONEncoder)

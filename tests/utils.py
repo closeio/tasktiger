@@ -28,7 +28,7 @@ class Patch(object):
         setattr(self.orig_obj, self.func_name, self.orig_func)
 
 
-def get_tiger():
+def get_tiger(**kwargs):
     """
     Sets up logging and returns a new tasktiger instance.
     """
@@ -38,7 +38,7 @@ def get_tiger():
     )
     logging.basicConfig(format='%(message)s')
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
-    tiger = TaskTiger(connection=conn, config={
+    config = {
         # We need this 0 here so we don't pick up scheduled tasks when
         # doing a single worker run.
         'SELECT_TIMEOUT': 0,
@@ -56,7 +56,10 @@ def get_tiger():
         },
 
         'SINGLE_WORKER_QUEUES': ['swq'],
-    })
+    }
+
+    config.update(kwargs)
+    tiger = TaskTiger(connection=conn, config=config)
     tiger.log.setLevel(logging.CRITICAL)
     return tiger
 
