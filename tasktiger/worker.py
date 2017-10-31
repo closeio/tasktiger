@@ -1,7 +1,6 @@
 from collections import OrderedDict
 import errno
 import fcntl
-import json
 import os
 import random
 import select
@@ -327,7 +326,7 @@ class Worker(object):
                     ''.join(traceback.format_exception(*exc_info))
             execution['success'] = success
             execution['host'] = socket.gethostname()
-            serialized_execution = json.dumps(execution)
+            serialized_execution = self.tiger._serialize(execution)
             for task in tasks:
                 self.connection.rpush(self._key('task', task.id, 'executions'),
                                       serialized_execution)
@@ -544,7 +543,7 @@ class Worker(object):
         tasks = []
         for task_id, serialized_task in zip(task_ids, serialized_tasks):
             if serialized_task:
-                task_data = json.loads(serialized_task)
+                task_data = self.tiger._deserialize(serialized_task)
             else:
                 # In the rare case where we don't find the task which is
                 # queued (see ReliabilityTestCase.test_task_disappears),
@@ -739,7 +738,7 @@ class Worker(object):
                 self._key('task', task.id, 'executions'), -1)
 
             if execution:
-                execution = json.loads(execution)
+                execution = self.tiger._deserialize(execution)
 
             if execution and execution.get('retry'):
                 if 'retry_method' in execution:

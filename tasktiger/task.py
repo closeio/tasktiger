@@ -1,5 +1,4 @@
 import datetime
-import json
 import redis
 import time
 
@@ -280,7 +279,7 @@ class Task(object):
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
-        serialized_task = json.dumps(self._data)
+        serialized_task = self.tiger._serialize(self._data)
 
         if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
@@ -341,8 +340,8 @@ class Task(object):
             serialized_executions = []
         # XXX: No timestamp for now
         if serialized_data:
-            data = json.loads(serialized_data)
-            executions = [json.loads(e) for e in serialized_executions if e]
+            data = tiger._deserialize(serialized_data)
+            executions = [tiger._deserialize(e) for e in serialized_executions if e]
             return Task(tiger, queue=queue, _data=data, _state=state,
                         _executions=executions)
         else:
@@ -380,8 +379,8 @@ class Task(object):
                 results = pipeline.execute()
 
                 for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
-                    data = json.loads(serialized_data)
-                    executions = [json.loads(e) for e in serialized_executions if e]
+                    data = tiger._deserialize(serialized_data)
+                    executions = [tiger._deserialize(e) for e in serialized_executions if e]
 
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts, _executions=executions)
@@ -390,7 +389,7 @@ class Task(object):
             else:
                 data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
                 for serialized_data, ts in zip(data, tss):
-                    data = json.loads(serialized_data)
+                    data = tiger._deserialize(serialized_data)
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts)
                     tasks.append(task)
