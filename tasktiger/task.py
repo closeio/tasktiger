@@ -28,6 +28,8 @@ class Task(object):
         self._state = _state
         self._ts = _ts
         self._executions = _executions or []
+        self.json_encoder = self.tiger.config.get('JSON_ENCODER')
+        self.json_decoder = self.tiger.config.get('JSON_DECODER')
 
         # Internal initialization based on raw data.
         if _data is not None:
@@ -57,7 +59,7 @@ class Task(object):
             retry_method = getattr(func, '_task_retry_method', None)
 
         if unique:
-            task_id = gen_unique_id(serialized_name, args, kwargs)
+            task_id = gen_unique_id(serialized_name, args, kwargs, cls=self.json_encoder)
         else:
             task_id = gen_id()
 
@@ -280,7 +282,7 @@ class Task(object):
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
-        serialized_task = json.dumps(self._data)
+        serialized_task = json.dumps(self._data, cls=self.json_encoder)
 
         if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
@@ -341,8 +343,9 @@ class Task(object):
             serialized_executions = []
         # XXX: No timestamp for now
         if serialized_data:
-            data = json.loads(serialized_data)
-            executions = [json.loads(e) for e in serialized_executions if e]
+            json_decoder = tiger.config.get('JSON_DECODER')
+            data = json.loads(serialized_data, cls=json_decoder)
+            executions = [json.loads(e, cls=json_decoder) for e in serialized_executions if e]
             return Task(tiger, queue=queue, _data=data, _state=state,
                         _executions=executions)
         else:
@@ -370,6 +373,8 @@ class Task(object):
 
         tasks = []
 
+        json_decoder = tiger.config.get('JSON_DECODER')
+
         if items:
             tss = [datetime.datetime.utcfromtimestamp(item[1]) for item in items]
             if load_executions:
@@ -380,8 +385,8 @@ class Task(object):
                 results = pipeline.execute()
 
                 for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
-                    data = json.loads(serialized_data)
-                    executions = [json.loads(e) for e in serialized_executions if e]
+                    data = json.loads(serialized_data, cls=json_decoder)
+                    executions = [json.loads(e, cls=json_decoder) for e in serialized_executions if e]
 
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts, _executions=executions)
@@ -390,7 +395,7 @@ class Task(object):
             else:
                 data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
                 for serialized_data, ts in zip(data, tss):
-                    data = json.loads(serialized_data)
+                    data = json.loads(serialized_data, cls=json_decoder)
                     task = Task(tiger, queue=queue, _data=data, _state=state,
                                 _ts=ts)
                     tasks.append(task)

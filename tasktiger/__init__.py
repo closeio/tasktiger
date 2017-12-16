@@ -2,6 +2,7 @@ import click
 from collections import defaultdict
 import importlib
 import logging
+from json import JSONDecoder, JSONEncoder
 import redis
 import structlog
 
@@ -159,6 +160,13 @@ class TaskTiger(object):
 
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
+
+            # Serializer / Deserilaizer to use for serializing/deserializing tasks
+
+            'JSON_ENCODER': JSONEncoder,
+
+            'JSON_DECODER': JSONDecoder
+
         }
         if config:
             self.config.update(config)
