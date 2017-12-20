@@ -271,36 +271,43 @@ class RedisScripts(object):
     def __init__(self, redis):
         self.redis = redis
 
-        self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
-        self._zadd_update_existing = redis.register_script(ZADD_UPDATE_EXISTING)
-        self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
-        self._zadd_update_max = redis.register_script(ZADD_UPDATE_MAX)
+        self._zadd_noupdate = self._register_script(ZADD_NOUPDATE)
+        self._zadd_update_existing = self._register_script(ZADD_UPDATE_EXISTING)
+        self._zadd_update_min = self._register_script(ZADD_UPDATE_MIN)
+        self._zadd_update_max = self._register_script(ZADD_UPDATE_MAX)
 
-        self._zpoppush = redis.register_script(ZPOPPUSH)
-        self._zpoppush_update_sets = redis.register_script(ZPOPPUSH_UPDATE_SETS)
-        self._zpoppush_withscores = redis.register_script(ZPOPPUSH_WITHSCORES)
-        self._zpoppush_exists_min_update_sets = redis.register_script(
+        self._zpoppush = self._register_script(ZPOPPUSH)
+        self._zpoppush_update_sets = self._register_script(ZPOPPUSH_UPDATE_SETS)
+        self._zpoppush_withscores = self._register_script(ZPOPPUSH_WITHSCORES)
+        self._zpoppush_exists_min_update_sets = self._register_script(
             ZPOPPUSH_EXISTS_MIN_UPDATE_SETS)
-        self._zpoppush_exists_ignore_update_sets = redis.register_script(
+        self._zpoppush_exists_ignore_update_sets = self._register_script(
             ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS)
 
-        self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
+        self._srem_if_not_exists = self._register_script(SREM_IF_NOT_EXISTS)
 
-        self._delete_if_not_in_zsets = redis.register_script(
+        self._delete_if_not_in_zsets = self._register_script(
             DELETE_IF_NOT_IN_ZSETS)
 
-        self._fail_if_not_in_zset = redis.register_script(
+        self._fail_if_not_in_zset = self._register_script(
             FAIL_IF_NOT_IN_ZSET)
 
-        self._get_expired_tasks = redis.register_script(
+        self._get_expired_tasks = self._register_script(
             GET_EXPIRED_TASKS)
 
         self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
 
+    def _register_script(self, lua_script):
+        script = self.redis.register_script(lua_script)
+        self.redis.script_load(lua_script)
+        return script
+
     def register_script_from_file(self, filename):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                filename)) as f:
-            return self.redis.register_script(f.read())
+            lua_script = f.read()
+            self.redis.script_load(lua_script)
+            return self.redis.register_script(lua_script)
 
     def zadd(self, key, score, member, mode, client=None):
         """
