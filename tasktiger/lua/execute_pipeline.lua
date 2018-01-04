@@ -5,7 +5,7 @@
 -- registered Redis Lua scripts using EVALSHA.
 --
 -- KEYS = { }
--- ARGV = { n_commands
+-- ARGV = { can_replicate_commands, n_commands
 --          [, cmd_1_n_args, cmd_1_name, [cmd_1_arg_1 , ..., cmd_1_arg_n]
 --            [, ...
 --              [, cmd_n_n_args, cmd_n_name, [cmd_n_arg_1 ..., cmd_1_arg_n]]]]}
@@ -13,10 +13,16 @@
 -- Example: ARGV = { 2, 1, "GET", "key", 0, "INFO" }
 
 local argv = ARGV
-local n_cmds = argv[1]
-local cmd_ptr = 2
+local can_replicate_commands = argv[1]
+local n_cmds = argv[2]
+local cmd_ptr = 3
 local n_args
 local results = {}
+
+if can_replicate_commands == '1' then
+    redis.replicate_commands()
+end
+
 
 -- Returns a subrange of the given table, from (and including) the first
 -- index, to (and including) the last index.
