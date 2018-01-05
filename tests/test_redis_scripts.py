@@ -309,10 +309,10 @@ class TestRedisScripts:
 
     @pytest.mark.parametrize('can_replicate_commands', [True, False])
     def test_execute_pipeline_script(self, can_replicate_commands):
-        if not self.scripts._can_replicate_commands():
+        if not self.scripts.can_replicate_commands:
             assert False, 'test suite needs Redis 3.2 or higher'
 
-        self.scripts.can_replicate_commands = can_replicate_commands
+        self.scripts._can_replicate_commands = can_replicate_commands
 
         self.conn.script_flush()
 

@@ -297,16 +297,18 @@ class RedisScripts(object):
 
         self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
 
-        self.can_replicate_commands = self._can_replicate_commands()
-
-    def _can_replicate_commands(self):
+    @property
+    def can_replicate_commands(self):
         """
         Whether Redis supports single command replication.
         """
-        info = self.redis.info('server')
-        version_info = info['redis_version'].split('.')
-        major, minor = int(version_info[0]), int(version_info[1])
-        return major > 3 or major == 3 and minor >= 2
+        if not hasattr(self, '_can_replicate_commands'):
+            info = self.redis.info('server')
+            version_info = info['redis_version'].split('.')
+            major, minor = int(version_info[0]), int(version_info[1])
+            result = major > 3 or major == 3 and minor >= 2
+            self._can_replicate_commands = result
+        return self._can_replicate_commands
 
     def register_script_from_file(self, filename):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
