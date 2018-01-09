@@ -1,3 +1,5 @@
+# workaround for open() with encoding='' python2/3 compability
+from io import open
 from setuptools import setup
 
 with open('README.rst', encoding='utf-8') as file:
