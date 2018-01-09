@@ -297,6 +297,19 @@ class RedisScripts(object):
 
         self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
 
+    @property
+    def can_replicate_commands(self):
+        """
+        Whether Redis supports single command replication.
+        """
+        if not hasattr(self, '_can_replicate_commands'):
+            info = self.redis.info('server')
+            version_info = info['redis_version'].split('.')
+            major, minor = int(version_info[0]), int(version_info[1])
+            result = major > 3 or major == 3 and minor >= 2
+            self._can_replicate_commands = result
+        return self._can_replicate_commands
+
     def register_script_from_file(self, filename):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                filename)) as f:
@@ -469,20 +482,39 @@ class RedisScripts(object):
         results = redis_scripts.execute_pipeline(p)
         """
 
+        client = client or self.redis
+
+        executing_pipeline = None
         try:
+
             # Prepare args
             stack = pipeline.command_stack
-            script_args = [len(stack)]
+            script_args = [int(self.can_replicate_commands), len(stack)]
             for args, options in stack:
                 script_args += [len(args)-1] + list(args)
 
-            # Make sure scripts exist
-            if pipeline.scripts:
-                pipeline.load_scripts()
-
             # Run the pipeline
-            raw_results = self._execute_pipeline(args=script_args,
-                                                 client=client)
+            if self.can_replicate_commands:  # Redis 3.2 or higher
+                # Make sure scripts exist
+                if pipeline.scripts:
+                    pipeline.load_scripts()
+
+                raw_results = self._execute_pipeline(args=script_args,
+                                                     client=client)
+            else:
+                executing_pipeline = client.pipeline()
+
+                # Always load scripts to avoid issues when Redis loads data
+                # from AOF file / when replicating.
+                for s in pipeline.scripts:
+                    executing_pipeline.script_load(s.script)
+
+                # Run actual pipeline lua script
+                self._execute_pipeline(args=script_args,
+                                       client=executing_pipeline)
+
+                # Always load all scripts and run actual pipeline lua script
+                raw_results = executing_pipeline.execute()[-1]
 
             # Run response callbacks on results.
             results = []
@@ -497,4 +529,6 @@ class RedisScripts(object):
             return results
 
         finally:
+            if executing_pipeline:
+                executing_pipeline.reset()
             pipeline.reset()

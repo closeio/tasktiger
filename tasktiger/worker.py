@@ -908,6 +908,11 @@ class Worker(object):
                                exclude_queues=sorted(self.exclude_queues),
                                single_worker_queues=sorted(self.single_worker_queues))
 
+        if not self.scripts.can_replicate_commands:
+            # Older Redis versions may create additional overhead when
+            # executing pipelines.
+            self.log.warn('using old Redis version')
+
         if self.config['STATS_INTERVAL']:
             self.stats_thread = StatsThread(self)
             self.stats_thread.start()

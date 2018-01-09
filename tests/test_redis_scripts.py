@@ -300,8 +300,34 @@ class TestRedisScripts:
     def test_execute_pipeline_2(self):
         p = self.conn.pipeline()
         p.set('x', 1)
+        # Test that invalid operation halts pipeline.
         p.lrange('x', 0, -1)
         p.set('y', 1)
         pytest.raises(redis.ResponseError, self.scripts.execute_pipeline, p)
         assert self.conn.get('x') == '1'
         assert self.conn.get('y') is None
+
+    @pytest.mark.parametrize('can_replicate_commands', [True, False])
+    def test_execute_pipeline_script(self, can_replicate_commands):
+        if not self.scripts.can_replicate_commands:
+            assert False, 'test suite needs Redis 3.2 or higher'
+
+        self.scripts._can_replicate_commands = can_replicate_commands
+
+        self.conn.script_flush()
+
+        s = self.conn.register_script("redis.call('set', 'x', 'y')")
+
+        # Uncached execution
+        p = self.conn.pipeline()
+        s(client=p)
+        self.scripts.execute_pipeline(p)
+        assert self.conn.get('x') == 'y'
+
+        self.conn.delete('x')
+
+        # Cached execution
+        p = self.conn.pipeline()
+        s(client=p)
+        self.scripts.execute_pipeline(p)
+        assert self.conn.get('x') == 'y'

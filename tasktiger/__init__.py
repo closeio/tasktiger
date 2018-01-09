@@ -163,9 +163,6 @@ class TaskTiger(object):
         if config:
             self.config.update(config)
 
-        self.connection = connection or redis.Redis(decode_responses=True)
-        self.scripts = RedisScripts(self.connection)
-
         if setup_structlog:
             structlog.configure(
                 processors=[
@@ -192,6 +189,9 @@ class TaskTiger(object):
 
         # List of task functions that are executed periodically.
         self.periodic_task_funcs = {}
+
+        self.connection = connection or redis.Redis(decode_responses=True)
+        self.scripts = RedisScripts(self.connection)
 
     def _get_current_task(self):
         if g['current_tasks'] is None:
