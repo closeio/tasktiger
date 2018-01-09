@@ -1,6 +1,6 @@
 from setuptools import setup
 
-with open('README.rst') as file:
+with open('README.rst', encoding='utf-8') as file:
     long_description = file.read()
 
 install_requires = [
@@ -16,7 +16,7 @@ tests_require = install_requires + [
 
 setup(
     name='tasktiger',
-    version='0.9.2',
+    version='0.9.3',
     url='http://github.com/closeio/tasktiger',
     license='MIT',
     description='Python task queue',
@@ -36,6 +36,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
     ],
     packages=[
         'tasktiger',
