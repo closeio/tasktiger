@@ -374,7 +374,7 @@ class Task(object):
             tss = [datetime.datetime.utcfromtimestamp(item[1]) for item in items]
             if load_executions:
                 pipeline = tiger.connection.pipeline()
-                pipeline.mget(['t:task:%s' % item[0] for item in items])
+                pipeline.mget([tiger._key('task', item[0]) for item in items])
                 for item in items:
                     pipeline.lrange(tiger._key('task', item[0], 'executions'), -load_executions, -1)
                 results = pipeline.execute()
