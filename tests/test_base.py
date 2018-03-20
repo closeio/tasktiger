@@ -762,6 +762,26 @@ class TestTasks(BaseTestCase):
         assert task0.queue == tasks[0].queue
         assert task0.queue == 'default'
 
+    def test_tasks_from_queue_with_executions(self):
+        task = self.tiger.delay(exception_task, retry=True)
+        
+        # Get two executions in task
+        Worker(self.tiger).run(once=True)
+        time.sleep(DELAY)
+        # Second run (run twice to move from scheduled to queued)
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+
+        n, tasks = Task.tasks_from_queue(self.tiger, 'default', 'scheduled',
+                                         load_executions=1)
+        assert n == 1
+        assert len(tasks[0].executions) == 1
+
+        n, tasks = Task.tasks_from_queue(self.tiger, 'default', 'scheduled',
+                                         load_executions=10)
+        assert n == 1
+        assert len(tasks[0].executions) == 2
+
     def test_eager(self):
         self.tiger.config['ALWAYS_EAGER'] = True
 
