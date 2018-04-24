@@ -553,7 +553,7 @@ Each queue can have tasks in the following states:
 - ``error``: Tasks that failed with an error.
 
 To get a count of the number of tasks for a given queue and state, use
-``Task.count_tasks_from_queue``. To get a list of all tasks for a given queue
+``Task.task_count_from_queue``. To get a list of all tasks for a given queue
 and state, use ``Task.tasks_from_queue``. The method gives you back a tuple
 containing the total number of tasks in the queue (useful if the tasks are
 truncated) and a list of tasks in the queue, latest first. Using the ``skip``
