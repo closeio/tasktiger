@@ -681,6 +681,18 @@ Example 4: Printing the number of queued tasks for the default queue.
       count=count,
   )
 
+Example 5: Printing all queues with task metrics.
+
+.. code:: python
+
+  from tasktiger import TaskTiger, Task
+
+  tiger = TaskTiger()
+
+  metrics = Task.queue_metrics(tiger)
+
+  print(metrics)
+
 
 Rollbar error handling
 ----------------------

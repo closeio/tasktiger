@@ -364,6 +364,48 @@ class Task(object):
             ))
 
     @classmethod
+    def queue_metrics(self, tiger):
+        """
+        Returns a dict of queue metrics.
+
+        For ex:
+        {
+          'active': {
+            'default': {
+              'total': 3,
+            },
+          },
+          'error': {},
+          'queued': {
+            'default': {
+              'total': 10,
+            },
+            'other': {
+              'total': 42,
+            },
+          },
+          'scheduled': {},
+        }
+        """
+
+        metrics = {
+            'active': {},
+            'error': {},
+            'queued': {},
+            'scheduled': {},
+        }
+        prefix = tiger.config['REDIS_PREFIX'] + ':'
+
+        for state in metrics.keys():
+            queues = tiger.connection.smembers(prefix + state)
+            for queue in queues:
+                metrics[state][queue] = {
+                    'total': self.task_count_from_queue(tiger, queue, state),
+                }
+
+        return metrics
+
+    @classmethod
     def tasks_from_queue(self, tiger, queue, state, skip=0, limit=1000,
                    load_executions=0):
         """
