@@ -1,9 +1,11 @@
 import sys
 
+
 class TaskImportError(ImportError):
     """
     Raised when a task could not be imported.
     """
+
 
 class JobTimeoutException(BaseException):
     """
@@ -11,10 +13,12 @@ class JobTimeoutException(BaseException):
     value.
     """
 
+
 class StopRetry(Exception):
     """
     Raised by a retry function to indicate that the task shouldn't be retried.
     """
+
 
 class RetryException(BaseException):
     """
@@ -31,6 +35,7 @@ class RetryException(BaseException):
         self.method = method
         self.exc_info = sys.exc_info() if original_traceback else None
         self.log_error = log_error
+
 
 class TaskNotFound(Exception):
     """

@@ -5,6 +5,7 @@ import json
 import rollbar
 from rollbar.logger import RollbarHandler
 
+
 class StructlogRollbarHandler(RollbarHandler):
     def __init__(self, prefix, *args, **kwargs):
         """
@@ -17,6 +18,7 @@ class StructlogRollbarHandler(RollbarHandler):
     def format_title(self, data):
         # Keys used to construct the title and for grouping purposes.
         KEYS = ['event', 'func', 'exception_name', 'queue']
+
         def format_field(field, value):
             if field == 'queue':
                 return '%s=%s' % (field, value.split('.')[0])

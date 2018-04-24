@@ -1,5 +1,6 @@
-from redis.lock import LockError
 import time
+from redis import WatchError
+from redis.lock import Lock as RedisLock, LockError
 
 # TODO: Switch to Redlock (http://redis.io/topics/distlock) once the following
 # bugs are fixed:
@@ -7,10 +8,10 @@ import time
 # * https://github.com/andymccurdy/redis-py/issues/629
 # * https://github.com/andymccurdy/redis-py/issues/601
 
+
 # For now, we're using the old-style lock pattern (based on py-redis 2.8.0)
 # The class below additionally catches ValueError for better compatibility with
 # new-style locks (for when we upgrade), and adds a renew() method.
-
 class Lock(object):
     """
     A shared, distributed Lock. Using Redis for locking allows the Lock
@@ -113,11 +114,10 @@ class Lock(object):
             self.redis.getset(self.name, timeout_at)
             self.acquired_until = timeout_at
 
+
 # For now unused:
 # New-style Lock with renew() method (andymccurdy/redis-py#629)
 # XXX: when upgrading to the new-style class, take old-style locks into account
-from redis import WatchError
-from redis.lock import Lock as RedisLock
 class NewStyleLock(RedisLock):
     def renew(self, new_timeout):
         """

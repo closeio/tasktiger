@@ -14,19 +14,35 @@ import traceback
 
 from .redis_lock import Lock
 
-from ._internal import *
+from ._internal import (
+    dotted_parts,
+    g,
+    g_fork_lock,
+    gen_unique_id,
+    import_attribute,
+    reversed_dotted_parts,
+    serialize_retry_method,
+    serialize_func_name,
+    ACTIVE,
+    ERROR,
+    QUEUED,
+    SCHEDULED,
+    TaskImportError,
+)
 from .exceptions import RetryException, TaskNotFound
-from .retry import *
+from .retry import StopRetry
 from .stats import StatsThread
 from .task import Task
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
 __all__ = ['Worker']
 
+
 def sigchld_handler(*args):
     # Nothing to do here. This is just a dummy handler that we set up to catch
     # the child process exiting.
     pass
+
 
 class Worker(object):
     def __init__(self, tiger, queues=None, exclude_queues=None,
@@ -177,14 +193,16 @@ class Worker(object):
                 message = self._pubsub.get_message()
 
             if self._did_work:
-                break   # Exit immediately if we did work during the last
-                        # execution loop because there might be more work to do
+                # Exit immediately if we did work during the last
+                # execution loop because there might be more work to do
+                break
             elif time.time() >= batch_exit and new_queue_found:
-                break   # After finding a new queue we can wait until the
-                        # batch timeout expires
+                # After finding a new queue we can wait until the
+                # batch timeout expires
+                break
             elif time.time() - start_time > timeout:
-                break   # Always exit after our maximum wait time
-
+                # Always exit after our maximum wait time
+                break
 
     def _worker_queue_expired_tasks(self):
         """
@@ -287,8 +305,7 @@ class Worker(object):
                     'kwargs': task.kwargs,
                 } for task in tasks]
                 task_timeouts = [task.hard_timeout for task in tasks if task.hard_timeout is not None]
-                hard_timeout = ((max(task_timeouts) if task_timeouts else None)
-                                or
+                hard_timeout = ((max(task_timeouts) if task_timeouts else None) or
                                 getattr(func, '_task_hard_timeout', None) or
                                 self.config['DEFAULT_HARD_TIMEOUT'])
 
@@ -324,7 +341,7 @@ class Worker(object):
             execution['time_failed'] = time.time()
             # Currently we only log failed task executions to Redis.
             execution['traceback'] = \
-                    ''.join(traceback.format_exception(*exc_info))
+                ''.join(traceback.format_exception(*exc_info))
             execution['success'] = success
             execution['host'] = socket.gethostname()
             serialized_execution = json.dumps(execution)
@@ -460,7 +477,7 @@ class Worker(object):
                 """
                 try:
                     pid, return_code = os.waitpid(child_pid, os.WNOHANG)
-                    if pid != 0: # The child process is done.
+                    if pid != 0:  # The child process is done.
                         return return_code
                 except OSError as e:
                     # Of course EINTR can happen if the child process exits
@@ -746,8 +763,8 @@ class Worker(object):
                     retry_func, retry_args = execution['retry_method']
                 else:
                     # We expect the serialized method here.
-                    retry_func, retry_args = serialize_retry_method( \
-                            self.config['DEFAULT_RETRY_METHOD'])
+                    retry_func, retry_args = serialize_retry_method(
+                        self.config['DEFAULT_RETRY_METHOD'])
                 should_log_error = execution['log_error']
                 should_retry = True
 
@@ -905,8 +922,8 @@ class Worker(object):
         """
 
         self.log.info('ready', queues=sorted(self.only_queues),
-                               exclude_queues=sorted(self.exclude_queues),
-                               single_worker_queues=sorted(self.single_worker_queues))
+           exclude_queues=sorted(self.exclude_queues),
+           single_worker_queues=sorted(self.single_worker_queues))
 
         if not self.scripts.can_replicate_commands:
             # Older Redis versions may create additional overhead when
@@ -948,7 +965,7 @@ class Worker(object):
         except KeyboardInterrupt:
             pass
 
-        except Exception as e:
+        except Exception:
             self.log.exception(event='exception')
             raise
 

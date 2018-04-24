@@ -7,10 +7,10 @@ ZADD_NOUPDATE_TEMPLATE = """
         redis.call('zadd', {key}, {score}, {member})
     end
 """
-ZADD_NOUPDATE =  ZADD_NOUPDATE_TEMPLATE.format(
+ZADD_NOUPDATE = ZADD_NOUPDATE_TEMPLATE.format(
     key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition='not'
 )
-ZADD_UPDATE_EXISTING =  ZADD_NOUPDATE_TEMPLATE.format(
+ZADD_UPDATE_EXISTING = ZADD_NOUPDATE_TEMPLATE.format(
     key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition=''
 )
 ZADD_UPDATE_TEMPLATE = """
@@ -372,7 +372,7 @@ class RedisScripts(object):
         (their score will not be updated).
         """
         if score is None:
-            score = '+inf' # Include all elements.
+            score = '+inf'  # Include all elements.
         if withscores:
             if on_success:
                 raise NotImplementedError()
@@ -438,7 +438,7 @@ class RedisScripts(object):
         ``set_list``. Returns the number of removed elements (0 or 1).
         """
         return self._delete_if_not_in_zsets(
-            keys=[key]+set_list,
+            keys=[key] + set_list,
             args=[member],
             client=client)
 
@@ -491,7 +491,7 @@ class RedisScripts(object):
             stack = pipeline.command_stack
             script_args = [int(self.can_replicate_commands), len(stack)]
             for args, options in stack:
-                script_args += [len(args)-1] + list(args)
+                script_args += [len(args) - 1] + list(args)
 
             # Run the pipeline
             if self.can_replicate_commands:  # Redis 3.2 or higher
