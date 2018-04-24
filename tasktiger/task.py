@@ -8,6 +8,7 @@ from .exceptions import TaskNotFound
 
 __all__ = ['Task']
 
+
 class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
                  hard_timeout=None, unique=None, lock=None, lock_key=None,
@@ -396,6 +397,16 @@ class Task(object):
                     tasks.append(task)
 
         return n, tasks
+
+    @classmethod
+    def task_count_from_queue(self, tiger, queue, state):
+        """
+        Returns the number of tasks in a given queue and task state.
+        """
+
+        key = tiger._key(state, queue)
+        count = tiger.connection.zcount(key, '-inf', '+inf')
+        return count
 
     def n_executions(self):
         """
