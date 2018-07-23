@@ -396,6 +396,21 @@ class TestCase(BaseTestCase):
                             scheduled={'default': 1},
                             error={'default': 0})
 
+    def test_retry_on_invalid(self):
+        """
+        Ensure we handle exceptions that can't be imported.
+        """
+        class CustomException(Exception):
+            """
+            Since this is an inline exception, it's not possible to import it
+            via dotted path.
+            """
+        self.tiger.delay(exception_task, retry_on=[CustomException])
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0},
+                            scheduled={'default': 0},
+                            error={'default': 1})
+
     def test_retry_method(self):
         task = self.tiger.delay(exception_task,
                                 retry_method=linear(DELAY, DELAY, 3))

@@ -220,7 +220,7 @@ class Worker(object):
             self._did_work = True
             try:
                 task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
-                if task.should_retry_on(JobTimeoutException):
+                if task.should_retry_on(JobTimeoutException, logger=self.log):
                     self.log.info('queueing expired task',
                                   queue=queue, task_id=task_id)
 
@@ -762,7 +762,7 @@ class Worker(object):
                             log.error('could not import exception',
                                       exception_name=exception_name)
                         else:
-                            if task.should_retry_on(exception_class):
+                            if task.should_retry_on(exception_class, logger=log):
                                 should_retry = True
                 else:
                     should_retry = True
