@@ -146,13 +146,18 @@ class Task(object):
     def retry_on(self):
         return self._data.get('retry_on')
 
-    def should_retry_on(self, exception_class):
+    def should_retry_on(self, exception_class, logger=None):
         """
         Whether this task should be retried when the given exception occurs.
         """
         for n in (self.retry_on or []):
-            if issubclass(exception_class, import_attribute(n)):
-                return True
+            try:
+                if issubclass(exception_class, import_attribute(n)):
+                    return True
+            except TaskImportError:
+                if logger:
+                    logger.error('should_retry_on could not import class',
+                                 exception_name=n)
         return False
 
     @property
