@@ -3,10 +3,23 @@ import json
 import redis
 import time
 
-from ._internal import *
+from ._internal import (
+    g,
+    gen_id,
+    gen_unique_id,
+    get_timestamp,
+    import_attribute,
+    serialize_func_name,
+    serialize_retry_method,
+    ACTIVE,
+    ERROR,
+    QUEUED,
+    SCHEDULED,
+)
 from .exceptions import TaskNotFound
 
 __all__ = ['Task']
+
 
 class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
@@ -210,24 +223,24 @@ class Task(object):
                 when = time.time()
             if mode:
                 scripts.zadd(_key(to_state, queue), when, self.id,
-                                  mode, client=pipeline)
+                             mode, client=pipeline)
             else:
                 pipeline.zadd(_key(to_state, queue), self.id, when)
             pipeline.sadd(_key(to_state), queue)
         pipeline.zrem(_key(from_state, queue), self.id)
 
-        if not to_state: # Remove the task if necessary
+        if not to_state:  # Remove the task if necessary
             if self.unique:
                 # Only delete if it's not in any other queue
                 check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
                 check_states.remove(from_state)
                 # TODO: Do the following two in one call.
                 scripts.delete_if_not_in_zsets(_key('task', self.id, 'executions'),
-                                                    self.id, [
+                                               self.id, [
                     _key(state, queue) for state in check_states
                 ], client=pipeline)
                 scripts.delete_if_not_in_zsets(_key('task', self.id),
-                                                    self.id, [
+                                               self.id, [
                     _key(state, queue) for state in check_states
                 ], client=pipeline)
             else:
@@ -356,6 +369,48 @@ class Task(object):
             ))
 
     @classmethod
+    def queue_metrics(self, tiger):
+        """
+        Returns a dict of queue metrics.
+
+        For ex:
+        {
+          'active': {
+            'default': {
+              'total': 3,
+            },
+          },
+          'error': {},
+          'queued': {
+            'default': {
+              'total': 10,
+            },
+            'other': {
+              'total': 42,
+            },
+          },
+          'scheduled': {},
+        }
+        """
+
+        metrics = {
+            'active': {},
+            'error': {},
+            'queued': {},
+            'scheduled': {},
+        }
+        prefix = tiger.config['REDIS_PREFIX'] + ':'
+
+        for state in metrics.keys():
+            queues = tiger.connection.smembers(prefix + state)
+            for queue in queues:
+                metrics[state][queue] = {
+                    'total': self.task_count_from_queue(tiger, queue, state),
+                }
+
+        return metrics
+
+    @classmethod
     def tasks_from_queue(self, tiger, queue, state, skip=0, limit=1000,
                    load_executions=0):
         """
@@ -370,7 +425,7 @@ class Task(object):
         key = tiger._key(state, queue)
         pipeline = tiger.connection.pipeline()
         pipeline.zcard(key)
-        pipeline.zrange(key, -limit-skip, -1-skip, withscores=True)
+        pipeline.zrange(key, -limit - skip, -1 - skip, withscores=True)
         n, items = pipeline.execute()
 
         tasks = []
@@ -401,6 +456,16 @@ class Task(object):
                     tasks.append(task)
 
         return n, tasks
+
+    @classmethod
+    def task_count_from_queue(self, tiger, queue, state):
+        """
+        Returns the number of tasks in a given queue and task state.
+        """
+
+        key = tiger._key(state, queue)
+        count = tiger.connection.zcount(key, '-inf', '+inf')
+        return count
 
     def n_executions(self):
         """

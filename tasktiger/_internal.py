@@ -36,6 +36,7 @@ g = {
     'current_tasks': None,
 }
 
+
 # from rq
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
@@ -47,11 +48,13 @@ def import_attribute(name):
     except (ValueError, ImportError, AttributeError) as e:
         raise TaskImportError(e)
 
+
 def gen_id():
     """
     Generates and returns a random hex-encoded 256-bit unique ID.
     """
     return binascii.b2a_hex(os.urandom(32)).decode('utf8')
+
 
 def gen_unique_id(serialized_name, args, kwargs):
     """
@@ -63,6 +66,7 @@ def gen_unique_id(serialized_name, args, kwargs):
         'args': args,
         'kwargs': kwargs,
     }, sort_keys=True).encode('utf8')).hexdigest()
+
 
 def serialize_func_name(func):
     """
@@ -78,17 +82,19 @@ def serialize_func_name(func):
         func_name = func.__name__
     return ':'.join([func.__module__, func_name])
 
+
 def dotted_parts(s):
     """
     For a string "a.b.c", yields "a", "a.b", "a.b.c".
     """
     idx = -1
     while s:
-        idx = s.find('.', idx+1)
+        idx = s.find('.', idx + 1)
         if idx == -1:
             yield s
             break
         yield s[:idx]
+
 
 def reversed_dotted_parts(s):
     """
@@ -103,11 +109,13 @@ def reversed_dotted_parts(s):
             break
         yield s[:idx]
 
+
 def serialize_retry_method(retry_method):
     if callable(retry_method):
         return (serialize_func_name(retry_method), ())
     else:
         return (serialize_func_name(retry_method[0]), retry_method[1])
+
 
 def get_timestamp(when):
     # convert timedelta to datetime
@@ -117,4 +125,4 @@ def get_timestamp(when):
     if when:
         # Convert to unixtime: utctimetuple drops microseconds so we add
         # them manually.
-        return calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+        return calendar.timegm(when.utctimetuple()) + when.microsecond / 1.e6

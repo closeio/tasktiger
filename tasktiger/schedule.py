@@ -2,6 +2,7 @@ import datetime
 
 __all__ = ['periodic']
 
+
 def _periodic(dt, period, start_date, end_date):
     if end_date and dt >= end_date:
         return None
@@ -11,7 +12,7 @@ def _periodic(dt, period, start_date, end_date):
 
     # Determine the next time the task should be run
     delta = dt - start_date
-    seconds = delta.seconds + delta.days*86400
+    seconds = delta.seconds + delta.days * 86400
     runs = seconds // period
     next_run = runs + 1
     next_date = start_date + datetime.timedelta(seconds=next_run * period)
@@ -21,6 +22,7 @@ def _periodic(dt, period, start_date, end_date):
         return None
 
     return next_date
+
 
 def periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
              end_date=None):

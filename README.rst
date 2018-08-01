@@ -22,7 +22,7 @@ Features
 
   TaskTiger forks a subprocess for each task, This comes with several benefits:
   Memory leaks caused by tasks are avoided since the subprocess is terminated
-  when the task is finished. A hard time limit can be set for each task, after 
+  when the task is finished. A hard time limit can be set for each task, after
   which the task is killed if it hasn't completed. To ensure performance, any
   necessary Python modules can be preloaded in the parent process.
 
@@ -552,15 +552,16 @@ Each queue can have tasks in the following states:
 - ``scheduled``: Tasks that are scheduled for later execution.
 - ``error``: Tasks that failed with an error.
 
-To get a list of all tasks for a given queue and state, use
-``Task.tasks_from_queue``. The method gives you back a tuple containing the
-total number of tasks in the queue (useful if the tasks are truncated) and a
-list of tasks in the queue, latest first. Using the ``skip`` and ``limit``
-keyword arguments, you can fetch arbitrary slices of the queue. If you know the
-task ID, you can fetch a given task using ``Task.from_id``. Both methods let
-you load tracebacks from failed task executions using the ``load_executions``
-keyword argument, which accepts an integer indicating how many executions
-should be loaded.
+To get a count of the number of tasks for a given queue and state, use
+``Task.task_count_from_queue``. To get a list of all tasks for a given queue
+and state, use ``Task.tasks_from_queue``. The method gives you back a tuple
+containing the total number of tasks in the queue (useful if the tasks are
+truncated) and a list of tasks in the queue, latest first. Using the ``skip``
+and ``limit`` keyword arguments, you can fetch arbitrary slices of the queue.
+If you know the task ID, you can fetch a given task using ``Task.from_id``.
+Both methods let you load tracebacks from failed task executions using the
+``load_executions`` keyword argument, which accepts an integer indicating how
+many executions should be loaded.
 
 Tasks can also be constructed and queued using the regular constructor, which
 takes the TaskTiger instance, the function name and the options described in
@@ -660,6 +661,37 @@ executed.
   def my_task(args):
       for task in tiger.current_tasks:
           print(task.n_executions())
+
+Example 4: Printing the number of queued tasks for the default queue.
+
+.. code:: python
+
+  from tasktiger import TaskTiger, Task
+
+  QUEUE_NAME = 'default'
+  TASK_STATE = 'queued'
+
+  tiger = TaskTiger()
+
+  count = Task.task_count_from_queue(tiger, QUEUE_NAME, TASK_STATE)
+
+  print('{state} tasks in {queue}: {count}'.format(
+      state=TASK_STATE.title(),
+      queue=QUEUE_NAME,
+      count=count,
+  )
+
+Example 5: Printing all queues with task metrics.
+
+.. code:: python
+
+  from tasktiger import TaskTiger, Task
+
+  tiger = TaskTiger()
+
+  metrics = Task.queue_metrics(tiger)
+
+  print(metrics)
 
 
 Rollbar error handling

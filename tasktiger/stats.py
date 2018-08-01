@@ -3,6 +3,7 @@ import time
 
 from ._internal import g_fork_lock
 
+
 class StatsThread(threading.Thread):
     def __init__(self, tiger):
         super(StatsThread, self).__init__()
