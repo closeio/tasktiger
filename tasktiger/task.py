@@ -409,20 +409,20 @@ class Task(object):
                 results = pipeline.execute()
 
                 for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
-                    data = json.loads(serialized_data)
-                    executions = [json.loads(e) for e in serialized_executions if e]
-
-                    task = Task(tiger, queue=queue, _data=data, _state=state,
-                                _ts=ts, _executions=executions)
-
-                    tasks.append(task)
+                    if serialized_data:
+                        data = json.loads(serialized_data)
+                        executions = [json.loads(e) for e in serialized_executions if e]
+                        task = Task(tiger, queue=queue, _data=data, _state=state,
+                                    _ts=ts, _executions=executions)
+                        tasks.append(task)
             else:
                 data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
                 for serialized_data, ts in zip(data, tss):
-                    data = json.loads(serialized_data)
-                    task = Task(tiger, queue=queue, _data=data, _state=state,
-                                _ts=ts)
-                    tasks.append(task)
+                    if serialized_data:
+                        data = json.loads(serialized_data)
+                        task = Task(tiger, queue=queue, _data=data, _state=state,
+                                    _ts=ts)
+                        tasks.append(task)
 
         return n, tasks
 
