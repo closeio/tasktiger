@@ -11,11 +11,13 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 
 from .redis_lock import Lock
 
 from ._internal import *
 from .exceptions import RetryException, TaskNotFound
+from .redis_semaphore import Semaphore
 from .retry import *
 from .stats import StatsThread
 from .task import Task
@@ -30,7 +32,7 @@ def sigchld_handler(*args):
 
 class Worker(object):
     def __init__(self, tiger, queues=None, exclude_queues=None,
-                 single_worker_queues=None):
+                 single_worker_queues=None, max_workers_per_queue=None):
         """
         Internal method to initialize a worker.
         """
@@ -44,6 +46,8 @@ class Worker(object):
         self._did_work = True
         self._last_task_check = 0
         self.stats_thread = None
+        self.max_workers_per_queue = max_workers_per_queue
+        self.id = str(uuid.uuid4())
 
         if queues:
             self.only_queues = set(queues)
@@ -353,24 +357,25 @@ class Worker(object):
         For single worker queues it returns a Lock if acquired and whether
         it failed to acquire the lock.
         """
+        max_workers = self.max_workers_per_queue
 
         # Check if this is single worker queue
-        single_worker_queue = False
         for part in dotted_parts(queue):
             if part in self.single_worker_queues:
                 log.debug('single worker queue')
-                single_worker_queue = True
+                max_workers = 1
                 break
 
         # Single worker queues require us to get a queue lock before
         # moving tasks
-        if single_worker_queue:
-            queue_lock = Lock(self.connection, self._key('qlock', queue),
-                              timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
-            acquired = queue_lock.acquire(blocking=False)
-            if not acquired:
+        if max_workers:
+            queue_lock = Semaphore(self.connection, self._key('qlock', queue),
+                                  self.id, max=max_workers,
+                                  timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+            locks = queue_lock.acquire()
+            if locks == -1:
                 return None, True
-            log.debug('acquired swq lock')
+            log.debug('acquired queue lock', locks=locks)
         else:
             queue_lock = None
 
@@ -497,7 +502,9 @@ class Worker(object):
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
                     if queue_lock:
-                        queue_lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+                        locks = queue_lock.renew()
+                        if locks == -1:
+                            log.debug('queue lock renew failure')
                 except OSError as e:
                     # EINTR happens if the task completed. Since we're just
                     # renewing locks/heartbeat it's okay if we get interrupted.
@@ -904,9 +911,11 @@ class Worker(object):
         loop even if tasks remain queued.
         """
 
-        self.log.info('ready', queues=sorted(self.only_queues),
+        self.log.info('ready', id=self.id,
+                               queues=sorted(self.only_queues),
                                exclude_queues=sorted(self.exclude_queues),
-                               single_worker_queues=sorted(self.single_worker_queues))
+                               single_worker_queues=sorted(self.single_worker_queues),
+                               max_workers=self.max_workers_per_queue)
 
         if not self.scripts.can_replicate_commands:
             # Older Redis versions may create additional overhead when

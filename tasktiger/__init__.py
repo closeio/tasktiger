@@ -286,7 +286,8 @@ class TaskTiger(object):
         """
         run_worker(args=args, obj=self)
 
-    def run_worker(self, queues=None, module=None, exclude_queues=None):
+    def run_worker(self, queues=None, module=None, exclude_queues=None,
+                   max_workers_per_queue=None):
         """
         Main worker entry point method.
 
@@ -304,7 +305,8 @@ class TaskTiger(object):
 
             worker = Worker(self,
                             queues.split(',') if queues else None,
-                            exclude_queues.split(',') if exclude_queues else None)
+                            exclude_queues.split(',') if exclude_queues else None,
+                            max_workers_per_queue=max_workers_per_queue)
             worker.run()
         except Exception:
             self.log.exception('Unhandled exception')
@@ -391,6 +393,8 @@ class TaskTiger(object):
                                              'queue(s) from processing. '
                                              'Multiple queues can be '
                                              'separated by comma.')
+@click.option('-M', '--max-workers-per-queue', help='Maximum workers allowed '
+                                                    'to process a queue', type=int)
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')
