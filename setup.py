@@ -12,6 +12,7 @@ install_requires = [
 ]
 
 tests_require = install_requires + [
+    'freezefrog',
     'pytest',
     'psutil',
 ]
