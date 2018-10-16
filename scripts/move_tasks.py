@@ -1,4 +1,6 @@
 """Copy TaskTiger keys from one redis instance to another."""
+import sys
+
 import redis
 
 import click
@@ -23,7 +25,7 @@ def move_tasks(source, dest, state, queue, apply):
         executions_data = source.lrange(key_executions, 0, -1)
         print '  task', queue, task
         if apply:
-            print '    Moving'
+            print '    Moving task'
             dest.set(key, task_data)
             dest.zadd(queue_key, task[0], task[1])
         if executions_data is not None and apply:
@@ -36,6 +38,10 @@ def move_queues_in_state(source, dest, state, apply):
     """Move queues in a specific state."""
     print 'queues', state
     key = '{}:{}'.format(PREFIX, state)
+    if apply:
+        if dest.exists(key):
+            print 'Queue exists in destination, aborting!!! {}'.format(key)
+            sys.exit(1)
 
     queues = source.smembers(key)
     for queue in queues:
@@ -54,7 +60,7 @@ def run(apply=False):
     move_queues_in_state(source, dest, 'queued', apply)
     move_queues_in_state(source, dest, 'active', apply)
     move_queues_in_state(source, dest, 'scheduled', apply)
-    move_queues_in_state(source, dest, 'error', apply)
+    # move_queues_in_state(source, dest, 'error', apply)
 
 
 if __name__ == '__main__':
