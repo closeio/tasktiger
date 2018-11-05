@@ -75,11 +75,43 @@ STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 
 
 class TaskTiger(object):
-    def __init__(self, connection=None, config=None, setup_structlog=False):
+    def __init__(
+            self,
+            connection=None,
+            config=None,
+            setup_structlog=False,
+            lazy_init=False):
         """
         Initializes TaskTiger with the given Redis connection and config
         options. Optionally sets up structlog.
+
+        Lazy initialization can be used to create a TaskTiger instance
+        and import decorated tasks before Redis connection and configuration
+        is available.
+
+        You will have to provide Redis and config before scheduling any tasks
+        using init method.
         """
+
+        self.config = None
+
+        # List of task functions that are executed periodically.
+        self.periodic_task_funcs = {}
+
+        if lazy_init:
+            assert connection is None and config is None and setup_structlog is False
+        else:
+            self.init(
+                connection=connection,
+                config=config,
+                setup_structlog=setup_structlog
+            )
+
+    def init(self, connection=None, config=None, setup_structlog=False):
+        """Provide Redis connection and config when lazy initialization is used."""
+
+        if self.config is not None:
+            raise RuntimeError('TaskTiger was already initialized')
 
         self.config = {
             # String that is used to prefix all Redis keys
@@ -200,9 +232,6 @@ class TaskTiger(object):
         if setup_structlog:
             self.log.setLevel(logging.DEBUG)
             logging.basicConfig(format='%(message)s')
-
-        # List of task functions that are executed periodically.
-        self.periodic_task_funcs = {}
 
         self.connection = connection or redis.Redis(decode_responses=True)
         self.scripts = RedisScripts(self.connection)
