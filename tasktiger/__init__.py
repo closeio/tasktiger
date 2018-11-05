@@ -150,6 +150,11 @@ class TaskTiger(object):
             # locking techniques.
             'SINGLE_WORKER_QUEUES': [],
 
+            # The maximum number of workers that will be allow to actively
+            # process tasks for any queue. Similar to Single Worker Queues
+            # but allow specifying any number 1 or greater.
+            'MAX_WORKERS_PER_QUEUE': None,
+
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
             # run_worker() method).

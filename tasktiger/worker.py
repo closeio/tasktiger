@@ -46,7 +46,6 @@ class Worker(object):
         self._did_work = True
         self._last_task_check = 0
         self.stats_thread = None
-        self.max_workers_per_queue = max_workers_per_queue
         self.id = str(uuid.uuid4())
 
         if queues:
@@ -69,6 +68,15 @@ class Worker(object):
             self.single_worker_queues = set(self.config['SINGLE_WORKER_QUEUES'])
         else:
             self.single_worker_queues = set()
+
+        if max_workers_per_queue:
+            self.max_workers_per_queue = max_workers_per_queue
+        elif self.config['MAX_WORKERS_PER_QUEUE']:
+            self.max_workers_per_queue = self.config['MAX_WORKERS_PER_QUEUE']
+        else:
+            self.max_workers_per_queue = None
+        assert (self.max_workers_per_queue is None or
+                self.max_workers_per_queue >= 1)
 
         self._stop_requested = False
 
