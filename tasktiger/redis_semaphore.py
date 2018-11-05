@@ -1,3 +1,5 @@
+"""Redis Semaphore lock."""
+
 import os
 import time
 
@@ -13,12 +15,21 @@ class Semaphore(object):
             self._semaphore = self.redis.register_script(f.read())
 
     def release(self):
+        """Release semaphore."""
+
         self.redis.zrem(self.name, self.id)
 
     def acquire(self):
         """Obtain a semaphore lock."""
-        return self._semaphore(keys=[self.name], args=[self.id, self.max,
-                                                       self.timeout, time.time()])
+        acquired, locks = self._semaphore(keys=[self.name],
+                                          args=[self.id, self.max,
+                                                self.timeout, time.time()])
+
+        # Convert Lua boolean returns to Python booleans
+        acquired = True if acquired == 1 else False
+
+        return acquired, locks
 
     def renew(self):
+        """Attempt to renew semaphore."""
         return self.acquire()

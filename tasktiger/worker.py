@@ -370,10 +370,10 @@ class Worker(object):
         # moving tasks
         if max_workers:
             queue_lock = Semaphore(self.connection, self._key('qlock', queue),
-                                  self.id, max=max_workers,
-                                  timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
-            locks = queue_lock.acquire()
-            if locks == -1:
+                                   self.id, max=max_workers,
+                                   timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
+            acquired, locks = queue_lock.acquire()
+            if not acquired:
                 return None, True
             log.debug('acquired queue lock', locks=locks)
         else:
@@ -502,8 +502,8 @@ class Worker(object):
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
                     if queue_lock:
-                        locks = queue_lock.renew()
-                        if locks == -1:
+                        acquired, locks = queue_lock.renew()
+                        if not acquired:
                             log.debug('queue lock renew failure')
                 except OSError as e:
                     # EINTR happens if the task completed. Since we're just

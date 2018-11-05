@@ -1,8 +1,5 @@
 import datetime
 
-import pytest
-import redis
-
 from freezefrog import FreezeTime
 
 from tasktiger.redis_semaphore import Semaphore
@@ -28,23 +25,27 @@ class TestSemaphore:
 
         # Get lock and then release
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            locks = semaphore1.acquire()
+            acquired, locks = semaphore1.acquire()
+        assert acquired
         assert locks == 1
         semaphore1.release()
 
         # Get lock
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            locks = semaphore2.acquire()
+            acquired, locks = semaphore2.acquire()
+        assert acquired
         assert locks == 1
 
         # Fail getting lock
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 9)):
-            locks = semaphore1.acquire()
-        assert locks == -1
+            acquired, locks = semaphore1.acquire()
+        assert not acquired
+        assert locks == 1
 
         # Successful getting lock after semaphore2 times out
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
-            locks = semaphore1.acquire()
+            acquired, locks = semaphore1.acquire()
+        assert acquired
         assert locks == 1
 
     def test_semaphores_multiple(self):
@@ -59,21 +60,25 @@ class TestSemaphore:
                                timeout=10)
 
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            locks = semaphore1.acquire()
+            acquired, locks = semaphore1.acquire()
+        assert acquired
         assert locks == 1
 
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 4)):
-            locks = semaphore2.acquire()
+            acquired, locks = semaphore2.acquire()
+        assert acquired
         assert locks == 2
 
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 6)):
-            locks = semaphore3.acquire()
-        assert locks == -1
+            acquired, locks = semaphore3.acquire()
+        assert not acquired
+        assert locks == 2
 
         semaphore2.release()
 
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 9)):
-            locks = semaphore3.acquire()
+            acquired, locks = semaphore3.acquire()
+        assert acquired
         assert locks == 2
 
     def test_semaphores_renew(self):
@@ -85,25 +90,30 @@ class TestSemaphore:
                                timeout=10)
 
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            locks = semaphore1.acquire()
+            acquired, locks = semaphore1.acquire()
+        assert acquired
         assert locks == 1
 
         # Renew 5 seconds into lock timeout window
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 5)):
-            locks = semaphore1.renew()
+            acquired, locks = semaphore1.renew()
+        assert acquired
         assert locks == 1
 
         # Fail getting a lock
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 14)):
-            locks = semaphore2.acquire()
-        assert locks == -1
+            acquired, locks = semaphore2.acquire()
+        assert not acquired
+        assert locks == 1
 
         # Successful getting lock after renewed timeout window passes
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 15)):
-            locks = semaphore2.acquire()
+            acquired, locks = semaphore2.acquire()
+        assert acquired
         assert locks == 1
 
         # Fail renewing
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 15)):
-            locks = semaphore1.renew()
-        assert locks == -1
+            acquired, locks = semaphore1.renew()
+        assert not acquired
+        assert locks == 1
