@@ -1,7 +1,9 @@
 import threading
 import time
 
-from ._internal import g_fork_lock
+import redis
+
+from ._internal import ACTIVE, g_fork_lock, QUEUED, SCHEDULED
 
 class StatsThread(threading.Thread):
     def __init__(self, tiger):
@@ -65,3 +67,13 @@ class StatsThread(threading.Thread):
 
     def stop(self):
         self._stop_event.set()
+
+
+def get_queue_size(tiger, queue_name):
+    """Get size of this task's queue for each state."""
+    pipeline = tiger.connection.pipeline()
+    pipeline.zcard(tiger._key(QUEUED, queue_name))
+    pipeline.zcard(tiger._key(SCHEDULED, queue_name))
+    pipeline.zcard(tiger._key(ACTIVE, queue_name))
+    results = pipeline.execute()
+    return dict(zip([QUEUED, SCHEDULED, ACTIVE], results))

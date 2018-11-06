@@ -4,7 +4,8 @@ import redis
 import time
 
 from ._internal import *
-from .exceptions import TaskNotFound
+from .exceptions import QueueFullException, TaskNotFound
+from .stats import get_queue_size
 
 __all__ = ['Task']
 
@@ -268,7 +269,7 @@ class Task(object):
             g['current_task_is_batch'] = None
             g['current_tasks'] = None
 
-    def delay(self, when=None):
+    def delay(self, when=None, max_queue_size=None):
         tiger = self.tiger
 
         ts = get_timestamp(when)
@@ -290,12 +291,19 @@ class Task(object):
         if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
 
+        if max_queue_size:
+            # This will fail adding a unique task that already is queued but
+            # the queue size is at the max
+            queue_size = sum(get_queue_size(self.tiger, self.queue).values())
+            if queue_size >= max_queue_size:
+                raise QueueFullException('Queue size: {}'.format(queue_size))
+
         pipeline = tiger.connection.pipeline()
         pipeline.sadd(tiger._key(state), self.queue)
         pipeline.set(tiger._key('task', self.id), serialized_task)
         # In case of unique tasks, don't update the score.
         tiger.scripts.zadd(tiger._key(state, self.queue), ts, self.id,
-                          mode='nx', client=pipeline)
+                           mode='nx', client=pipeline)
         if state == QUEUED:
             pipeline.publish(tiger._key('activity'), self.queue)
         pipeline.execute()

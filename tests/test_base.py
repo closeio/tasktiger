@@ -11,6 +11,7 @@ from multiprocessing import Pool, Process
 from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
                        Worker, exponential, fixed, linear)
 from tasktiger._internal import serialize_func_name
+from tasktiger.exceptions import QueueFullException
 
 from .config import DELAY
 from .tasks import (batch_task, decorated_task, decorated_task_simple_func,
@@ -100,6 +101,14 @@ class TestCase(BaseTestCase):
         assert task['func'] == 'tests.tasks:decorated_task'
         assert task['args'] == [1, 2]
         assert task['kwargs'] == {'a': 3, 'b': 4}
+
+    def test_task_delay_with_max_queue_size(self):
+        self.tiger.delay(simple_task, queue='a', max_queue_size=1)
+        queues = self._ensure_queues(queued={'a': 1})
+        task = queues['queued']['a'][0]
+        assert task['func'] == 'tests.tasks:simple_task'
+        with pytest.raises(QueueFullException):
+            self.tiger.delay(simple_task, queue='a', max_queue_size=1)
 
     def test_file_args_task(self):
         # Use a temp file to communicate since we're forking.
@@ -779,7 +788,7 @@ class TestTasks(BaseTestCase):
 
     def test_tasks_from_queue_with_executions(self):
         task = self.tiger.delay(exception_task, retry=True)
-        
+
         # Get two executions in task
         Worker(self.tiger).run(once=True)
         time.sleep(DELAY)

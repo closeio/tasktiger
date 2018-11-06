@@ -11,6 +11,13 @@ class JobTimeoutException(BaseException):
     value.
     """
 
+class QueueFullException(BaseException):
+    """
+    Raised when a task is attempted to be queued using max_queue_size and the
+    total queue size (QUEUED + SCHEDULED + ACTIVE) is greater than or equal to
+    max_queue_size.
+    """
+
 class StopRetry(Exception):
     """
     Raised by a retry function to indicate that the task shouldn't be retried.
