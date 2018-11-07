@@ -510,7 +510,7 @@ class Worker(object):
                     for lock in locks:
                         lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
                     if queue_lock:
-                        acquired, locks = queue_lock.renew()
+                        acquired, current_locks = queue_lock.renew()
                         if not acquired:
                             log.debug('queue lock renew failure')
                 except OSError as e:
