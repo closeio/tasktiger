@@ -224,7 +224,8 @@ class TaskTiger(object):
 
     def task(self, _fn=None, queue=None, hard_timeout=None, unique=None,
              lock=None, lock_key=None, retry=None, retry_on=None,
-             retry_method=None, schedule=None, batch=False):
+             retry_method=None, schedule=None, batch=False,
+             max_queue_size=None):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -263,6 +264,8 @@ class TaskTiger(object):
                 func._task_batch = batch
             if schedule is not None:
                 func._task_schedule = schedule
+            if max_queue_size is not None:
+                func._task_max_queue_size = max_queue_size
 
             func.delay = _delay(func)
 

@@ -12,6 +12,7 @@ class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
                  hard_timeout=None, unique=None, lock=None, lock_key=None,
                  retry=None, retry_on=None, retry_method=None,
+                 max_queue_size=None,
 
                  # internal variables
                  _data=None, _state=None, _ts=None, _executions=None):
@@ -56,6 +57,9 @@ class Task(object):
         if retry_method is None:
             retry_method = getattr(func, '_task_retry_method', None)
 
+        if max_queue_size is None:
+            max_queue_size = getattr(func, '_task_max_queue_size', None)
+
         if unique:
             task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
@@ -87,6 +91,8 @@ class Task(object):
             if retry_on:
                 task['retry_on'] = [serialize_func_name(cls)
                                     for cls in retry_on]
+        if max_queue_size:
+            task['max_queue_size'] = max_queue_size
 
         self._data = task
 
@@ -275,6 +281,9 @@ class Task(object):
 
         now = time.time()
         self._data['time_last_queued'] = now
+
+        if max_queue_size is None:
+            max_queue_size = self._data.get('max_queue_size')
 
         if not ts or ts <= now:
             # Immediately queue if the timestamp is in the past.
