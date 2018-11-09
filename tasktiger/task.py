@@ -5,7 +5,6 @@ import time
 
 from ._internal import *
 from .exceptions import QueueFullException, TaskNotFound
-from .stats import get_queue_size
 
 __all__ = ['Task']
 
@@ -291,7 +290,7 @@ class Task(object):
         if max_queue_size:
             # This will fail adding a unique task that already is queued but
             # the queue size is at the max
-            queue_size = sum(get_queue_size(tiger, self.queue).values())
+            queue_size = tiger.get_total_queue_size(self.queue)
             if queue_size >= max_queue_size:
                 raise QueueFullException('Queue size: {}'.format(queue_size))
 

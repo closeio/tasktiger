@@ -324,6 +324,24 @@ class TaskTiger(object):
 
         return task
 
+    def get_queue_sizes(self, queue):
+        """
+        Get size of this task's queue for each state.
+
+        Returns dict with queue size for the QUEUED, SCHEDULED, and ACTIVE
+        states. Does not include size of error queue.
+        """
+        states = [QUEUED, SCHEDULED, ACTIVE]
+        pipeline = self.connection.pipeline()
+        for state in states:
+            pipeline.zcard(self._key(state, queue))
+        results = pipeline.execute()
+        return dict(zip(states, results))
+
+    def get_total_queue_size(self, queue):
+        """Get total queue size for QUEUED, SCHEDULED, and ACTIVE states."""
+        return sum(self.get_queue_sizes(queue).values())
+
     def get_queue_stats(self):
         """
         Returns a dict with stats about all the queues. The keys are the queue

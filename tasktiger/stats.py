@@ -67,13 +67,3 @@ class StatsThread(threading.Thread):
 
     def stop(self):
         self._stop_event.set()
-
-
-def get_queue_size(tiger, queue_name):
-    """Get size of this task's queue for each state."""
-    pipeline = tiger.connection.pipeline()
-    pipeline.zcard(tiger._key(QUEUED, queue_name))
-    pipeline.zcard(tiger._key(SCHEDULED, queue_name))
-    pipeline.zcard(tiger._key(ACTIVE, queue_name))
-    results = pipeline.execute()
-    return dict(zip([QUEUED, SCHEDULED, ACTIVE], results))
