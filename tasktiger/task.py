@@ -288,15 +288,15 @@ class Task(object):
         # ensure there are no serialization errors.
         serialized_task = json.dumps(self._data)
 
-        if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
-            return self.execute()
-
         if max_queue_size:
             # This will fail adding a unique task that already is queued but
             # the queue size is at the max
-            queue_size = sum(get_queue_size(self.tiger, self.queue).values())
+            queue_size = sum(get_queue_size(tiger, self.queue).values())
             if queue_size >= max_queue_size:
                 raise QueueFullException('Queue size: {}'.format(queue_size))
+
+        if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
+            return self.execute()
 
         pipeline = tiger.connection.pipeline()
         pipeline.sadd(tiger._key(state), self.queue)
