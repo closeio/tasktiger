@@ -1,9 +1,6 @@
 import threading
 import time
 
-import redis
-
-from ._internal import ACTIVE, g_fork_lock, QUEUED, SCHEDULED
 
 class StatsThread(threading.Thread):
     def __init__(self, tiger):
