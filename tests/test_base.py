@@ -1106,11 +1106,11 @@ class TestMaxQueue(BaseTestCase):
                             queued={'a': 1},
                             scheduled={'a': 1})
 
-        # Verify failing to queue new task
+        # Should fail to queue task to run immediately
         with pytest.raises(QueueFullException):
             self.tiger.delay(simple_task, queue='a', max_queue_size=3)
 
-        # Verify failing to schedule new task
+        # Should fail to queue task to run in the future
         with pytest.raises(QueueFullException):
             self.tiger.delay(simple_task, queue='a', max_queue_size=3,
                              when=datetime.timedelta(seconds=10))
