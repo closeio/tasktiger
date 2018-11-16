@@ -21,6 +21,7 @@ class Semaphore(object):
 
     def acquire(self):
         """Obtain a semaphore lock."""
+
         acquired, locks = self._semaphore(keys=[self.name],
                                           args=[self.id, self.max,
                                                 self.timeout, time.time()])
@@ -31,5 +32,12 @@ class Semaphore(object):
         return acquired, locks
 
     def renew(self):
-        """Attempt to renew semaphore."""
+        """
+        Attempt to renew semaphore.
+
+        Technically this doesn't know the difference between losing the lock
+        but then successfully getting a new lock versus renewing your lock
+        before the timeout. Both will return True.
+        """
+
         return self.acquire()
