@@ -17,7 +17,7 @@ from .tasks import (batch_task, decorated_task, decorated_task_simple_func,
                     exception_task, file_args_task, locked_task,
                     long_task_killed, long_task_ok, non_batch_task, retry_task,
                     retry_task_2, simple_task, sleep_task, StaticTask,
-                    task_on_other_queue, tiger, unique_task,
+                    task_on_other_queue, unique_task,
                     verify_current_task, verify_current_tasks)
 from .utils import Patch, external_worker, get_tiger
 
@@ -999,51 +999,3 @@ class TestReliability(BaseTestCase):
             self._ensure_queues()
             assert len(errors) == 1
             assert "not found" in errors[0]
-
-
-class TestSingleWorkerQueue(BaseTestCase):
-    """Single Worker Queue tests."""
-
-    def test_single_worker_queue(self):
-        """Test Single Worker Queue."""
-
-        # Queue two tasks
-        task = Task(self.tiger, long_task_ok, queue='swq')
-        task.delay()
-        task = Task(self.tiger, long_task_ok, queue='swq')
-        task.delay()
-        self._ensure_queues(queued={'swq': 2})
-
-        # Start a worker and wait until it starts processing.
-        # It should start processing one task and hold a lock on the queue
-        worker = Process(target=external_worker)
-        worker.start()
-        time.sleep(DELAY)
-
-        # This worker should fail to get the queue lock and exit immediately
-        Worker(tiger).run(once=True, force_once=True)
-        self._ensure_queues(active={'swq': 1}, queued={'swq': 1})
-        # Wait for external worker
-        worker.join()
-
-        # Retest using a non-single worker queue
-        # Queue two tasks
-        task = Task(self.tiger, long_task_ok, queue='not_swq')
-        task.delay()
-        task = Task(self.tiger, long_task_ok, queue='not_swq')
-        task.delay()
-        self._ensure_queues(queued={'not_swq': 2})
-
-        # Start a worker and wait until it starts processing.
-        # It should start processing one task
-        worker = Process(target=external_worker)
-        worker.start()
-        time.sleep(DELAY)
-
-        # This worker should process the second task
-        Worker(tiger).run(once=True, force_once=True)
-
-        # Queues should be empty
-        self._ensure_queues()
-
-        worker.join()
