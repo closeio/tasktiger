@@ -779,7 +779,7 @@ class TestTasks(BaseTestCase):
 
     def test_tasks_from_queue_with_executions(self):
         task = self.tiger.delay(exception_task, retry=True)
-        
+
         # Get two executions in task
         Worker(self.tiger).run(once=True)
         time.sleep(DELAY)
