@@ -164,6 +164,12 @@ class TaskTiger(object):
 
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
+
+            # If set to a callable, these are executed for each child process
+            # before and after processing task(s). The callable should support
+            # any number of kwargs for future compatibility.
+            'CHILD_INIT_FUNCTION': None,
+            'CHILD_SHUTDOWN_FUNCTION': None,
         }
         if config:
             self.config.update(config)
