@@ -24,15 +24,24 @@ local timeout = tonumber(ARGV[3])
 --local now = tonumber(time[1])
 local now = tonumber(ARGV[4])
 
---Remove expired locks and update TTL for semaphore key
+--Remove expired locks
 redis.call("ZREMRANGEBYSCORE", semaphore_key, 0, now - timeout)
+
+--Check if there is a system lock which will override all other locks
+if redis.call("ZSCORE", semaphore_key, "SYSTEM_LOCK") ~= false then
+  return {false, -1}
+end
+
+--Update TTL for semaphore key. This is done after checking
+--for a system lock so we don't accidently make the TTL
+--less than the system lock timeout.
 redis.call("EXPIRE", semaphore_key, math.ceil(timeout * 2))
 
 -- Get current count of active locks
 local lock_count = redis.call("ZCARD", semaphore_key)
 
 -- Check if this lock_id already has an active lock
-local updating_lock = redis.call("ZRANK", semaphore_key, lock_id)
+local updating_lock = redis.call("ZSCORE", semaphore_key, lock_id)
 
 -- The lock count will increase by 1 if we are getting a new lock
 local current_lock_count = lock_count

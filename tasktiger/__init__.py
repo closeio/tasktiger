@@ -3,6 +3,7 @@ from collections import defaultdict
 import importlib
 import logging
 import redis
+import time
 import structlog
 
 from .redis_scripts import RedisScripts
@@ -12,7 +13,7 @@ from .exceptions import *
 from .retry import *
 from .schedule import *
 from .task import Task
-from .worker import Worker
+from .worker import LOCK_REDIS_KEY, Worker
 
 __all__ = ['TaskTiger', 'Worker', 'Task',
 
@@ -353,6 +354,25 @@ class TaskTiger(object):
         """Get total queue size for QUEUED, SCHEDULED, and ACTIVE states."""
 
         return sum(self.get_queue_sizes(queue).values())
+
+    def queue_system_lock(self, queue, timeout):
+        """
+        Set system lock on a queue.
+
+        Max workers for this queue must be used for this to have any effect.
+
+        This will keep workers from processing tasks for this queue until
+        the timeout has expired. Active tasks will continue processing their
+        current task.
+
+        timeout is number of seconds to hold the lock
+        """
+
+        key = self._key(LOCK_REDIS_KEY, queue)
+        pipeline = self.connection.pipeline()
+        pipeline.zadd(key, 'SYSTEM_LOCK', time.time()+timeout)
+        pipeline.expire(key, timeout + 10)  # timeout plus buffer for troubleshooting
+        pipeline.execute()
 
     def get_queue_stats(self):
         """

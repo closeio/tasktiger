@@ -1,8 +1,10 @@
 """Test workers."""
 
+import datetime
 from multiprocessing import Process
 import time
 
+from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
 
@@ -92,3 +94,31 @@ class TestMaxWorkers(BaseTestCase):
         self._ensure_queues()
 
         worker.join()
+
+    def test_queue_system_lock(self):
+        """Test queue system lock."""
+
+        config = {'MAX_WORKERS_PER_QUEUE': 2}
+        self.tiger.config.update(config)
+
+        with FreezeTime(datetime.datetime(2014, 1, 1)):
+            # Queue three tasks
+            for i in range(0, 3):
+                task = Task(self.tiger, long_task_ok, queue='a')
+                task.delay()
+            self._ensure_queues(queued={'a': 3})
+
+            # Ensure we can process one
+            Worker(self.tiger).run(once=True, force_once=True)
+            self._ensure_queues(queued={'a': 2})
+
+            # Set system lock so no processing should occur for 10 seconds
+            self.tiger.queue_system_lock('a', 10)
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
+            Worker(self.tiger).run(once=True, force_once=True)
+            self._ensure_queues(queued={'a': 2})
+
+        # 11 seconds in the future the lock should have expired
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 11)):
+            Worker(self.tiger).run(once=True, force_once=True)
+            self._ensure_queues(queued={'a': 1})

@@ -23,6 +23,8 @@ from .stats import StatsThread
 from .task import Task
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
+LOCK_REDIS_KEY = 'qlock'
+
 __all__ = ['Worker']
 
 def sigchld_handler(*args):
@@ -377,7 +379,8 @@ class Worker(object):
         # Single worker queues require us to get a queue lock before
         # moving tasks
         if max_workers:
-            queue_lock = Semaphore(self.connection, self._key('qlock', queue),
+            queue_lock = Semaphore(self.connection,
+                                   self._key(LOCK_REDIS_KEY, queue),
                                    self.id, max=max_workers,
                                    timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
             acquired, locks = queue_lock.acquire()
