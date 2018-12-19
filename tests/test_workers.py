@@ -113,7 +113,11 @@ class TestMaxWorkers(BaseTestCase):
             self._ensure_queues(queued={'a': 2})
 
             # Set system lock so no processing should occur for 10 seconds
-            self.tiger.queue_system_lock('a', 10)
+            self.tiger.set_queue_system_lock('a', 10)
+
+            lock_timeout = self.tiger.get_queue_system_lock('a')
+            assert lock_timeout == time.time() + 10
+
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
             Worker(self.tiger).run(once=True, force_once=True)
             self._ensure_queues(queued={'a': 2})

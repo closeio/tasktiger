@@ -68,6 +68,9 @@ Queue periodic tasks lock
 STRING <prefix>:queue_periodic_tasks_lock
 """
 
+SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
+
+
 class TaskTiger(object):
     def __init__(self, connection=None, config=None, setup_structlog=False):
         """
@@ -355,7 +358,17 @@ class TaskTiger(object):
 
         return sum(self.get_queue_sizes(queue).values())
 
-    def queue_system_lock(self, queue, timeout):
+    def get_queue_system_lock(self, queue):
+        """
+        Get system lock timeout
+
+        Returns timeout of system lock or None if lock does not exist
+        """
+
+        key = self._key(LOCK_REDIS_KEY, queue)
+        return self.connection.zscore(key, SYSTEM_LOCK_ID)
+
+    def set_queue_system_lock(self, queue, timeout):
         """
         Set system lock on a queue.
 
@@ -370,7 +383,7 @@ class TaskTiger(object):
 
         key = self._key(LOCK_REDIS_KEY, queue)
         pipeline = self.connection.pipeline()
-        pipeline.zadd(key, 'SYSTEM_LOCK', time.time()+timeout)
+        pipeline.zadd(key, SYSTEM_LOCK_ID, time.time()+timeout)
         pipeline.expire(key, timeout + 10)  # timeout plus buffer for troubleshooting
         pipeline.execute()
 
