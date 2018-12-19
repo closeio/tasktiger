@@ -7,11 +7,12 @@ with open('README.rst', encoding='utf-8') as file:
 
 install_requires = [
     'click',
-    'redis',
+    'redis==2.10.6',
     'structlog'
 ]
 
 tests_require = install_requires + [
+    'freezefrog',
     'pytest',
     'psutil',
 ]

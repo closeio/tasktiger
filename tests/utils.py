@@ -61,10 +61,12 @@ def get_tiger():
     return tiger
 
 
-def external_worker(n=None):
+def external_worker(n=None, patch_config=None):
     """
     Runs a worker. To be used with multiprocessing.Pool.map.
     """
     tiger = get_tiger()
+    if patch_config:
+        tiger.config.update(patch_config)
     worker = Worker(tiger)
     worker.run(once=True)
