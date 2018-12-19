@@ -66,6 +66,9 @@ STRING <prefix>:lock:<lock_hash>
 
 Queue periodic tasks lock
 STRING <prefix>:queue_periodic_tasks_lock
+
+Queue locks scored by timeout
+ZSET <prefix>:qlock:<queue>
 """
 
 SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
