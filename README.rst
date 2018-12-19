@@ -22,7 +22,7 @@ Features
 
   TaskTiger forks a subprocess for each task, This comes with several benefits:
   Memory leaks caused by tasks are avoided since the subprocess is terminated
-  when the task is finished. A hard time limit can be set for each task, after 
+  when the task is finished. A hard time limit can be set for each task, after
   which the task is killed if it hasn't completed. To ensure performance, any
   necessary Python modules can be preloaded in the parent process.
 
@@ -59,7 +59,7 @@ Features
   worker to process ``process_emails`` and any of its subqueues. Since tasks
   are picked from a random queue, all customers get equal treatment: If one
   customer is queueing many tasks it can't block other customers' tasks from
-  being processed.
+  being processed. A maximum queue size can also be enforced.
 
 - Batch queues
 
@@ -276,6 +276,13 @@ The following options are supported by both ``delay`` and the task decorator:
   If set, this implies ``lock=True`` and specifies the list of kwargs to
   use to construct the lock key. By default, all args and kwargs are
   serialized and hashed.
+
+- ``max_queue_size``
+
+  A maximum queue size can be enforced by setting this to an integer value.
+  The ``QueueFullException`` exception will be raised when queuing a task if
+  this limit is reached. Tasks in the ``active``, ``scheduled``, and ``queued``
+  states are counted against this limit.
 
 - ``when``
 

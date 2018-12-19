@@ -4,7 +4,7 @@ import redis
 import time
 
 from ._internal import *
-from .exceptions import TaskNotFound
+from .exceptions import QueueFullException, TaskNotFound
 
 __all__ = ['Task']
 
@@ -12,6 +12,7 @@ class Task(object):
     def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
                  hard_timeout=None, unique=None, lock=None, lock_key=None,
                  retry=None, retry_on=None, retry_method=None,
+                 max_queue_size=None,
 
                  # internal variables
                  _data=None, _state=None, _ts=None, _executions=None):
@@ -56,6 +57,9 @@ class Task(object):
         if retry_method is None:
             retry_method = getattr(func, '_task_retry_method', None)
 
+        if max_queue_size is None:
+            max_queue_size = getattr(func, '_task_max_queue_size', None)
+
         if unique:
             task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
@@ -87,6 +91,8 @@ class Task(object):
             if retry_on:
                 task['retry_on'] = [serialize_func_name(cls)
                                     for cls in retry_on]
+        if max_queue_size:
+            task['max_queue_size'] = max_queue_size
 
         self._data = task
 
@@ -268,13 +274,16 @@ class Task(object):
             g['current_task_is_batch'] = None
             g['current_tasks'] = None
 
-    def delay(self, when=None):
+    def delay(self, when=None, max_queue_size=None):
         tiger = self.tiger
 
         ts = get_timestamp(when)
 
         now = time.time()
         self._data['time_last_queued'] = now
+
+        if max_queue_size is None:
+            max_queue_size = self._data.get('max_queue_size')
 
         if not ts or ts <= now:
             # Immediately queue if the timestamp is in the past.
@@ -287,6 +296,13 @@ class Task(object):
         # ensure there are no serialization errors.
         serialized_task = json.dumps(self._data)
 
+        if max_queue_size:
+            # This will fail adding a unique task that already is queued but
+            # the queue size is at the max
+            queue_size = tiger.get_total_queue_size(self.queue)
+            if queue_size >= max_queue_size:
+                raise QueueFullException('Queue size: {}'.format(queue_size))
+
         if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
             return self.execute()
 
@@ -295,7 +311,7 @@ class Task(object):
         pipeline.set(tiger._key('task', self.id), serialized_task)
         # In case of unique tasks, don't update the score.
         tiger.scripts.zadd(tiger._key(state, self.queue), ts, self.id,
-                          mode='nx', client=pipeline)
+                           mode='nx', client=pipeline)
         if state == QUEUED:
             pipeline.publish(tiger._key('activity'), self.queue)
         pipeline.execute()

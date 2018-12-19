@@ -224,7 +224,8 @@ class TaskTiger(object):
 
     def task(self, _fn=None, queue=None, hard_timeout=None, unique=None,
              lock=None, lock_key=None, retry=None, retry_on=None,
-             retry_method=None, schedule=None, batch=False):
+             retry_method=None, schedule=None, batch=False,
+             max_queue_size=None):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -263,6 +264,8 @@ class TaskTiger(object):
                 func._task_batch = batch
             if schedule is not None:
                 func._task_schedule = schedule
+            if max_queue_size is not None:
+                func._task_max_queue_size = max_queue_size
 
             func.delay = _delay(func)
 
@@ -309,7 +312,8 @@ class TaskTiger(object):
 
     def delay(self, func, args=None, kwargs=None, queue=None,
               hard_timeout=None, unique=None, lock=None, lock_key=None,
-              when=None, retry=None, retry_on=None, retry_method=None):
+              when=None, retry=None, retry_on=None, retry_method=None,
+              max_queue_size=None):
         """
         Queues a task. See README.rst for an explanation of the options.
         """
@@ -319,9 +323,29 @@ class TaskTiger(object):
                     lock=lock, lock_key=lock_key,
                     retry=retry, retry_on=retry_on, retry_method=retry_method)
 
-        task.delay(when=when)
+        task.delay(when=when, max_queue_size=max_queue_size)
 
         return task
+
+    def get_queue_sizes(self, queue):
+        """
+        Get the queue's number of tasks in each state.
+
+        Returns dict with queue size for the QUEUED, SCHEDULED, and ACTIVE
+        states. Does not include size of error queue.
+        """
+
+        states = [QUEUED, SCHEDULED, ACTIVE]
+        pipeline = self.connection.pipeline()
+        for state in states:
+            pipeline.zcard(self._key(state, queue))
+        results = pipeline.execute()
+        return dict(zip(states, results))
+
+    def get_total_queue_size(self, queue):
+        """Get total queue size for QUEUED, SCHEDULED, and ACTIVE states."""
+
+        return sum(self.get_queue_sizes(queue).values())
 
     def get_queue_stats(self):
         """
