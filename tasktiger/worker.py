@@ -362,9 +362,9 @@ class Worker(object):
         return batch_size
 
     def _get_queue_lock(self, queue, log):
-        """Get queue lock for single worker queues.
+        """Get queue lock for max worker queues.
 
-        For single worker queues it returns a Lock if acquired and whether
+        For max worker queues it returns a Lock if acquired and whether
         it failed to acquire the lock.
         """
         max_workers = self.max_workers_per_queue
@@ -376,7 +376,7 @@ class Worker(object):
                 max_workers = 1
                 break
 
-        # Single worker queues require us to get a queue lock before
+        # Max worker queues require us to get a queue lock before
         # moving tasks
         if max_workers:
             queue_lock = Semaphore(self.connection,
