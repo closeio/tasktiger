@@ -433,7 +433,15 @@ class Worker(object):
             # process already takes care of a graceful shutdown.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+            child_init = self.config['CHILD_INIT_FUNCTION']
+            if child_init:
+                child_init()
+
             success = self._execute_forked(tasks, log)
+
+            child_shutdown = self.config['CHILD_SHUTDOWN_FUNCTION']
+            if child_shutdown:
+                child_shutdown()
 
             # Wait for any threads that might be running in the child, just
             # like sys.exit() would. Note we don't call sys.exit() directly
