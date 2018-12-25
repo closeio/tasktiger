@@ -8,7 +8,10 @@ with open('README.rst', encoding='utf-8') as file:
 install_requires = [
     'click',
     'redis',
-    'structlog'
+    'structlog',
+    'croniter',
+    'pytz',
+    'tzlocal',
 ]
 
 tests_require = install_requires + [

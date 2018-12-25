@@ -1,6 +1,9 @@
 import datetime
+import pytz
+import tzlocal
+import croniter
 
-__all__ = ['periodic']
+__all__ = ['periodic', 'cron_expr']
 
 def _periodic(dt, period, start_date, end_date):
     if end_date and dt >= end_date:
@@ -39,3 +42,16 @@ def periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
         # Saturday at midnight
         start_date = datetime.datetime(2000, 1, 1)
     return (_periodic, (period, start_date, end_date))
+
+def _cron_expr(naive_utc_dt, expr):
+    aware_utc_dt = pytz.utc.localize(naive_utc_dt)
+    local_timezone = tzlocal.get_localzone()
+    local_dt = aware_utc_dt.astimezone(local_timezone)
+    local_dt = local_timezone.normalize(local_dt)
+    next_dt = croniter.croniter(expr, start_time=local_dt).get_next(ret_type=datetime.datetime)
+    next_utc = next_dt.astimezone(pytz.utc)
+    next_utc = pytz.utc.normalize(next_utc)
+    return next_utc
+
+def cron_expr(expr_format):
+    return _cron_expr, (expr_format, )
