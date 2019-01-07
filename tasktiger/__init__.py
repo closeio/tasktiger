@@ -160,8 +160,9 @@ class TaskTiger(object):
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
 
-            # List of context manager instances that will called for each child
-            # process.
+            # List of context manager instances that will be called in each
+            # forked child process. Useful to do things like close file handles
+            # or reinitialize crypto libraries.
             'CHILD_CONTEXT_MANAGERS': [],
         }
         if config:
