@@ -42,7 +42,7 @@ class TestChildContextManagers(BaseTestCase):
 
         for i in range(num):
             assert self.conn.get('cm:{}:enter'.format(cms[i].name)) == '1'
-            assert self.conn.get('cm:{}:enter'.format(cms[i].name)) == '1'
+            assert self.conn.get('cm:{}:exit'.format(cms[i].name)) == '1'
 
     def test_single_context_manager(self):
         self._test_context_managers(1, simple_task)
