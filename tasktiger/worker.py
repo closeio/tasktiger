@@ -21,12 +21,27 @@ from .stats import StatsThread
 from .task import Task
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
+if sys.version_info < (3, 3):
+    from contextlib2 import ExitStack
+else:
+    from contextlib import ExitStack
+
+
 __all__ = ['Worker']
 
 def sigchld_handler(*args):
     # Nothing to do here. This is just a dummy handler that we set up to catch
     # the child process exiting.
     pass
+
+
+class WorkerContextManagerStack(ExitStack):
+    def __init__(self, context_managers):
+        super(WorkerContextManagerStack, self).__init__()
+
+        for mgr in context_managers:
+            self.enter_context(mgr)
+
 
 class Worker(object):
     def __init__(self, tiger, queues=None, exclude_queues=None,
@@ -417,15 +432,8 @@ class Worker(object):
             # process already takes care of a graceful shutdown.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-            child_init = self.config['CHILD_INIT_FUNCTION']
-            if child_init:
-                child_init()
-
-            success = self._execute_forked(tasks, log)
-
-            child_shutdown = self.config['CHILD_SHUTDOWN_FUNCTION']
-            if child_shutdown:
-                child_shutdown()
+            with WorkerContextManagerStack(self.config['CHILD_CONTEXT_MANAGERS']):
+                success = self._execute_forked(tasks, log)
 
             # Wait for any threads that might be running in the child, just
             # like sys.exit() would. Note we don't call sys.exit() directly
