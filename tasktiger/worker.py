@@ -73,8 +73,6 @@ class Worker(object):
 
         if max_workers_per_queue:
             self.max_workers_per_queue = max_workers_per_queue
-        elif self.config['MAX_WORKERS_PER_QUEUE']:
-            self.max_workers_per_queue = self.config['MAX_WORKERS_PER_QUEUE']
         else:
             self.max_workers_per_queue = None
         assert (self.max_workers_per_queue is None or

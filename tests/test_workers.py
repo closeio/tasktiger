@@ -20,9 +20,6 @@ class TestMaxWorkers(BaseTestCase):
     def test_max_workers(self):
         """Test Single Worker Queue."""
 
-        config = {'MAX_WORKERS_PER_QUEUE': 2}
-        self.tiger.config.update(config)
-
         # Queue three tasks
         for i in range(0, 3):
             task = Task(self.tiger, long_task_killed, queue='a')
@@ -31,15 +28,17 @@ class TestMaxWorkers(BaseTestCase):
 
         # Start two workers and wait until they start processing.
         worker1 = Process(target=external_worker,
-                          kwargs={'patch_config': config})
+                          kwargs={'max_workers_per_queue': 2})
         worker2 = Process(target=external_worker,
-                          kwargs={'patch_config': config})
+                          kwargs={'max_workers_per_queue': 2})
         worker1.start()
         worker2.start()
         time.sleep(DELAY)
 
         # This worker should fail to get the queue lock and exit immediately
-        Worker(self.tiger).run(once=True, force_once=True)
+        worker = Worker(self.tiger)
+        worker.max_workers_per_queue = 2
+        worker.run(once=True, force_once=True)
         self._ensure_queues(active={'a': 2}, queued={'a': 1})
         # Wait for external workers
         worker1.join()
@@ -98,9 +97,6 @@ class TestMaxWorkers(BaseTestCase):
     def test_queue_system_lock(self):
         """Test queue system lock."""
 
-        config = {'MAX_WORKERS_PER_QUEUE': 2}
-        self.tiger.config.update(config)
-
         with FreezeTime(datetime.datetime(2014, 1, 1)):
             # Queue three tasks
             for i in range(0, 3):
@@ -109,7 +105,9 @@ class TestMaxWorkers(BaseTestCase):
             self._ensure_queues(queued={'a': 3})
 
             # Ensure we can process one
-            Worker(self.tiger).run(once=True, force_once=True)
+            worker = Worker(self.tiger)
+            worker.max_workers_per_queue = 2
+            worker.run(once=True, force_once=True)
             self._ensure_queues(queued={'a': 2})
 
             # Set system lock so no processing should occur for 10 seconds
@@ -119,10 +117,14 @@ class TestMaxWorkers(BaseTestCase):
             assert lock_timeout == time.time() + 10
 
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
-            Worker(self.tiger).run(once=True, force_once=True)
+            worker = Worker(self.tiger)
+            worker.max_workers_per_queue = 2
+            worker.run(once=True, force_once=True)
             self._ensure_queues(queued={'a': 2})
 
         # 11 seconds in the future the lock should have expired
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 11)):
-            Worker(self.tiger).run(once=True, force_once=True)
+            worker = Worker(self.tiger)
+            worker.max_workers_per_queue = 2
+            worker.run(once=True, force_once=True)
             self._ensure_queues(queued={'a': 1})
