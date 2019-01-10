@@ -64,7 +64,7 @@ class TestMaxWorkers(BaseTestCase):
         # It should start processing one task and hold a lock on the queue
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(DELAY)
+        time.sleep(DELAY / 2.0)
 
         # This worker should fail to get the queue lock and exit immediately
         Worker(self.tiger).run(once=True, force_once=True)
