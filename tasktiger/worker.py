@@ -23,7 +23,7 @@ from .stats import StatsThread
 from .task import Task
 from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
 
-LOCK_REDIS_KEY = 'qlock'
+LOCK_REDIS_KEY = 'qslock'
 
 __all__ = ['Worker']
 
