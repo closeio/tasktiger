@@ -1,4 +1,4 @@
-"""Periodic task tests."""
+"""Child context manager tests."""
 import redis
 
 from tasktiger import Worker
