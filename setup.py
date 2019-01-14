@@ -16,6 +16,7 @@ if sys.version_info < (3, 3):
     install_requires += ['contextlib2==0.5.5']
 
 tests_require = install_requires + [
+    'freezefrog',
     'pytest',
     'psutil',
 ]

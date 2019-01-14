@@ -500,6 +500,10 @@ Workers support the following options:
 
   Redis server database number (if different from ``0``).
 
+- ``-M``, ``--max-workers-per-queue``
+
+  Maximum number of workers that are allowed to process a queue.
+
 In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the
 environment and you may want to launch TaskTiger workers using that script. To

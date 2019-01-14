@@ -15,7 +15,7 @@ defaults: &defaults
   - checkout
   - run:
       name: Install dependencies
-      command: sudo pip install -r requirements.txt psutil pytest
+      command: sudo pip install -r requirements.txt freezefrog psutil pytest
   - run:
       name: Test
       command: pytest

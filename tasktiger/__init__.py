@@ -3,6 +3,7 @@ from collections import defaultdict
 import importlib
 import logging
 import redis
+import time
 import structlog
 
 from .redis_scripts import RedisScripts
@@ -12,7 +13,7 @@ from .exceptions import *
 from .retry import *
 from .schedule import *
 from .task import Task
-from .worker import Worker
+from .worker import LOCK_REDIS_KEY, Worker
 
 __all__ = ['TaskTiger', 'Worker', 'Task',
 
@@ -65,7 +66,13 @@ STRING <prefix>:lock:<lock_hash>
 
 Queue periodic tasks lock
 STRING <prefix>:queue_periodic_tasks_lock
+
+Queue locks scored by timeout
+ZSET <prefix>:qlock:<queue>
 """
+
+SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
+
 
 class TaskTiger(object):
     def __init__(self, connection=None, config=None, setup_structlog=False):
@@ -291,7 +298,8 @@ class TaskTiger(object):
         """
         run_worker(args=args, obj=self)
 
-    def run_worker(self, queues=None, module=None, exclude_queues=None):
+    def run_worker(self, queues=None, module=None, exclude_queues=None,
+                   max_workers_per_queue=None):
         """
         Main worker entry point method.
 
@@ -309,7 +317,8 @@ class TaskTiger(object):
 
             worker = Worker(self,
                             queues.split(',') if queues else None,
-                            exclude_queues.split(',') if exclude_queues else None)
+                            exclude_queues.split(',') if exclude_queues else None,
+                            max_workers_per_queue=max_workers_per_queue)
             worker.run()
         except Exception:
             self.log.exception('Unhandled exception')
@@ -351,6 +360,35 @@ class TaskTiger(object):
         """Get total queue size for QUEUED, SCHEDULED, and ACTIVE states."""
 
         return sum(self.get_queue_sizes(queue).values())
+
+    def get_queue_system_lock(self, queue):
+        """
+        Get system lock timeout
+
+        Returns timeout of system lock or None if lock does not exist
+        """
+
+        key = self._key(LOCK_REDIS_KEY, queue)
+        return self.connection.zscore(key, SYSTEM_LOCK_ID)
+
+    def set_queue_system_lock(self, queue, timeout):
+        """
+        Set system lock on a queue.
+
+        Max workers for this queue must be used for this to have any effect.
+
+        This will keep workers from processing tasks for this queue until
+        the timeout has expired. Active tasks will continue processing their
+        current task.
+
+        timeout is number of seconds to hold the lock
+        """
+
+        key = self._key(LOCK_REDIS_KEY, queue)
+        pipeline = self.connection.pipeline()
+        pipeline.zadd(key, SYSTEM_LOCK_ID, time.time()+timeout)
+        pipeline.expire(key, timeout + 10)  # timeout plus buffer for troubleshooting
+        pipeline.execute()
 
     def get_queue_stats(self):
         """
@@ -396,6 +434,8 @@ class TaskTiger(object):
                                              'queue(s) from processing. '
                                              'Multiple queues can be '
                                              'separated by comma.')
+@click.option('-M', '--max-workers-per-queue', help='Maximum workers allowed '
+                                                    'to process a queue', type=int)
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')
