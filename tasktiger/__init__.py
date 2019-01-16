@@ -6,6 +6,7 @@ import redis
 import time
 import structlog
 
+from .redis_semaphore import Semaphore
 from .redis_scripts import RedisScripts
 
 from ._internal import *
@@ -70,8 +71,6 @@ STRING <prefix>:queue_periodic_tasks_lock
 Queue locks scored by timeout
 ZSET <prefix>:qlock:<queue>
 """
-
-SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
 
 
 class TaskTiger(object):
@@ -360,11 +359,11 @@ class TaskTiger(object):
         """
         Get system lock timeout
 
-        Returns timeout of system lock or None if lock does not exist
+        Returns time system lock expires or None if lock does not exist
         """
 
         key = self._key(LOCK_REDIS_KEY, queue)
-        return self.connection.zscore(key, SYSTEM_LOCK_ID)
+        return Semaphore.get_system_lock(self.connection, key)
 
     def set_queue_system_lock(self, queue, timeout):
         """
@@ -380,10 +379,7 @@ class TaskTiger(object):
         """
 
         key = self._key(LOCK_REDIS_KEY, queue)
-        pipeline = self.connection.pipeline()
-        pipeline.zadd(key, SYSTEM_LOCK_ID, time.time()+timeout)
-        pipeline.expire(key, timeout + 10)  # timeout plus buffer for troubleshooting
-        pipeline.execute()
+        Semaphore.set_system_lock(self.connection, key, timeout)
 
     def get_queue_stats(self):
         """

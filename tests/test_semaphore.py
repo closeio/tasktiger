@@ -1,5 +1,6 @@
 """Test Redis Semaphore lock."""
 import datetime
+import time
 
 from freezefrog import FreezeTime
 
@@ -26,9 +27,9 @@ class TestSemaphore:
         """Test semaphore."""
 
         semaphore1 = Semaphore(self.conn, 'test_key',
-                               'id_1', max=1, timeout=10)
+                               'id_1', max_locks=1, timeout=10)
         semaphore2 = Semaphore(self.conn, 'test_key',
-                               'id_2', max=1, timeout=10)
+                               'id_2', max_locks=1, timeout=10)
 
         # Get lock and then release
         with FreezeTime(datetime.datetime(2014, 1, 1)):
@@ -57,13 +58,13 @@ class TestSemaphore:
 
     def test_multiple_locks(self):
         semaphore1 = Semaphore(self.conn, 'test_key',
-                               'id_1', max=2,
+                               'id_1', max_locks=2,
                                timeout=10)
         semaphore2 = Semaphore(self.conn, 'test_key',
-                               'id_2', max=2,
+                               'id_2', max_locks=2,
                                timeout=10)
         semaphore3 = Semaphore(self.conn, 'test_key',
-                               'id_3', max=2,
+                               'id_3', max_locks=2,
                                timeout=10)
 
         # First two locks should be acquired
@@ -92,10 +93,10 @@ class TestSemaphore:
 
     def test_semaphores_renew(self):
         semaphore1 = Semaphore(self.conn, 'test_key',
-                               'id_1', max=1,
+                               'id_1', max_locks=1,
                                timeout=10)
         semaphore2 = Semaphore(self.conn, 'test_key',
-                               'id_2', max=1,
+                               'id_2', max_locks=1,
                                timeout=10)
 
         with FreezeTime(datetime.datetime(2014, 1, 1)):
@@ -125,4 +126,24 @@ class TestSemaphore:
         with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 15)):
             acquired, locks = semaphore1.renew()
         assert not acquired
+        assert locks == 1
+
+    def test_system_lock(self):
+        semaphore1 = Semaphore(self.conn, 'test_key',
+                               'id_1', max_locks=10,
+                               timeout=10)
+
+        # System lock should block other locks
+        with FreezeTime(datetime.datetime(2014, 1, 1)):
+            Semaphore.set_system_lock(self.conn, 'test_key', 10)
+            acquired, locks = semaphore1.acquire()
+            assert not acquired
+            assert locks == -1
+            ttl = Semaphore.get_system_lock(self.conn, 'test_key')
+            assert ttl == time.time() + 10
+
+        # Wait for system lock to expire
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
+            acquired, locks = semaphore1.acquire()
+        assert acquired
         assert locks == 1

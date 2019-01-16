@@ -379,7 +379,7 @@ class Worker(object):
         if max_workers:
             queue_lock = Semaphore(self.connection,
                                    self._key(LOCK_REDIS_KEY, queue),
-                                   self.id, max=max_workers,
+                                   self.id, max_locks=max_workers,
                                    timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
             acquired, locks = queue_lock.acquire()
             if not acquired:
