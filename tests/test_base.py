@@ -282,7 +282,8 @@ class TestCase(BaseTestCase):
                             scheduled={'default': 1},
                             error={'default': 0})
 
-        time.sleep(DELAY)
+        # Wait for task to exit, .1 extra for task startup time
+        time.sleep(DELAY + .1)
 
         # Two runs: The first one picks the task up from the "scheduled" queue,
         # the second one processes it.
