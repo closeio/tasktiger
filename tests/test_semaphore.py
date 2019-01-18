@@ -4,6 +4,8 @@ import time
 
 from freezefrog import FreezeTime
 
+import pytest
+
 from tasktiger.redis_semaphore import Semaphore
 from .utils import get_tiger
 
@@ -128,22 +130,31 @@ class TestSemaphore:
         assert not acquired
         assert locks == 1
 
-    def test_system_lock(self):
+    # Test system lock shorter and longer than regular lock timeout
+    @pytest.mark.parametrize('timeout', [8, 30])
+    def test_system_lock(self, timeout):
         semaphore1 = Semaphore(self.conn, 'test_key',
                                'id_1', max_locks=10,
                                timeout=10)
 
-        # System lock should block other locks
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            Semaphore.set_system_lock(self.conn, 'test_key', 10)
+            Semaphore.set_system_lock(self.conn, 'test_key', timeout)
+            ttl = Semaphore.get_system_lock(self.conn, 'test_key')
+            assert ttl == time.time() + timeout
+
+            # Should be blocked by system lock
             acquired, locks = semaphore1.acquire()
             assert not acquired
             assert locks == -1
-            ttl = Semaphore.get_system_lock(self.conn, 'test_key')
-            assert ttl == time.time() + 10
+
+        # System lock should still block other locks 1 second before it expires
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, timeout - 1)):
+            acquired, locks = semaphore1.acquire()
+            assert not acquired
+            assert locks == -1
 
         # Wait for system lock to expire
-        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, timeout)):
             acquired, locks = semaphore1.acquire()
-        assert acquired
-        assert locks == 1
+            assert acquired
+            assert locks == 1
