@@ -50,6 +50,10 @@ def long_task_killed():
 
 @tiger.task(hard_timeout=DELAY * 2)
 def long_task_ok():
+    # Signal task has started
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn.lpush('long_task_ok', '1')
+
     time.sleep(DELAY)
 
 
