@@ -68,7 +68,8 @@ Queue periodic tasks lock
 STRING <prefix>:queue_periodic_tasks_lock
 
 Queue locks scored by timeout
-ZSET <prefix>:qlock:<queue>
+ZSET <prefix>:qslock:<queue>
+STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 """
 
 SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
