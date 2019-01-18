@@ -116,14 +116,15 @@ class TestMaxWorkers(BaseTestCase):
             lock_timeout = self.tiger.get_queue_system_lock('a')
             assert lock_timeout == time.time() + 10
 
-        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
+        # Confirm tasks don't get processed within the system lock timeout
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 9)):
             worker = Worker(self.tiger)
             worker.max_workers_per_queue = 2
             worker.run(once=True, force_once=True)
             self._ensure_queues(queued={'a': 2})
 
-        # 11 seconds in the future the lock should have expired
-        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 11)):
+        # 10 seconds in the future the lock should have expired
+        with FreezeTime(datetime.datetime(2014, 1, 1, 0, 0, 10)):
             worker = Worker(self.tiger)
             worker.max_workers_per_queue = 2
             worker.run(once=True, force_once=True)
