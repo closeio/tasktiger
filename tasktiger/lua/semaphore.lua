@@ -25,7 +25,7 @@ local timeout = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
 
 --Remove expired locks
-redis.call("ZREMRANGEBYSCORE", semaphore_key, 0, now - timeout)
+redis.call("ZREMRANGEBYSCORE", semaphore_key, 0, now)
 
 --Check if there is a system lock which will override all other locks
 if redis.call("ZSCORE", semaphore_key, "SYSTEM_LOCK") ~= false then
@@ -54,6 +54,7 @@ if lock_count > semaphore_size then
   return {false, current_lock_count}
 else
   -- This also handles renewing an existing lock
-  redis.call("ZADD", semaphore_key, now, lock_id)
+  -- Score is set to the time this lock expires
+  redis.call("ZADD", semaphore_key, now + timeout, lock_id)
   return {true, lock_count}
 end
