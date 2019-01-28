@@ -171,6 +171,11 @@ class TaskTiger(object):
             # forked child process. Useful to do things like close file handles
             # or reinitialize crypto libraries.
             'CHILD_CONTEXT_MANAGERS': [],
+
+            # Store traceback in execution history for failed tasks. This can
+            # increase Redis storage requirements and therefore can be disabled
+            # if that is a concern.
+            'STORE_TRACEBACKS': True,
         }
         if config:
             self.config.update(config)
@@ -433,6 +438,9 @@ class TaskTiger(object):
                                              'separated by comma.')
 @click.option('-M', '--max-workers-per-queue', help='Maximum workers allowed '
                                                     'to process a queue', type=int)
+@click.option('--store-tracebacks/--no-store-tracebacks',
+              help='Store tracebacks with execution history',
+              default=True)
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')
