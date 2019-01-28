@@ -304,7 +304,7 @@ class TaskTiger(object):
         run_worker(args=args, obj=self)
 
     def run_worker(self, queues=None, module=None, exclude_queues=None,
-                   max_workers_per_queue=None):
+                   max_workers_per_queue=None, store_tracebacks=None):
         """
         Main worker entry point method.
 
@@ -323,7 +323,8 @@ class TaskTiger(object):
             worker = Worker(self,
                             queues.split(',') if queues else None,
                             exclude_queues.split(',') if exclude_queues else None,
-                            max_workers_per_queue=max_workers_per_queue)
+                            max_workers_per_queue=max_workers_per_queue,
+                            store_tracebacks=store_tracebacks)
             worker.run()
         except Exception:
             self.log.exception('Unhandled exception')
