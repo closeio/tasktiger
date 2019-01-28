@@ -441,7 +441,7 @@ class TaskTiger(object):
                                                     'to process a queue', type=int)
 @click.option('--store-tracebacks/--no-store-tracebacks',
               help='Store tracebacks with execution history',
-              default=True)
+              default=None)
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')

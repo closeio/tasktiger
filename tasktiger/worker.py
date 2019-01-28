@@ -94,9 +94,9 @@ class Worker(object):
                 self.max_workers_per_queue >= 1)
 
         if store_tracebacks is not None:
-            self.store_tracebacks = store_tracebacks
+            self.store_tracebacks = bool(store_tracebacks)
         else:
-            self.store_tracebacks = self.config['STORE_TRACEBACKS']
+            self.store_tracebacks = bool(self.config['STORE_TRACEBACKS'])
 
         self._stop_requested = False
 
