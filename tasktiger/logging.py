@@ -1,7 +1,7 @@
 from _internal import g
 
 
-def tasktiger_processor(self, logger, method_name, event_dict):
+def tasktiger_processor(logger, method_name, event_dict):
     """
     TaskTiger structlog processor.
 
