@@ -49,7 +49,8 @@ class WorkerContextManagerStack(ExitStack):
 
 class Worker(object):
     def __init__(self, tiger, queues=None, exclude_queues=None,
-                 single_worker_queues=None, max_workers_per_queue=None, store_tracebacks=None):
+                 single_worker_queues=None, max_workers_per_queue=None,
+                 store_tracebacks=None):
         """
         Internal method to initialize a worker.
         """
@@ -93,10 +94,11 @@ class Worker(object):
         assert (self.max_workers_per_queue is None or
                 self.max_workers_per_queue >= 1)
 
-        if store_tracebacks is not None:
-            self.store_tracebacks = bool(store_tracebacks)
+        if store_tracebacks is None:
+            self.store_tracebacks = bool(self.config.get(
+                'STORE_TRACEBACKS', True))
         else:
-            self.store_tracebacks = bool(self.config['STORE_TRACEBACKS'])
+            self.store_tracebacks = bool(store_tracebacks)
 
         self._stop_requested = False
 
