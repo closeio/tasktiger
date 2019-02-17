@@ -504,6 +504,10 @@ Workers support the following options:
 
   Maximum number of workers that are allowed to process a queue.
 
+- ``--store-tracebacks/--no-store-tracebacks``
+
+  Store tracebacks with execution history (config defaults to ``True``).
+
 In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the
 environment and you may want to launch TaskTiger workers using that script. To

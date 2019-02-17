@@ -194,7 +194,10 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'default': 0}, scheduled={'default': 0})
 
-    def test_exception_task(self):
+    @pytest.mark.parametrize('store_tracebacks', [False, True])
+    def test_exception_task(self, store_tracebacks):
+        self.tiger.config['STORE_TRACEBACKS'] = store_tracebacks
+
         self.tiger.delay(exception_task)
 
         Worker(self.tiger).run(once=True)
@@ -209,9 +212,12 @@ class TestCase(BaseTestCase):
         execution = json.loads(executions[0])
         assert execution['exception_name'] == serialize_func_name(Exception)
         assert not execution['success']
-        assert execution['traceback'].startswith(
-            'Traceback (most recent call last):'
-        )
+        if store_tracebacks:
+            assert execution['traceback'].startswith(
+                'Traceback (most recent call last):'
+            )
+        else:
+            assert 'traceback' not in execution
 
     def test_long_task_ok(self):
         self.tiger.delay(long_task_ok)
