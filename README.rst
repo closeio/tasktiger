@@ -78,6 +78,9 @@ Features
   flexibility for tools to analyze the log. For example, you can use TaskTiger
   together with Logstash, Elasticsearch, and Kibana.
 
+  The structlog processor ``tasktiger.logging.tasktiger_processor`` can
+  be used to inject the current task id into all log messages.
+
 - Reliability
 
   TaskTiger atomically moves tasks between queue states, and will re-execute
