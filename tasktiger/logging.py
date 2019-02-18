@@ -1,4 +1,4 @@
-from _internal import g
+from ._internal import g
 
 
 def tasktiger_processor(logger, method_name, event_dict):
