@@ -8,12 +8,12 @@ with open('README.rst', encoding='utf-8') as file:
 
 install_requires = [
     'click',
-    'redis==2.10.6',
+    'redis>=2,<3',
     'structlog'
 ]
 
 if sys.version_info < (3, 3):
-    install_requires += ['contextlib2==0.5.5']
+    install_requires += ['contextlib2>=0.5.5']
 
 tests_require = install_requires + [
     'freezefrog',
