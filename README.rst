@@ -358,7 +358,7 @@ The following options can be only specified in the task decorator:
 
   The schedule function must return the next task execution datetime, or
   ``None`` to prevent periodic execution. The function is executed to determine
-  the initial tasks execution date when a worker is initialized, and to determine
+  the initial task execution date when a worker is initialized, and to determine
   the next execution date when the task is about to get executed.
 
   For most common scenarios, the ``periodic`` built-in function can be passed:
