@@ -266,7 +266,8 @@ The following options are supported by both ``delay`` and the task decorator:
   similar task with the same function, arguments, and keyword arguments in the
   queue. Note that multiple similar tasks may still be executed at the same
   time since the task will still be inserted into the queue if another one
-  is being processed.
+  is being processed. Requeueing an already scheduled unique task will not
+  change the time it was originally scheduled to execute at.
 
 - ``lock``
 
@@ -357,7 +358,7 @@ The following options can be only specified in the task decorator:
 
   The schedule function must return the next task execution datetime, or
   ``None`` to prevent periodic execution. The function is executed to determine
-  the initial taks execution date when a worker is initialized, and to determine
+  the initial task execution date when a worker is initialized, and to determine
   the next execution date when the task is about to get executed.
 
   For most common scenarios, the ``periodic`` built-in function can be passed:
