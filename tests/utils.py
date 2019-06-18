@@ -75,4 +75,4 @@ def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
     if max_workers_per_queue is not None:
         worker.max_workers_per_queue = max_workers_per_queue
 
-    worker.run(once=True)
+    worker.run(once=True, force_once=True)

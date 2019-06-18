@@ -1,4 +1,5 @@
 import json
+from math import ceil
 import time
 
 import redis
@@ -8,6 +9,9 @@ from tasktiger.retry import fixed
 
 from .config import DELAY, TEST_DB
 from .utils import get_tiger
+
+
+LONG_TASK_SIGNAL_KEY = 'long_task_ok'
 
 tiger = get_tiger()
 
@@ -52,9 +56,16 @@ def long_task_killed():
 def long_task_ok():
     # Signal task has started
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
-    conn.lpush('long_task_ok', '1')
+    conn.lpush(LONG_TASK_SIGNAL_KEY, '1')
 
     time.sleep(DELAY)
+
+
+def wait_for_long_task():
+    """Waits for a long task to start."""
+    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    result = conn.blpop(LONG_TASK_SIGNAL_KEY, int(ceil(DELAY * 3)))
+    assert result[1] == '1'
 
 
 @tiger.task(unique=True)
