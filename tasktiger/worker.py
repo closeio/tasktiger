@@ -893,6 +893,11 @@ class Worker(object):
         # queued yet. Otherwise, assume another worker is doing this.
         funcs = self.tiger.periodic_task_funcs.values()
 
+        # Only queue periodic tasks for queues this worker is responsible
+        # for.
+        funcs = [f for f in funcs if self._filter_queues(
+            [Task.queue_from_function(f, self.tiger)])]
+
         if not funcs:
             return
 
