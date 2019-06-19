@@ -21,7 +21,7 @@ class Task(object):
         """
 
         if func and queue is None:
-            queue = getattr(func, '_task_queue', tiger.config['DEFAULT_QUEUE'])
+            queue = Task.queue_from_function(func, tiger)
 
         self.tiger = tiger
         self._func = func
@@ -417,6 +417,11 @@ class Task(object):
                     tasks.append(task)
 
         return n, tasks
+
+    @classmethod
+    def queue_from_function(cls, func, tiger):
+        """Get queue from function."""
+        return getattr(func, '_task_queue', tiger.config['DEFAULT_QUEUE'])
 
     def n_executions(self):
         """
