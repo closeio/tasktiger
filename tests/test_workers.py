@@ -8,8 +8,7 @@ from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
 
-from .config import DELAY
-from .tasks import long_task_killed, long_task_ok
+from .tasks import long_task_ok, wait_for_long_task
 from .test_base import BaseTestCase
 from .utils import external_worker
 
@@ -22,7 +21,7 @@ class TestMaxWorkers(BaseTestCase):
 
         # Queue three tasks
         for i in range(0, 3):
-            task = Task(self.tiger, long_task_killed, queue='a')
+            task = Task(self.tiger, long_task_ok, queue='a')
             task.delay()
         self._ensure_queues(queued={'a': 3})
 
@@ -33,7 +32,13 @@ class TestMaxWorkers(BaseTestCase):
                           kwargs={'max_workers_per_queue': 2})
         worker1.start()
         worker2.start()
-        time.sleep(DELAY)
+
+        # Wait for both tasks to start
+        wait_for_long_task()
+        wait_for_long_task()
+
+        # Verify they both are active
+        self._ensure_queues(active={'a': 2}, queued={'a': 1})
 
         # This worker should fail to get the queue lock and exit immediately
         worker = Worker(self.tiger)
@@ -65,15 +70,18 @@ class TestMaxWorkers(BaseTestCase):
         worker = Process(target=external_worker)
         worker.start()
 
-        # Wait up to 2 seconds for external task to start
-        result = self.conn.blpop('long_task_ok', 2)
-        assert result[1] == '1'
+        # Wait for task to start
+        wait_for_long_task()
 
         # This worker should fail to get the queue lock and exit immediately
         Worker(self.tiger).run(once=True, force_once=True)
         self._ensure_queues(active={'swq': 1}, queued={'swq': 1})
         # Wait for external worker
         worker.join()
+
+        # Clear out second task
+        Worker(self.tiger).run(once=True, force_once=True)
+        self.conn.delete('long_task_ok')
 
         # Retest using a non-single worker queue
         # Queue two tasks
@@ -87,12 +95,15 @@ class TestMaxWorkers(BaseTestCase):
         # It should start processing one task
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(DELAY)
+
+        # Wait for task to start processing
+        wait_for_long_task()
 
         # This worker should process the second task
         Worker(self.tiger).run(once=True, force_once=True)
 
-        # Queues should be empty
+        # Queues should be empty since the first task will have to
+        # have finished before the second task finishes.
         self._ensure_queues()
 
         worker.join()
