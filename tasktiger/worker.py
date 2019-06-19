@@ -937,6 +937,8 @@ class Worker(object):
                 self.log.info('queued periodic task',
                               func=task.serialized_func,
                               when=when)
+        except Exception:
+            self.log.exception(event='periodic task queueing exception')
         finally:
             lock.release()
 
