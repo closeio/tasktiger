@@ -56,6 +56,8 @@ def get_tiger():
         },
 
         'SINGLE_WORKER_QUEUES': ['swq'],
+
+        'EXCLUDE_QUEUES': ['periodic_ignore'],
     })
     tiger.log.setLevel(logging.CRITICAL)
     return tiger

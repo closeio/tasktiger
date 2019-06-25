@@ -15,3 +15,13 @@ def periodic_task():
     """Periodic task."""
     conn = redis.Redis(db=TEST_DB, decode_responses=True)
     conn.incr('period_count', 1)
+
+
+@tiger.task(schedule=periodic(seconds=1), queue='periodic_ignore')
+def periodic_task_ignore():
+    """
+    Ignored periodic task.
+
+    This task should never get queued.
+    """
+    pass
