@@ -889,8 +889,6 @@ class Worker(object):
             self._last_task_check = time.time()
 
     def _queue_periodic_tasks(self):
-        # If we can acquire the lock, queue any periodic tasks that are not
-        # queued yet. Otherwise, assume another worker is doing this.
         funcs = self.tiger.periodic_task_funcs.values()
 
         # Only queue periodic tasks for queues this worker is responsible
@@ -901,44 +899,30 @@ class Worker(object):
         if not funcs:
             return
 
-        lock = Lock(
-            self.connection,
-            self._key('queue_periodic_tasks_lock'),
-            timeout=self.config['QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT'])
-        acquired = lock.acquire(blocking=False)
-        if not acquired:
-            self.log.info('could not acquire lock to queue periodic tasks '
-                          ' (assuming other process will)')
-            return
+        for func in funcs:
+            # Check if task is queued (in scheduled/active queues).
+            task = Task(self.tiger, func)
 
-        try:
-            for func in funcs:
-                # Check if task is queued (in scheduled/active queues).
-                task = Task(self.tiger, func)
+            # Since periodic tasks are unique, we can use the ID to look up
+            # the task.
+            pipeline = self.tiger.connection.pipeline()
+            for state in [QUEUED, ACTIVE, SCHEDULED]:
+                pipeline.zscore(self.tiger._key(state, task.queue), task.id)
+            results = pipeline.execute()
 
-                # Since periodic tasks are unique, we can use the ID to look up
-                # the task.
-                pipeline = self.tiger.connection.pipeline()
-                for state in [QUEUED, ACTIVE, SCHEDULED]:
-                    pipeline.zscore(self.tiger._key(state, task.queue), task.id)
-                results = pipeline.execute()
-
-                # Task is already queued, scheduled, or running.
-                if any(results):
-                    self.log.info('periodic task already in queue',
-                                  func=task.serialized_func,
-                                  result=results)
-                    continue
-
-                # We can safely queue the task here since we have a lock (the
-                # uniqueness of the task also prevents it from being scheduled
-                # multiple times)
-                when = task._queue_for_next_period()
-                self.log.info('queued periodic task',
+            # Task is already queued, scheduled, or running.
+            if any(results):
+                self.log.info('periodic task already in queue',
                               func=task.serialized_func,
-                              when=when)
-        finally:
-            lock.release()
+                              result=results)
+                continue
+
+            # We can safely queue the task here since periodic tasks are
+            # unique.
+            when = task._queue_for_next_period()
+            self.log.info('queued periodic task',
+                          func=task.serialized_func,
+                          when=when)
 
     def run(self, once=False, force_once=False):
         """

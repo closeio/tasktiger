@@ -56,7 +56,12 @@ class TestPeriodicTasks(BaseTestCase):
         assert f[0](datetime.datetime(2010, 1, 1, 0, 1), *f[1]) == None
 
     def test_periodic_execution(self):
-        """Test periodic task execution."""
+        """
+        Test periodic task execution.
+
+        Test periodic_task() runs as expected and periodic_task_ignore()
+        is not queued.
+        """
 
         # After the first worker run, the periodic task will be queued.
         # Note that since periodic tasks register with the Tiger instance, it
@@ -73,9 +78,9 @@ class TestPeriodicTasks(BaseTestCase):
             self._ensure_queues(scheduled={'periodic': 1})
         except AssertionError:
             Worker(tiger).run(once=True)
+            self._ensure_queues(scheduled={'periodic': 1})
             assert int(self.conn.get('period_count')) == 1
             self.conn.delete('period_count')
-            self._ensure_queues(scheduled={'periodic': 1})
 
         def ensure_run(n):
             # Run worker twice (once to move from scheduled to queued, and once

@@ -146,9 +146,6 @@ class TaskTiger(object):
             # How often to print stats.
             'STATS_INTERVAL': 60,
 
-            # Upper bound for the time it takes to queue all periodic tasks.
-            'QUEUE_PERIODIC_TASKS_LOCK_TIMEOUT': 10,
-
             # Single worker queues can reduce redis activity in some use cases
             # by locking at the queue level instead of just at the task or task
             # group level. These queues will only allow a single worker to
