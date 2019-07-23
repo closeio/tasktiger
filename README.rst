@@ -680,6 +680,20 @@ executed.
       for task in tiger.current_tasks:
           print(task.n_executions())
 
+Example 4: Drain a specific queue by setting tasks as errored.
+
+.. code:: python
+
+  from tasktiger import TaskTiger, Task
+
+  QUEUE_NAME = 'default'
+  TASK_STATE = 'queued'
+
+  tiger = TaskTiger()
+
+  n_total, tasks = Task.tasks_from_queue(tiger, QUEUE_NAME, TASK_STATE, limit=5000)
+  for task in tasks:
+      task._move(from_state='queued', to_state='error')
 
 Pause queue processing
 ----------------------
