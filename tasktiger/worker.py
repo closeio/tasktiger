@@ -314,32 +314,33 @@ class Worker(object):
             is_batch_func = getattr(func, '_task_batch', False)
             g['current_task_is_batch'] = is_batch_func
 
-            if is_batch_func:
-                # Batch process if the task supports it.
-                params = [{
-                    'args': task.args,
-                    'kwargs': task.kwargs,
-                } for task in tasks]
-                task_timeouts = [task.hard_timeout for task in tasks if task.hard_timeout is not None]
-                hard_timeout = ((max(task_timeouts) if task_timeouts else None)
-                                or
-                                getattr(func, '_task_hard_timeout', None) or
-                                self.config['DEFAULT_HARD_TIMEOUT'])
-
-                g['current_tasks'] = tasks
-                with UnixSignalDeathPenalty(hard_timeout):
-                    func(params)
-
-            else:
-                # Process sequentially.
-                for task in tasks:
-                    hard_timeout = (task.hard_timeout or
+            with WorkerContextManagerStack(self.config['CHILD_CONTEXT_MANAGERS']):
+                if is_batch_func:
+                    # Batch process if the task supports it.
+                    params = [{
+                        'args': task.args,
+                        'kwargs': task.kwargs,
+                    } for task in tasks]
+                    task_timeouts = [task.hard_timeout for task in tasks if task.hard_timeout is not None]
+                    hard_timeout = ((max(task_timeouts) if task_timeouts else None)
+                                    or
                                     getattr(func, '_task_hard_timeout', None) or
                                     self.config['DEFAULT_HARD_TIMEOUT'])
 
-                    g['current_tasks'] = [task]
+                    g['current_tasks'] = tasks
                     with UnixSignalDeathPenalty(hard_timeout):
-                        func(*task.args, **task.kwargs)
+                        func(params)
+
+                else:
+                    # Process sequentially.
+                    for task in tasks:
+                        hard_timeout = (task.hard_timeout or
+                                        getattr(func, '_task_hard_timeout', None) or
+                                        self.config['DEFAULT_HARD_TIMEOUT'])
+
+                        g['current_tasks'] = [task]
+                        with UnixSignalDeathPenalty(hard_timeout):
+                            func(*task.args, **task.kwargs)
 
         except RetryException as exc:
             execution['retry'] = True
@@ -454,8 +455,8 @@ class Worker(object):
             # process already takes care of a graceful shutdown.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-            with WorkerContextManagerStack(self.config['CHILD_CONTEXT_MANAGERS']):
-                success = self._execute_forked(tasks, log)
+            # run the tasks
+            success = self._execute_forked(tasks, log)
 
             # Wait for any threads that might be running in the child, just
             # like sys.exit() would. Note we don't call sys.exit() directly
