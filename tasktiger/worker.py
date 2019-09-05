@@ -764,10 +764,13 @@ class Worker(object):
         """
         log = self.log.bind(queue=queue, task_id=task.id)
 
+        when = time.time()
+        execution_duration = task.ts and when - task.ts
+
         def _mark_done():
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
-            log.info('done')
+            log.info('done', execution_duration=execution_duration)
 
         if success:
             _mark_done()
@@ -809,10 +812,9 @@ class Worker(object):
 
             state = ERROR
 
-            when = time.time()
-
             log_context = {
-                'func': task.serialized_func
+                'func': task.serialized_func,
+                'execution_duration': execution_duration,
             }
 
             if should_retry:
