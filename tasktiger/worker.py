@@ -627,7 +627,7 @@ class Worker(object):
             log.debug('processed', attempted=len(tasks),
                       processed=processed_count)
             for task in processed_tasks:
-                self._finish_task_processing(queue, task, success)
+                self._finish_task_processing(queue, task, success, now)
 
         return processed_count
 
@@ -756,7 +756,7 @@ class Worker(object):
 
         return success, ready_tasks
 
-    def _finish_task_processing(self, queue, task, success):
+    def _finish_task_processing(self, queue, task, success, start_time):
         """
         After a task is executed, this method is called and ensures that
         the task gets properly removed from the ACTIVE queue and, in case of an
@@ -765,7 +765,7 @@ class Worker(object):
         log = self.log.bind(queue=queue, task_id=task.id)
 
         when = time.time()
-        processing_duration = task.ts and when - task.ts
+        processing_duration = when - start_time
 
         def _mark_done():
             # Remove the task from active queue
