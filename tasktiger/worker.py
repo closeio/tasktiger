@@ -764,8 +764,8 @@ class Worker(object):
         """
         log = self.log.bind(queue=queue, task_id=task.id)
 
-        when = time.time()
-        processing_duration = when - start_time
+        now = time.time()
+        processing_duration = now - start_time
 
         def _mark_done():
             # Remove the task from active queue
@@ -811,6 +811,8 @@ class Worker(object):
                     should_retry = True
 
             state = ERROR
+
+            when = now
 
             log_context = {
                 'func': task.serialized_func,
