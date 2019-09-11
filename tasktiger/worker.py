@@ -627,7 +627,7 @@ class Worker(object):
             log.debug('processed', attempted=len(tasks),
                       processed=processed_count)
             for task in processed_tasks:
-                self._finish_task_processing(queue, task, success)
+                self._finish_task_processing(queue, task, success, now)
 
         return processed_count
 
@@ -756,7 +756,7 @@ class Worker(object):
 
         return success, ready_tasks
 
-    def _finish_task_processing(self, queue, task, success):
+    def _finish_task_processing(self, queue, task, success, start_time):
         """
         After a task is executed, this method is called and ensures that
         the task gets properly removed from the ACTIVE queue and, in case of an
@@ -764,10 +764,13 @@ class Worker(object):
         """
         log = self.log.bind(queue=queue, task_id=task.id)
 
+        now = time.time()
+        processing_duration = now - start_time
+
         def _mark_done():
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
-            log.info('done')
+            log.info('done', processing_duration=processing_duration)
 
         if success:
             _mark_done()
@@ -809,10 +812,11 @@ class Worker(object):
 
             state = ERROR
 
-            when = time.time()
+            when = now
 
             log_context = {
-                'func': task.serialized_func
+                'func': task.serialized_func,
+                'processing_duration': processing_duration,
             }
 
             if should_retry:
