@@ -458,17 +458,17 @@ class TestCase(BaseTestCase):
 
     def test_retry_method_linear(self):
         f = linear(1, 2, 3)
-        assert f[0](1, *f[1]), 1
-        assert f[0](2, *f[1]), 3
-        assert f[0](3, *f[1]), 5
+        assert f[0](1, *f[1]) == 1
+        assert f[0](2, *f[1]) == 3
+        assert f[0](3, *f[1]) == 5
         pytest.raises(StopRetry, f[0], 4, *f[1])
 
     def test_retry_method_exponential(self):
         f = exponential(1, 2, 4)
-        assert f[0](1, *f[1]), 1
-        assert f[0](2, *f[1]), 2
-        assert f[0](3, *f[1]), 4
-        assert f[0](4, *f[1]), 8
+        assert f[0](1, *f[1]) == 1
+        assert f[0](2, *f[1]) == 2
+        assert f[0](3, *f[1]) == 4
+        assert f[0](4, *f[1]) == 8
         pytest.raises(StopRetry, f[0], 5, *f[1])
 
     def test_retry_exception_1(self):
