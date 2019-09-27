@@ -26,10 +26,12 @@ class TestMaxWorkers(BaseTestCase):
         self._ensure_queues(queued={'a': 3})
 
         # Start two workers and wait until they start processing.
-        worker1 = Process(target=external_worker,
-                          kwargs={'max_workers_per_queue': 2})
-        worker2 = Process(target=external_worker,
-                          kwargs={'max_workers_per_queue': 2})
+        worker1 = Process(
+            target=external_worker, kwargs={'max_workers_per_queue': 2}
+        )
+        worker2 = Process(
+            target=external_worker, kwargs={'max_workers_per_queue': 2}
+        )
         worker1.start()
         worker2.start()
 
@@ -48,7 +50,6 @@ class TestMaxWorkers(BaseTestCase):
         # Wait for external workers
         worker1.join()
         worker2.join()
-
 
     def test_single_worker_queue(self):
         """

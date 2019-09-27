@@ -16,18 +16,23 @@ from .schedule import *
 from .task import Task
 from .worker import LOCK_REDIS_KEY, Worker
 
-__all__ = ['TaskTiger', 'Worker', 'Task',
-
-           # Exceptions
-           'JobTimeoutException', 'RetryException', 'StopRetry',
-           'TaskImportError', 'TaskNotFound',
-
-           # Retry methods
-           'fixed', 'linear', 'exponential',
-
-           # Schedules
-           'periodic',
-           ]
+__all__ = [
+    'TaskTiger',
+    'Worker',
+    'Task',
+    # Exceptions
+    'JobTimeoutException',
+    'RetryException',
+    'StopRetry',
+    'TaskImportError',
+    'TaskNotFound',
+    # Retry methods
+    'fixed',
+    'linear',
+    'exponential',
+    # Schedules
+    'periodic',
+]
 
 """
 Redis keys:
@@ -76,11 +81,12 @@ STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 
 class TaskTiger(object):
     def __init__(
-            self,
-            connection=None,
-            config=None,
-            setup_structlog=False,
-            lazy_init=False):
+        self,
+        connection=None,
+        config=None,
+        setup_structlog=False,
+        lazy_init=False,
+    ):
         """
         Initializes TaskTiger with the given Redis connection and config
         options. Optionally sets up structlog.
@@ -99,12 +105,16 @@ class TaskTiger(object):
         self.periodic_task_funcs = {}
 
         if lazy_init:
-            assert connection is None and config is None and setup_structlog is False
+            assert (
+                connection is None
+                and config is None
+                and setup_structlog is False
+            )
         else:
             self.init(
                 connection=connection,
                 config=config,
-                setup_structlog=setup_structlog
+                setup_structlog=setup_structlog,
             )
 
     def init(self, connection=None, config=None, setup_structlog=False):
@@ -116,13 +126,10 @@ class TaskTiger(object):
         self.config = {
             # String that is used to prefix all Redis keys
             'REDIS_PREFIX': 't',
-
             # Name of the Python (structlog) logger
             'LOGGER_NAME': 'tasktiger',
-
             # Where to queue tasks that don't have an explicit queue
             'DEFAULT_QUEUE': 'default',
-
             # After how many seconds time out on listening on the activity
             # channel and check for scheduled or expired items.  The batch
             # timeout will delay the specified seconds after the first message
@@ -130,42 +137,34 @@ class TaskTiger(object):
             # Appropriate values: 0 <= SELECT_BATCH_TIMEOUT <= SELECT_TIMEOUT
             'SELECT_TIMEOUT': 1,
             'SELECT_BATCH_TIMEOUT': 0,
-
             # If this is True, all tasks except future tasks (when=a future
             # time) will be executed locally by blocking until the task
             # returns. This is useful for testing purposes.
             'ALWAYS_EAGER': False,
-
             # If retry is True but no retry_method is specified for a given
             # task, use the following default method.
             'DEFAULT_RETRY_METHOD': fixed(60, 3),
-
             # After how many seconds a task that can't acquire a lock is
             # retried.
             'LOCK_RETRY': 1,
-
             # How many items to move at most from the scheduled queue to the
             # active queue.
             'SCHEDULED_TASK_BATCH_SIZE': 1000,
-
             # After how many seconds a long-running task is killed. This can be
             # overridden by the task or at queue time.
             'DEFAULT_HARD_TIMEOUT': 300,
-
             # The timer specifies how often the worker updates the task's
             # timestamp in the active queue (in seconds). Tasks exceeding the
             # timeout value are requeued periodically. This may happen when a
             # worker crashes or is killed.
             'ACTIVE_TASK_UPDATE_TIMER': 10,
             'ACTIVE_TASK_UPDATE_TIMEOUT': 60,
-
             # How often we requeue expired tasks (in seconds), and how many
             # expired tasks we requeue at a time. The interval also determines
             # the lock timeout, i.e. it should be large enough to have enough
             # time to requeue a batch of tasks.
             'REQUEUE_EXPIRED_TASKS_INTERVAL': 30,
             'REQUEUE_EXPIRED_TASKS_BATCH_SIZE': 10,
-
             # Set up queues that will be processed in batch, i.e. multiple jobs
             # are taken out of the queue at the same time and passed as a list
             # to the worker method. Takes a dict where the key represents the
@@ -174,10 +173,8 @@ class TaskTiger(object):
             # subqueues will be automatically treated as batch queues, and the
             # batch value of the most specific subqueue name takes precedence.
             'BATCH_QUEUES': {},
-
             # How often to print stats.
             'STATS_INTERVAL': 60,
-
             # Single worker queues can reduce redis activity in some use cases
             # by locking at the queue level instead of just at the task or task
             # group level. These queues will only allow a single worker to
@@ -185,22 +182,17 @@ class TaskTiger(object):
             # with large queues and many worker processes that need aggressive
             # locking techniques.
             'SINGLE_WORKER_QUEUES': [],
-
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
             # run_worker() method).
-
             # If non-empty, a worker only processeses the given queues.
             'ONLY_QUEUES': [],
-
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],
-
             # List of context manager instances that will be called in each
             # forked child process. Useful to do things like close file handles
             # or reinitialize crypto libraries.
             'CHILD_CONTEXT_MANAGERS': [],
-
             # Store traceback in execution history for failed tasks. This can
             # increase Redis storage requirements and therefore can be disabled
             # if that is a concern.
@@ -217,7 +209,7 @@ class TaskTiger(object):
                     structlog.processors.TimeStamper(fmt='iso', utc=True),
                     structlog.processors.StackInfoRenderer(),
                     structlog.processors.format_exc_info,
-                    structlog.processors.JSONRenderer()
+                    structlog.processors.JSONRenderer(),
                 ],
                 context_class=dict,
                 logger_factory=structlog.stdlib.LoggerFactory(),
@@ -225,9 +217,7 @@ class TaskTiger(object):
                 cache_logger_on_first_use=True,
             )
 
-        self.log = structlog.get_logger(
-            self.config['LOGGER_NAME'],
-        ).bind()
+        self.log = structlog.get_logger(self.config['LOGGER_NAME']).bind()
 
         if setup_structlog:
             self.log.setLevel(logging.DEBUG)
@@ -265,10 +255,21 @@ class TaskTiger(object):
         """
         return ':'.join([self.config['REDIS_PREFIX']] + list(parts))
 
-    def task(self, _fn=None, queue=None, hard_timeout=None, unique=None,
-             lock=None, lock_key=None, retry=None, retry_on=None,
-             retry_method=None, schedule=None, batch=False,
-             max_queue_size=None):
+    def task(
+        self,
+        _fn=None,
+        queue=None,
+        hard_timeout=None,
+        unique=None,
+        lock=None,
+        lock_key=None,
+        retry=None,
+        retry_on=None,
+        retry_method=None,
+        schedule=None,
+        batch=False,
+        max_queue_size=None,
+    ):
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -280,6 +281,7 @@ class TaskTiger(object):
         def _delay(func):
             def _delay_inner(*args, **kwargs):
                 return self.delay(func, args=args, kwargs=kwargs)
+
             return _delay_inner
 
         # Periodic tasks are unique.
@@ -314,8 +316,9 @@ class TaskTiger(object):
 
             if schedule is not None:
                 serialized_func = serialize_func_name(func)
-                assert serialized_func not in self.periodic_task_funcs, \
-                    "attempted duplicate registration of periodic task"
+                assert (
+                    serialized_func not in self.periodic_task_funcs
+                ), "attempted duplicate registration of periodic task"
                 self.periodic_task_funcs[serialized_func] = func
 
             return func
@@ -329,8 +332,14 @@ class TaskTiger(object):
         """
         run_worker(args=args, obj=self)
 
-    def run_worker(self, queues=None, module=None, exclude_queues=None,
-                   max_workers_per_queue=None, store_tracebacks=None):
+    def run_worker(
+        self,
+        queues=None,
+        module=None,
+        exclude_queues=None,
+        max_workers_per_queue=None,
+        store_tracebacks=None,
+    ):
         """
         Main worker entry point method.
 
@@ -346,28 +355,52 @@ class TaskTiger(object):
                     importlib.import_module(module_name)
                     self.log.debug('imported module', module_name=module_name)
 
-            worker = Worker(self,
-                            queues.split(',') if queues else None,
-                            exclude_queues.split(',') if exclude_queues else None,
-                            max_workers_per_queue=max_workers_per_queue,
-                            store_tracebacks=store_tracebacks)
+            worker = Worker(
+                self,
+                queues.split(',') if queues else None,
+                exclude_queues.split(',') if exclude_queues else None,
+                max_workers_per_queue=max_workers_per_queue,
+                store_tracebacks=store_tracebacks,
+            )
             worker.run()
         except Exception:
             self.log.exception('Unhandled exception')
             raise
 
-    def delay(self, func, args=None, kwargs=None, queue=None,
-              hard_timeout=None, unique=None, lock=None, lock_key=None,
-              when=None, retry=None, retry_on=None, retry_method=None,
-              max_queue_size=None):
+    def delay(
+        self,
+        func,
+        args=None,
+        kwargs=None,
+        queue=None,
+        hard_timeout=None,
+        unique=None,
+        lock=None,
+        lock_key=None,
+        when=None,
+        retry=None,
+        retry_on=None,
+        retry_method=None,
+        max_queue_size=None,
+    ):
         """
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        task = Task(self, func, args=args, kwargs=kwargs, queue=queue,
-                    hard_timeout=hard_timeout, unique=unique,
-                    lock=lock, lock_key=lock_key,
-                    retry=retry, retry_on=retry_on, retry_method=retry_method)
+        task = Task(
+            self,
+            func,
+            args=args,
+            kwargs=kwargs,
+            queue=queue,
+            hard_timeout=hard_timeout,
+            unique=unique,
+            lock=lock,
+            lock_key=lock_key,
+            retry=retry,
+            retry_on=retry_on,
+            retry_method=retry_method,
+        )
 
         task.delay(when=when, max_queue_size=max_queue_size)
 
@@ -449,34 +482,56 @@ class TaskTiger(object):
 
         return queue_stats
 
+
 @click.command()
-@click.option('-q', '--queues', help='If specified, only the given queue(s) '
-                                     'are processed. Multiple queues can be '
-                                     'separated by comma.')
-@click.option('-m', '--module', help="Module(s) to import when launching the "
-                                     "worker. This improves task performance "
-                                     "since the module doesn't have to be "
-                                     "reimported every time a task is forked. "
-                                     "Multiple modules can be separated by "
-                                     "comma.")
-@click.option('-e', '--exclude-queues', help='If specified, exclude the given '
-                                             'queue(s) from processing. '
-                                             'Multiple queues can be '
-                                             'separated by comma.')
-@click.option('-M', '--max-workers-per-queue', help='Maximum workers allowed '
-                                                    'to process a queue', type=int)
-@click.option('--store-tracebacks/--no-store-tracebacks',
-              help='Store tracebacks with execution history',
-              default=None)
+@click.option(
+    '-q',
+    '--queues',
+    help='If specified, only the given queue(s) '
+    'are processed. Multiple queues can be '
+    'separated by comma.',
+)
+@click.option(
+    '-m',
+    '--module',
+    help="Module(s) to import when launching the "
+    "worker. This improves task performance "
+    "since the module doesn't have to be "
+    "reimported every time a task is forked. "
+    "Multiple modules can be separated by "
+    "comma.",
+)
+@click.option(
+    '-e',
+    '--exclude-queues',
+    help='If specified, exclude the given '
+    'queue(s) from processing. '
+    'Multiple queues can be '
+    'separated by comma.',
+)
+@click.option(
+    '-M',
+    '--max-workers-per-queue',
+    help='Maximum workers allowed ' 'to process a queue',
+    type=int,
+)
+@click.option(
+    '--store-tracebacks/--no-store-tracebacks',
+    help='Store tracebacks with execution history',
+    default=None,
+)
 @click.option('-h', '--host', help='Redis server hostname')
 @click.option('-p', '--port', help='Redis server port')
 @click.option('-a', '--password', help='Redis password')
 @click.option('-n', '--db', help='Redis database number')
 @click.pass_context
 def run_worker(context, host, port, db, password, **kwargs):
-    conn = redis.Redis(host, int(port or 6379), int(db or 0), password, decode_responses=True)
+    conn = redis.Redis(
+        host, int(port or 6379), int(db or 0), password, decode_responses=True
+    )
     tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
     tiger.run_worker(**kwargs)
+
 
 if __name__ == '__main__':
     run_worker()

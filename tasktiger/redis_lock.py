@@ -11,6 +11,7 @@ import time
 # The class below additionally catches ValueError for better compatibility with
 # new-style locks (for when we upgrade), and adds a renew() method.
 
+
 class Lock(object):
     """
     A shared, distributed Lock. Using Redis for locking allows the Lock
@@ -82,7 +83,9 @@ class Lock(object):
             if existing < unixtime:
                 # the previous lock is expired, attempt to overwrite it
                 try:
-                    existing = float(self.redis.getset(self.name, timeout_at) or 1)
+                    existing = float(
+                        self.redis.getset(self.name, timeout_at) or 1
+                    )
                 except ValueError:
                     existing = Lock.LOCK_FOREVER
                 if existing < unixtime:
@@ -113,11 +116,14 @@ class Lock(object):
             self.redis.getset(self.name, timeout_at)
             self.acquired_until = timeout_at
 
+
 # For now unused:
 # New-style Lock with renew() method (andymccurdy/redis-py#629)
 # XXX: when upgrading to the new-style class, take old-style locks into account
 from redis import WatchError
 from redis.lock import Lock as RedisLock
+
+
 class NewStyleLock(RedisLock):
     def renew(self, new_timeout):
         """

@@ -1,15 +1,18 @@
 import sys
 
+
 class TaskImportError(ImportError):
     """
     Raised when a task could not be imported.
     """
+
 
 class JobTimeoutException(BaseException):
     """
     Raised when a job takes longer to complete than the allowed maximum timeout
     value.
     """
+
 
 class QueueFullException(BaseException):
     """
@@ -18,10 +21,12 @@ class QueueFullException(BaseException):
     max_queue_size.
     """
 
+
 class StopRetry(Exception):
     """
     Raised by a retry function to indicate that the task shouldn't be retried.
     """
+
 
 class RetryException(BaseException):
     """
@@ -34,10 +39,12 @@ class RetryException(BaseException):
     warning will be logged instead of an error, and the task will be removed
     from Redis when it completes.
     """
+
     def __init__(self, method=None, original_traceback=False, log_error=True):
         self.method = method
         self.exc_info = sys.exc_info() if original_traceback else None
         self.log_error = log_error
+
 
 class TaskNotFound(Exception):
     """

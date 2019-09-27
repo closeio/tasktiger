@@ -8,14 +8,29 @@ from .exceptions import QueueFullException, TaskNotFound
 
 __all__ = ['Task']
 
-class Task(object):
-    def __init__(self, tiger, func=None, args=None, kwargs=None, queue=None,
-                 hard_timeout=None, unique=None, lock=None, lock_key=None,
-                 retry=None, retry_on=None, retry_method=None,
-                 max_queue_size=None,
 
-                 # internal variables
-                 _data=None, _state=None, _ts=None, _executions=None):
+class Task(object):
+    def __init__(
+        self,
+        tiger,
+        func=None,
+        args=None,
+        kwargs=None,
+        queue=None,
+        hard_timeout=None,
+        unique=None,
+        lock=None,
+        lock_key=None,
+        retry=None,
+        retry_on=None,
+        retry_method=None,
+        max_queue_size=None,
+        # internal variables
+        _data=None,
+        _state=None,
+        _ts=None,
+        _executions=None,
+    ):
         """
         Queues a task. See README.rst for an explanation of the options.
         """
@@ -65,10 +80,7 @@ class Task(object):
         else:
             task_id = gen_id()
 
-        task = {
-            'id': task_id,
-            'func': serialized_name,
-        }
+        task = {'id': task_id, 'func': serialized_name}
         if unique:
             task['unique'] = True
         if lock or lock_key:
@@ -89,8 +101,9 @@ class Task(object):
 
             task['retry_method'] = retry_method
             if retry_on:
-                task['retry_on'] = [serialize_func_name(cls)
-                                    for cls in retry_on]
+                task['retry_on'] = [
+                    serialize_func_name(cls) for cls in retry_on
+                ]
         if max_queue_size:
             task['max_queue_size'] = max_queue_size
 
@@ -156,14 +169,16 @@ class Task(object):
         """
         Whether this task should be retried when the given exception occurs.
         """
-        for n in (self.retry_on or []):
+        for n in self.retry_on or []:
             try:
                 if issubclass(exception_class, import_attribute(n)):
                     return True
             except TaskImportError:
                 if logger:
-                    logger.error('should_retry_on could not import class',
-                                 exception_name=n)
+                    logger.error(
+                        'should_retry_on could not import class',
+                        exception_name=n,
+                    )
         return False
 
     @property
@@ -209,40 +224,47 @@ class Task(object):
         assert from_state
         assert queue
 
-        scripts.fail_if_not_in_zset(_key(from_state, queue), self.id,
-                                    client=pipeline)
+        scripts.fail_if_not_in_zset(
+            _key(from_state, queue), self.id, client=pipeline
+        )
         if to_state:
             if not when:
                 when = time.time()
             if mode:
-                scripts.zadd(_key(to_state, queue), when, self.id,
-                                  mode, client=pipeline)
+                scripts.zadd(
+                    _key(to_state, queue), when, self.id, mode, client=pipeline
+                )
             else:
                 pipeline.zadd(_key(to_state, queue), self.id, when)
             pipeline.sadd(_key(to_state), queue)
         pipeline.zrem(_key(from_state, queue), self.id)
 
-        if not to_state: # Remove the task if necessary
+        if not to_state:  # Remove the task if necessary
             if self.unique:
                 # Only delete if it's not in any other queue
                 check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
                 check_states.remove(from_state)
                 # TODO: Do the following two in one call.
-                scripts.delete_if_not_in_zsets(_key('task', self.id, 'executions'),
-                                                    self.id, [
-                    _key(state, queue) for state in check_states
-                ], client=pipeline)
-                scripts.delete_if_not_in_zsets(_key('task', self.id),
-                                                    self.id, [
-                    _key(state, queue) for state in check_states
-                ], client=pipeline)
+                scripts.delete_if_not_in_zsets(
+                    _key('task', self.id, 'executions'),
+                    self.id,
+                    [_key(state, queue) for state in check_states],
+                    client=pipeline,
+                )
+                scripts.delete_if_not_in_zsets(
+                    _key('task', self.id),
+                    self.id,
+                    [_key(state, queue) for state in check_states],
+                    client=pipeline,
+                )
             else:
                 # Safe to remove
                 pipeline.delete(_key('task', self.id, 'executions'))
                 pipeline.delete(_key('task', self.id))
 
-        scripts.srem_if_not_exists(_key(from_state), queue,
-                _key(from_state, queue), client=pipeline)
+        scripts.srem_if_not_exists(
+            _key(from_state), queue, _key(from_state, queue), client=pipeline
+        )
 
         if to_state == QUEUED:
             pipeline.publish(_key('activity'), queue)
@@ -251,9 +273,11 @@ class Task(object):
             scripts.execute_pipeline(pipeline)
         except redis.ResponseError as e:
             if '<FAIL_IF_NOT_IN_ZSET>' in e.args[0]:
-                raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
-                    self.id, queue, from_state
-                ))
+                raise TaskNotFound(
+                    'Task {} not found in queue "{}" in state "{}".'.format(
+                        self.id, queue, from_state
+                    )
+                )
             raise
         else:
             self._state = to_state
@@ -310,8 +334,13 @@ class Task(object):
         pipeline.sadd(tiger._key(state), self.queue)
         pipeline.set(tiger._key('task', self.id), serialized_task)
         # In case of unique tasks, don't update the score.
-        tiger.scripts.zadd(tiger._key(state, self.queue), ts, self.id,
-                           mode='nx', client=pipeline)
+        tiger.scripts.zadd(
+            tiger._key(state, self.queue),
+            ts,
+            self.id,
+            mode='nx',
+            client=pipeline,
+        )
         if state == QUEUED:
             pipeline.publish(tiger._key('activity'), self.queue)
         pipeline.execute()
@@ -335,9 +364,11 @@ class Task(object):
         pipeline.zscore(key, self.id)
         _, score = pipeline.execute()
         if not score:
-            raise TaskNotFound('Task {} not found in queue "{}" in state "{}".'.format(
-                self.id, self.queue, SCHEDULED
-            ))
+            raise TaskNotFound(
+                'Task {} not found in queue "{}" in state "{}".'.format(
+                    self.id, self.queue, SCHEDULED
+                )
+            )
 
         self._ts = ts
 
@@ -355,7 +386,9 @@ class Task(object):
         if load_executions:
             pipeline = tiger.connection.pipeline()
             pipeline.get(tiger._key('task', task_id))
-            pipeline.lrange(tiger._key('task', task_id, 'executions'), -load_executions, -1)
+            pipeline.lrange(
+                tiger._key('task', task_id, 'executions'), -load_executions, -1
+            )
             serialized_data, serialized_executions = pipeline.execute()
         else:
             serialized_data = tiger.connection.get(tiger._key('task', task_id))
@@ -364,16 +397,20 @@ class Task(object):
         if serialized_data:
             data = json.loads(serialized_data)
             executions = [json.loads(e) for e in serialized_executions if e]
-            return Task(tiger, queue=queue, _data=data, _state=state,
-                        _executions=executions)
+            return Task(
+                tiger,
+                queue=queue,
+                _data=data,
+                _state=state,
+                _executions=executions,
+            )
         else:
-            raise TaskNotFound('Task {} not found.'.format(
-                task_id
-            ))
+            raise TaskNotFound('Task {} not found.'.format(task_id))
 
     @classmethod
-    def tasks_from_queue(self, tiger, queue, state, skip=0, limit=1000,
-                   load_executions=0):
+    def tasks_from_queue(
+        self, tiger, queue, state, skip=0, limit=1000, load_executions=0
+    ):
         """
         Returns a tuple with the following information:
         * total items in the queue
@@ -386,34 +423,53 @@ class Task(object):
         key = tiger._key(state, queue)
         pipeline = tiger.connection.pipeline()
         pipeline.zcard(key)
-        pipeline.zrange(key, -limit-skip, -1-skip, withscores=True)
+        pipeline.zrange(key, -limit - skip, -1 - skip, withscores=True)
         n, items = pipeline.execute()
 
         tasks = []
 
         if items:
-            tss = [datetime.datetime.utcfromtimestamp(item[1]) for item in items]
+            tss = [
+                datetime.datetime.utcfromtimestamp(item[1]) for item in items
+            ]
             if load_executions:
                 pipeline = tiger.connection.pipeline()
                 pipeline.mget([tiger._key('task', item[0]) for item in items])
                 for item in items:
-                    pipeline.lrange(tiger._key('task', item[0], 'executions'), -load_executions, -1)
+                    pipeline.lrange(
+                        tiger._key('task', item[0], 'executions'),
+                        -load_executions,
+                        -1,
+                    )
                 results = pipeline.execute()
 
-                for serialized_data, serialized_executions, ts in zip(results[0], results[1:], tss):
+                for serialized_data, serialized_executions, ts in zip(
+                    results[0], results[1:], tss
+                ):
                     data = json.loads(serialized_data)
-                    executions = [json.loads(e) for e in serialized_executions if e]
+                    executions = [
+                        json.loads(e) for e in serialized_executions if e
+                    ]
 
-                    task = Task(tiger, queue=queue, _data=data, _state=state,
-                                _ts=ts, _executions=executions)
+                    task = Task(
+                        tiger,
+                        queue=queue,
+                        _data=data,
+                        _state=state,
+                        _ts=ts,
+                        _executions=executions,
+                    )
 
                     tasks.append(task)
             else:
-                data = tiger.connection.mget([tiger._key('task', item[0]) for item in items])
+                data = tiger.connection.mget(
+                    [tiger._key('task', item[0]) for item in items]
+                )
                 for serialized_data, ts in zip(data, tss):
                     data = json.loads(serialized_data)
-                    task = Task(tiger, queue=queue, _data=data, _state=state,
-                                _ts=ts)
+                    task = Task(
+                        tiger, queue=queue, _data=data, _state=state, _ts=ts
+                    )
                     tasks.append(task)
 
         return n, tasks
@@ -432,9 +488,7 @@ class Task(object):
         pipeline.llen(self.tiger._key('task', self.id, 'executions'))
         exists, n_executions = pipeline.execute()
         if not exists:
-            raise TaskNotFound('Task {} not found.'.format(
-                self.id
-            ))
+            raise TaskNotFound('Task {} not found.'.format(self.id))
         return n_executions
 
     def retry(self):
