@@ -235,13 +235,16 @@ class Worker(object):
                 message = self._pubsub.get_message()
 
             if self._did_work:
-                break  # Exit immediately if we did work during the last
-                # execution loop because there might be more work to do
+                # Exit immediately if we did work during the last execution
+                # loop because there might be more work to do
+                break
             elif time.time() >= batch_exit and new_queue_found:
-                break  # After finding a new queue we can wait until the
-                # batch timeout expires
+                # After finding a new queue we can wait until the batch timeout
+                # expires
+                break
             elif time.time() - start_time > timeout:
-                break  # Always exit after our maximum wait time
+                # Always exit after our maximum wait time
+                break
 
     def _worker_queue_expired_tasks(self):
         """
