@@ -71,8 +71,8 @@ def serialize_func_name(func):
     """
     if func.__module__ == '__main__':
         raise ValueError(
-            'Functions from the __main__ module cannot be '
-            'processed by workers.'
+            'Functions from the __main__ module cannot be processed by '
+            'workers.'
         )
     try:
         # This will only work on Python 3.3 or above, but it will allow us to use static/classmethods

@@ -487,32 +487,32 @@ class TaskTiger(object):
 @click.option(
     '-q',
     '--queues',
-    help='If specified, only the given queue(s) '
-    'are processed. Multiple queues can be '
-    'separated by comma.',
+    help=(
+        'If specified, only the given queue(s) are processed. Multiple queues '
+        'can be separated by comma.'
+    ),
 )
 @click.option(
     '-m',
     '--module',
-    help="Module(s) to import when launching the "
-    "worker. This improves task performance "
-    "since the module doesn't have to be "
-    "reimported every time a task is forked. "
-    "Multiple modules can be separated by "
-    "comma.",
+    help=(
+        'Module(s) to import when launching the worker. This improves task '
+        'performance since the module doesn\'t have to be reimported every '
+        'time a task is forked. Multiple modules can be separated by comma.'
+    ),
 )
 @click.option(
     '-e',
     '--exclude-queues',
-    help='If specified, exclude the given '
-    'queue(s) from processing. '
-    'Multiple queues can be '
-    'separated by comma.',
+    help=(
+        'If specified, exclude the given queue(s) from processing. Multiple '
+        'queues can be separated by comma.'
+    ),
 )
 @click.option(
     '-M',
     '--max-workers-per-queue',
-    help='Maximum workers allowed ' 'to process a queue',
+    help='Maximum workers allowed to process a queue',
     type=int,
 )
 @click.option(
