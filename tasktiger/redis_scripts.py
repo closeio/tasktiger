@@ -415,9 +415,12 @@ class RedisScripts(object):
 
                 if not on_success or on_success[0] != 'update_sets':
                     raise NotImplementedError()
-                set_value, remove_from_set, add_to_set, add_to_set_if_exists = on_success[
-                    1:
-                ]
+                (
+                    set_value,
+                    remove_from_set,
+                    add_to_set,
+                    add_to_set_if_exists,
+                ) = on_success[1:]
 
                 return self._zpoppush_exists_min_update_sets(
                     keys=[
