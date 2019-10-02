@@ -536,19 +536,10 @@ class TaskTiger(object):
         if last_execution_before:
             assert isinstance(last_execution_before, datetime.datetime)
 
-        if queues:
-            only_queues = set(queues)
-        elif self.config['ONLY_QUEUES']:
-            only_queues = set(self.config['ONLY_QUEUES'])
-        else:
-            only_queues = set()
-
-        if exclude_queues:
-            exclude_queues = set(exclude_queues)
-        elif self.config['EXCLUDE_QUEUES']:
-            exclude_queues = set(self.config['EXCLUDE_QUEUES'])
-        else:
-            exclude_queues = set()
+        only_queues = set(queues or self.config['ONLY_QUEUES'] or [])
+        exclude_queues = set(
+            exclude_queues or self.config['EXCLUDE_QUEUES'] or []
+        )
 
         def match(queue):
             """
