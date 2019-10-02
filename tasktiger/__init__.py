@@ -485,7 +485,6 @@ class TaskTiger(object):
 
         return queue_stats
 
-
     def purge_errored_tasks(
         self,
         queues=None,
