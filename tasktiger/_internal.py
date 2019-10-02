@@ -31,10 +31,7 @@ g_fork_lock = threading.Lock()
 # Global task context. We store this globally (and not on the TaskTiger
 # instance) for consistent results just in case the user has multiple TaskTiger
 # instances.
-g = {
-    'current_task_is_batch': None,
-    'current_tasks': None,
-}
+g = {'current_task_is_batch': None, 'current_tasks': None}
 
 # from rq
 def import_attribute(name):
@@ -47,30 +44,36 @@ def import_attribute(name):
     except (ValueError, ImportError, AttributeError) as e:
         raise TaskImportError(e)
 
+
 def gen_id():
     """
     Generates and returns a random hex-encoded 256-bit unique ID.
     """
     return binascii.b2a_hex(os.urandom(32)).decode('utf8')
 
+
 def gen_unique_id(serialized_name, args, kwargs):
     """
     Generates and returns a hex-encoded 256-bit ID for the given task name and
     args. Used to generate IDs for unique tasks or for task locks.
     """
-    return hashlib.sha256(json.dumps({
-        'func': serialized_name,
-        'args': args,
-        'kwargs': kwargs,
-    }, sort_keys=True).encode('utf8')).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            {'func': serialized_name, 'args': args, 'kwargs': kwargs},
+            sort_keys=True,
+        ).encode('utf8')
+    ).hexdigest()
+
 
 def serialize_func_name(func):
     """
     Returns the dotted serialized path to the passed function.
     """
     if func.__module__ == '__main__':
-        raise ValueError('Functions from the __main__ module cannot be '
-                         'processed by workers.')
+        raise ValueError(
+            'Functions from the __main__ module cannot be processed by '
+            'workers.'
+        )
     try:
         # This will only work on Python 3.3 or above, but it will allow us to use static/classmethods
         func_name = func.__qualname__
@@ -78,17 +81,19 @@ def serialize_func_name(func):
         func_name = func.__name__
     return ':'.join([func.__module__, func_name])
 
+
 def dotted_parts(s):
     """
     For a string "a.b.c", yields "a", "a.b", "a.b.c".
     """
     idx = -1
     while s:
-        idx = s.find('.', idx+1)
+        idx = s.find('.', idx + 1)
         if idx == -1:
             yield s
             break
         yield s[:idx]
+
 
 def reversed_dotted_parts(s):
     """
@@ -103,11 +108,13 @@ def reversed_dotted_parts(s):
             break
         yield s[:idx]
 
+
 def serialize_retry_method(retry_method):
     if callable(retry_method):
         return (serialize_func_name(retry_method), ())
     else:
         return (serialize_func_name(retry_method[0]), retry_method[1])
+
 
 def get_timestamp(when):
     # convert timedelta to datetime
@@ -117,4 +124,4 @@ def get_timestamp(when):
     if when:
         # Convert to unixtime: utctimetuple drops microseconds so we add
         # them manually.
-        return calendar.timegm(when.utctimetuple()) + when.microsecond/1.e6
+        return calendar.timegm(when.utctimetuple()) + when.microsecond / 1.0e6

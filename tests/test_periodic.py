@@ -3,7 +3,7 @@
 import datetime
 import time
 
-from tasktiger import (Worker, periodic)
+from tasktiger import Worker, periodic
 
 from .tasks_periodic import tiger
 from .test_base import BaseTestCase
@@ -42,12 +42,14 @@ class TestPeriodicTasks(BaseTestCase):
         assert f[0](datetime.datetime(1990, 1, 1), *f[1]) == dt
 
         f = periodic(minutes=1, end_date=dt)
-        assert (f[0](datetime.datetime(2009, 12, 31, 23, 58), *f[1]) ==
-                              datetime.datetime(2009, 12, 31, 23, 59))
+        assert f[0](
+            datetime.datetime(2009, 12, 31, 23, 58), *f[1]
+        ) == datetime.datetime(2009, 12, 31, 23, 59)
 
         f = periodic(minutes=1, end_date=dt)
-        assert (f[0](datetime.datetime(2009, 12, 31, 23, 59), *f[1]) ==
-                              datetime.datetime(2010, 1, 1, 0, 0))
+        assert f[0](
+            datetime.datetime(2009, 12, 31, 23, 59), *f[1]
+        ) == datetime.datetime(2010, 1, 1, 0, 0)
 
         f = periodic(minutes=1, end_date=dt)
         assert f[0](datetime.datetime(2010, 1, 1, 0, 0), *f[1]) == None
@@ -97,7 +99,7 @@ class TestPeriodicTasks(BaseTestCase):
 
         # Sleep until the next second
         now = datetime.datetime.utcnow()
-        time.sleep(1 - now.microsecond / 10.**6)
+        time.sleep(1 - now.microsecond / 10.0 ** 6)
 
         ensure_run(1)
 

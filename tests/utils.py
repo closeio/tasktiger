@@ -9,21 +9,12 @@ TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when
     # doing a single worker run.
     'SELECT_TIMEOUT': 0,
-
     'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
-
     'REQUEUE_EXPIRED_TASKS_INTERVAL': DELAY,
-
-    'LOCK_RETRY': DELAY * 2.,
-
+    'LOCK_RETRY': DELAY * 2.0,
     'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
-
-    'BATCH_QUEUES': {
-        'batch': 3,
-    },
-
+    'BATCH_QUEUES': {'batch': 3},
     'SINGLE_WORKER_QUEUES': ['swq'],
-
     'EXCLUDE_QUEUES': ['periodic_ignore'],
 }
 
@@ -37,6 +28,7 @@ class Patch(object):
     module.func_name() # will use the original function
 
     """
+
     def __init__(self, orig_obj, func_name, new_func):
         self.orig_obj = orig_obj
         self.func_name = func_name

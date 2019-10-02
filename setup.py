@@ -6,20 +6,12 @@ import sys
 with open('README.rst', encoding='utf-8') as file:
     long_description = file.read()
 
-install_requires = [
-    'click',
-    'redis>=2,<3',
-    'structlog'
-]
+install_requires = ['click', 'redis>=2,<3', 'structlog']
 
 if sys.version_info < (3, 3):
     install_requires += ['contextlib2>=0.5.5']
 
-tests_require = install_requires + [
-    'freezefrog',
-    'pytest',
-    'psutil',
-]
+tests_require = install_requires + ['freezefrog', 'pytest', 'psutil']
 
 setup(
     name='tasktiger',
@@ -45,13 +37,7 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
-    packages=[
-        'tasktiger',
-    ],
+    packages=['tasktiger'],
     package_data={'tasktiger': ['lua/*.lua']},
-    entry_points={
-        'console_scripts': [
-            'tasktiger = tasktiger:run_worker',
-        ],
-    },
+    entry_points={'console_scripts': ['tasktiger = tasktiger:run_worker']},
 )

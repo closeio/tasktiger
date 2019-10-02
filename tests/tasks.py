@@ -41,10 +41,7 @@ def task_on_other_queue():
 
 
 def file_args_task(filename, *args, **kwargs):
-    open(filename, 'w').write(json.dumps({
-        'args': args,
-        'kwargs': kwargs,
-    }))
+    open(filename, 'w').write(json.dumps({'args': args, 'kwargs': kwargs}))
 
 
 @tiger.task(hard_timeout=DELAY)
@@ -108,8 +105,7 @@ def retry_task():
 
 
 def retry_task_2():
-    raise RetryException(method=fixed(DELAY, 1),
-                         log_error=False)
+    raise RetryException(method=fixed(DELAY, 1), log_error=False)
 
 
 def verify_current_task():

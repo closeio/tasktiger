@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import (
+    absolute_import,
+    division,
+    print_function,
+    unicode_literals,
+)
 import signal
 
 from .exceptions import JobTimeoutException
@@ -39,10 +43,11 @@ class BaseDeathPenalty(object):
 
 
 class UnixSignalDeathPenalty(BaseDeathPenalty):
-
     def handle_death_penalty(self, signum, frame):
-        raise JobTimeoutException('Job exceeded maximum timeout '
-                                  'value (%d seconds).' % self._timeout)
+        raise JobTimeoutException(
+            'Job exceeded maximum timeout '
+            'value (%d seconds).' % self._timeout
+        )
 
     def setup_death_penalty(self):
         """Sets up an alarm signal and a signal handler that raises

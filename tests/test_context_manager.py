@@ -14,6 +14,7 @@ class ContextManagerTester(object):
 
     Uses Redis to track number of enter/exit calls
     """
+
     def __init__(self, name):
         self.name = name
         self.conn = redis.Redis(db=TEST_DB, decode_responses=True)
