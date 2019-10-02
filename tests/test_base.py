@@ -829,9 +829,7 @@ class TestCase(BaseTestCase):
             self.tiger.delay(exception_task)
 
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(
-            queued={'default': 0}, error={'default': 10}
-        )
+        self._ensure_queues(queued={'default': 0}, error={'default': 10})
 
         # purge 1
         assert 1 == self.tiger.purge_errored_tasks(limit=1)
