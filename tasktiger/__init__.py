@@ -517,7 +517,8 @@ class TaskTiger(object):
         :param iterable(str) exclude_queues: Queues to exclude
         :param datetime last_execution_before: If provided, only deletes tasks
             older than this.
-        :param int limit: If given, stops after purging ``limit`` tasks.
+        :param int limit: Stops after purging ``limit`` tasks. Can be
+            explicitly set to None to remove limit and purge all at once.
 
         :returns: The total number of tasks purged
         """

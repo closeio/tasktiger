@@ -752,7 +752,6 @@ class TestCase(BaseTestCase):
     def test_purge_errored_tasks_no_errored_tasks(self):
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
         assert 0 == self.tiger.purge_errored_tasks()
-        # doesn't error
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
 
     def test_purge_errored_tasks_both_errored_and_queued(self):
