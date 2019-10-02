@@ -75,6 +75,9 @@ class Task(object):
         if max_queue_size is None:
             max_queue_size = getattr(func, '_task_max_queue_size', None)
 
+        # normalize falsy args/kwargs to empty structures
+        args = args or []
+        kwargs = kwargs or {}
         if unique:
             task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
