@@ -8,6 +8,8 @@ import tempfile
 import time
 from multiprocessing import Pool, Process
 
+from freezefrog import FreezeTime
+
 from tasktiger import (
     JobTimeoutException,
     StopRetry,
@@ -744,22 +746,12 @@ class TestCase(BaseTestCase):
         assert task['func'] == 'tests.tasks:exception_task'
 
         # purge errored tasks
-        all(self.tiger.purge_errored_tasks())
+        assert 1 == self.tiger.purge_errored_tasks()
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
-
-    def test_purge_errored_tasks_iterator_not_called(self):
-        self.tiger.delay(exception_task)
-
-        Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0}, error={'default': 1})
-
-        # create iterator, don't iterate over it
-        self.tiger.purge_errored_tasks()
-        self._ensure_queues(queued={'default': 0}, error={'default': 1})
 
     def test_purge_errored_tasks_no_errored_tasks(self):
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
-        all(self.tiger.purge_errored_tasks())
+        assert 0 == self.tiger.purge_errored_tasks()
         # doesn't error
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
 
@@ -770,7 +762,7 @@ class TestCase(BaseTestCase):
 
         self._ensure_queues(queued={'default': 1}, error={'default': 1})
 
-        all(self.tiger.purge_errored_tasks())
+        assert 1 == self.tiger.purge_errored_tasks()
         self._ensure_queues(queued={'default': 1}, error={'default': 0})
 
     def test_purge_errored_tasks_specific_queues(self):
@@ -787,43 +779,30 @@ class TestCase(BaseTestCase):
         )
 
         # create iterator, don't iterate over it
-        all(self.tiger.purge_errored_tasks(queues=['a.b.c']))
+        assert 1 == self.tiger.purge_errored_tasks(queues=['a.b.c'])
         self._ensure_queues(
             queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
             error={'a.b.c': 0, 'a.b.d': 1, 'a': 1, 'e': 1, 'default': 1},
         )
-        all(
-            self.tiger.purge_errored_tasks(
-                queues=['a'], exclude_queues=['a.b.d']
-            )
+        assert 1 == self.tiger.purge_errored_tasks(
+            queues=['a'], exclude_queues=['a.b.d']
         )
         self._ensure_queues(
             queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
             error={'a.b.c': 0, 'a.b.d': 1, 'a': 0, 'e': 1, 'default': 1},
         )
-        all(self.tiger.purge_errored_tasks(exclude_queues=['e']))
+        assert 2 == self.tiger.purge_errored_tasks(exclude_queues=['e'])
         self._ensure_queues(
             queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
             error={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 1, 'default': 0},
         )
-        all(self.tiger.purge_errored_tasks())
+        assert 1 == self.tiger.purge_errored_tasks()
         self._ensure_queues(
             queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
             error={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
         )
 
     def test_purge_errored_tasks_older_than(self):
-        from freezefrog import FreezeTime
-
-        self.tiger.delay(exception_task)
-        Worker(self.tiger).run(once=True)
-        self.tiger.delay(simple_task)
-
-        self._ensure_queues(queued={'default': 1}, error={'default': 1})
-
-        all(self.tiger.purge_errored_tasks())
-        self._ensure_queues(queued={'default': 1}, error={'default': 0})
-
         task_timestamps = [
             datetime.datetime(2015, 1, 1),
             datetime.datetime(2016, 1, 1),
@@ -834,16 +813,37 @@ class TestCase(BaseTestCase):
             with FreezeTime(task_timestamp):
                 self.tiger.delay(exception_task)
                 Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0}, error={'default': 4})
 
         _, tasks = Task.tasks_from_queue(self.tiger, 'default', 'error')
         actual_timestamps = [task.ts for task in tasks]
         assert task_timestamps == actual_timestamps
 
-        all(
-            self.tiger.purge_errored_tasks(
-                last_execution_before=datetime.datetime(2016, 6, 1)
-            )
+        assert 2 == self.tiger.purge_errored_tasks(
+            last_execution_before=datetime.datetime(2016, 6, 1)
         )
+        self._ensure_queues(queued={'default': 0}, error={'default': 2})
+
+    def test_purge_errored_tasks_limit(self):
+        for _ in range(10):
+            self.tiger.delay(exception_task)
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(
+            queued={'default': 0}, error={'default': 10}
+        )
+
+        # purge 1
+        assert 1 == self.tiger.purge_errored_tasks(limit=1)
+        self._ensure_queues(queued={'default': 0}, error={'default': 9})
+
+        # purge 4
+        assert 4 == self.tiger.purge_errored_tasks(limit=4)
+        self._ensure_queues(queued={'default': 0}, error={'default': 5})
+
+        # purge the rest
+        assert 5 == self.tiger.purge_errored_tasks(limit=None)
+        self._ensure_queues(queued={'default': 0}, error={'default': 0})
 
 
 class TestTasks(BaseTestCase):

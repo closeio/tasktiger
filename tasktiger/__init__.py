@@ -1,10 +1,13 @@
 import click
 from collections import defaultdict
+import datetime
 import importlib
 import logging
 import redis
 import time
+import six
 import structlog
+
 
 from .redis_semaphore import Semaphore
 from .redis_scripts import RedisScripts
@@ -488,55 +491,48 @@ class TaskTiger(object):
         queues=None,
         exclude_queues=None,
         last_execution_before=None,
-        batch_size=None,
+        limit=5000,
     ):
         """Purge failed tasks left in the ERROR state
 
         Example usage::
 
-            for prog in tiger.purge_errored_tasks(
-                queues=['my-queue'],
-                exclude_queues=['other-queue'],
-                last_execution_before=(
-                    datetime.datetime.utcnow() - datetime.timedelta(days=14)
-                ),
-                batch_size=500,
-            ):
+            limit = 500
+            n_processed = limit
+            while n_processed == limit:
+                n_processed = tiger.purge_errored_tasks(
+                    queues=['my-queue'],
+                    exclude_queues=['other-queue'],
+                    last_execution_before=(
+                        datetime.datetime.utcnow()
+                        - datetime.timedelta(days=14)
+                    ),
+                    limit=limit,
+                ):
                 time.sleep(.1)  # don't overload redis
-                print(prog, 'tasks have been deleted so far.')
 
-            # or more simply
-            all(tiger.purge_errored_tasks(queues=['my-queue']))
+            # or to purge all in one go
+            tiger.purge_errored_tasks(limit=None)
 
         :param iterable(str) queues: Queues to include
         :param iterable(str) exclude_queues: Queues to exclude
         :param datetime last_execution_before: If provided, only deletes tasks
             older than this.
-        :param int batch_size: If given, yields after processing each batch of
-            ``batch_size`` tasks
+        :param int limit: If given, stops after purging ``limit`` tasks.
 
-        :returns: If no batch size is given, returns the total number of tasks
-            deleted. If batch_size is given, returns an iterator that yields
-            the total number of tasks processed in increments of
-            ``batch_size``.
+        :returns: The total number of tasks purged
         """
-        import six
-        import datetime
-
-        iterable_of_strings_error_template = (
+        # some sanity checking and kind error messages for arguments
+        error_template = (
             '{kwarg} should be an iterable of strings, not a string directly. '
             'Did you mean `{kwarg}=[\'{val}\']`?'
         )
-        assert not isinstance(
-            queues, six.string_types
-        ), iterable_of_strings_error_template.format(
+        assert not isinstance(queues, six.string_types), error_template.format(
             kwarg='queues', val=queues
         )
         assert not isinstance(
             exclude_queues, six.string_types
-        ), iterable_of_strings_error_template.format(
-            kwarg='exclude_queues', val=exclude_queues
-        )
+        ), error_template.format(kwarg='exclude_queues', val=exclude_queues)
         if last_execution_before:
             assert isinstance(last_execution_before, datetime.datetime)
 
@@ -574,10 +570,10 @@ class TaskTiger(object):
 
                 skip = 0
                 total = None
-                task_batch_size = batch_size or 1000
+                task_limit = limit or 1000
                 while total is None or skip < total:
                     total_tasks, tasks = Task.tasks_from_queue(
-                        self, queue, ERROR, skip=skip, limit=task_batch_size
+                        self, queue, ERROR, skip=skip, limit=task_limit
                     )
                     for task in tasks:
                         if (
@@ -587,19 +583,18 @@ class TaskTiger(object):
                         ):
                             continue
                         yield task
-                    skip += task_batch_size
+                    skip += task_limit
                     total = total_tasks
 
         total_processed = 0
         for idx, task in enumerate(errored_tasks()):
-            if batch_size is not None and idx % batch_size == 0:
-                yield total_processed
-
-            # print(task)  # do the delete
             task.delete()
-            total_processed = idx + 1
 
-        yield total_processed
+            total_processed = idx + 1
+            if limit and total_processed >= limit:
+                break
+
+        return total_processed
 
 
 @click.command()
