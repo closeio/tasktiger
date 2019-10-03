@@ -718,3 +718,20 @@ reported to Rollbar. Here is a custom worker launch script:
   tiger.log.addHandler(rollbar_handler)
 
   tiger.run_worker_with_args(sys.argv[1:])
+
+
+Cleaning Up Error'd Tasks
+-------------------------
+
+Error'd tasks occasionally need to be purged from Redis, so ``TaskTiger``
+exposes a ``purge_errored_tasks`` method to help. It might be useful to set
+this up as a periodic task as follows:
+
+..code:: python
+  from tasktiger import TaskTiger, periodic
+
+  tiger = TaskTiger()
+
+  @tiger.task(schedule=periodic(hours=1))
+  def purge_errored_tasks():
+      tiger.purge_errored_tasks(limit=1000)
