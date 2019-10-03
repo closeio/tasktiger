@@ -40,6 +40,7 @@ from .tasks import (
     StaticTask,
     task_on_other_queue,
     unique_task,
+    unique_exception_task,
     verify_current_task,
     verify_current_tasks,
 )
@@ -841,6 +842,21 @@ class TestCase(BaseTestCase):
         # purge the rest
         assert 5 == self.tiger.purge_errored_tasks(limit=None)
         self._ensure_queues(queued={'default': 0}, error={'default': 0})
+
+    def test_purge_errored_tasks_only_errored_unique_task(self):
+        # only one of these should actually schedule (since it's unique)
+        self.tiger.delay(unique_exception_task)
+        self.tiger.delay(unique_exception_task)
+        self._ensure_queues(queued={'default': 1})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={'default': 1})
+
+        self.tiger.delay(unique_exception_task)
+        self._ensure_queues(queued={'default': 1}, error={'default': 1})
+
+        assert 1 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(queued={'default': 1}, error={'default': 0})
 
 
 class TestTasks(BaseTestCase):
