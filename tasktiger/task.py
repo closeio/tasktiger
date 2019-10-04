@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import redis
@@ -75,6 +76,9 @@ class Task(object):
         if max_queue_size is None:
             max_queue_size = getattr(func, '_task_max_queue_size', None)
 
+        # normalize falsy args/kwargs to empty structures
+        args = args or []
+        kwargs = kwargs or {}
         if unique:
             task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
@@ -518,6 +522,18 @@ class Task(object):
         """
         self._move(from_state=ERROR)
 
+    def clone(self):
+        """Returns a clone of the this task"""
+        return type(self)(
+            tiger=self.tiger,
+            func=self.func,
+            queue=self.queue,
+            _state=self._state,
+            _ts=self._ts,
+            _executions=copy.copy(self._executions),
+            _data=copy.copy(self._data),
+        )
+
     def _queue_for_next_period(self):
         now = datetime.datetime.utcnow()
         schedule = self.func._task_schedule
@@ -528,5 +544,11 @@ class Task(object):
             schedule_func, schedule_args = schedule
         when = schedule_func(now, *schedule_args)
         if when:
-            self.delay(when=when)
+            # recalculate the unique id so that malformed ids don't persist
+            # between executions
+            task = self.clone()
+            task._data['id'] = gen_unique_id(
+                task.serialized_func, task.args, task.kwargs
+            )
+            task.delay(when=when)
         return when

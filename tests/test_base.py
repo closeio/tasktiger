@@ -56,10 +56,21 @@ class BaseTestCase:
     def _ensure_queues(
         self, queued=None, active=None, error=None, scheduled=None
     ):
+
+        expected_queues = {
+            'queued': {name for name, n in (queued or {}).items() if n},
+            'active': {name for name, n in (active or {}).items() if n},
+            'error': {name for name, n in (error or {}).items() if n},
+            'scheduled': {name for name, n in (scheduled or {}).items() if n},
+        }
+        actual_queues = {
+            i: self.conn.smembers('t:{}'.format(i))
+            for i in ('queued', 'active', 'error', 'scheduled')
+        }
+        assert expected_queues == actual_queues
+
         def _ensure_queue(typ, data):
             data = data or {}
-            data_names = set(name for name, n in data.items() if n)
-            assert self.conn.smembers('t:%s' % typ) == data_names
             ret = {}
             for name, n in data.items():
                 task_ids = self.conn.zrange('t:%s:%s' % (typ, name), 0, -1)
