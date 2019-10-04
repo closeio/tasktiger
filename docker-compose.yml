@@ -8,5 +8,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      REDIS_HOST: redis
     volumes:
       - .:/src
+    depends_on:
+      - redis
