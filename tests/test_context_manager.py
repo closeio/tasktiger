@@ -17,7 +17,9 @@ class ContextManagerTester(object):
 
     def __init__(self, name):
         self.name = name
-        self.conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
+        self.conn = redis.Redis(
+            host=REDIS_HOST, db=TEST_DB, decode_responses=True
+        )
         self.conn.set('cm:{}:enter'.format(self.name), 0)
         self.conn.set('cm:{}:exit'.format(self.name), 0)
 
