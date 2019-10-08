@@ -5,7 +5,7 @@ from tasktiger import Worker
 
 from .tasks import exception_task, simple_task
 from .test_base import BaseTestCase
-from .config import TEST_DB
+from .config import TEST_DB, REDIS_HOST
 
 
 class ContextManagerTester(object):
@@ -17,7 +17,9 @@ class ContextManagerTester(object):
 
     def __init__(self, name):
         self.name = name
-        self.conn = redis.Redis(db=TEST_DB, decode_responses=True)
+        self.conn = redis.Redis(
+            host=REDIS_HOST, db=TEST_DB, decode_responses=True
+        )
         self.conn.set('cm:{}:enter'.format(self.name), 0)
         self.conn.set('cm:{}:exit'.format(self.name), 0)
 

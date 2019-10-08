@@ -718,3 +718,19 @@ reported to Rollbar. Here is a custom worker launch script:
   tiger.log.addHandler(rollbar_handler)
 
   tiger.run_worker_with_args(sys.argv[1:])
+
+
+Running The Test Suite
+----------------------
+
+Tests can be run locally using the provided docker compose file. After installing docker, tests should be runnable with:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest
+
+Tests can be more granularly run using normal pytest flags. For example:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest tests/test_base.py::TestCase

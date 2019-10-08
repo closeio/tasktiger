@@ -12,11 +12,14 @@ workflows:
 
 defaults: &defaults
   working_directory: ~/code
+  environment:
+    # circleci exposes services on localhost
+    REDIS_HOST: localhost
   steps:
   - checkout
   - run:
       name: Install dependencies
-      command: sudo pip install -r requirements.txt freezefrog psutil pytest
+      command: sudo pip install -r requirements.txt -r requirements-test.txt
   - run:
       name: Test
       command: pytest
