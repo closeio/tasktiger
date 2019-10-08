@@ -735,3 +735,19 @@ this up as a periodic task as follows:
   @tiger.task(schedule=periodic(hours=1))
   def purge_errored_tasks():
       tiger.purge_errored_tasks(limit=1000)
+
+
+Running The Test Suite
+----------------------
+
+Tests can be run locally using the provided docker compose file. After installing docker, tests should be runnable with:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest
+
+Tests can be more granularly run using normal pytest flags. For example:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest tests/test_base.py::TestCase

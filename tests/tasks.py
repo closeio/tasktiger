@@ -7,7 +7,7 @@ import redis
 from tasktiger import RetryException
 from tasktiger.retry import fixed
 
-from .config import DELAY, TEST_DB
+from .config import DELAY, TEST_DB, REDIS_HOST
 from .utils import get_tiger
 
 
@@ -52,7 +52,7 @@ def long_task_killed():
 @tiger.task(hard_timeout=DELAY * 2)
 def long_task_ok():
     # Signal task has started
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.lpush(LONG_TASK_SIGNAL_KEY, '1')
 
     time.sleep(DELAY)
@@ -60,14 +60,14 @@ def long_task_ok():
 
 def wait_for_long_task():
     """Waits for a long task to start."""
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     result = conn.blpop(LONG_TASK_SIGNAL_KEY, int(ceil(DELAY * 3)))
     assert result[1] == '1'
 
 
 @tiger.task(unique=True)
 def unique_task(value=None):
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.lpush('unique_task', value)
 
 
@@ -78,7 +78,7 @@ def unique_exception_task(value=None):
 
 @tiger.task(lock=True)
 def locked_task(key, other=None):
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     data = conn.getset(key, 1)
     if data is not None:
         raise Exception('task failed, key already set')
@@ -88,7 +88,7 @@ def locked_task(key, other=None):
 
 @tiger.task(queue='batch', batch=True)
 def batch_task(params):
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     try:
         conn.rpush('batch_task', json.dumps(params))
     except Exception:
@@ -99,7 +99,7 @@ def batch_task(params):
 
 @tiger.task(queue='batch')
 def non_batch_task(arg):
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.rpush('batch_task', arg)
     if arg == 10:
         raise Exception('exception')
@@ -114,7 +114,7 @@ def retry_task_2():
 
 
 def verify_current_task():
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
 
     try:
         tiger.current_tasks
@@ -126,7 +126,7 @@ def verify_current_task():
 
 @tiger.task(batch=True, queue='batch')
 def verify_current_tasks(tasks):
-    conn = redis.Redis(db=TEST_DB, decode_responses=True)
+    conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
 
     try:
         tasks = tiger.current_task

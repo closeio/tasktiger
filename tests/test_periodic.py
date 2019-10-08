@@ -4,8 +4,15 @@ import datetime
 import time
 
 from tasktiger import Worker, periodic
+from tasktiger import (
+    Task,
+    gen_unique_id,
+    serialize_func_name,
+    QUEUED,
+    SCHEDULED,
+)
 
-from .tasks_periodic import tiger
+from .tasks_periodic import tiger, periodic_task
 from .test_base import BaseTestCase
 
 
@@ -107,3 +114,117 @@ class TestPeriodicTasks(BaseTestCase):
         time.sleep(1)
 
         ensure_run(2)
+
+    def test_periodic_execution_unique_ids(self):
+        """
+        Test that periodic tasks generate the same unique ids
+
+        When a periodic task is scheduled initially as part of worker startup
+        vs re-scheduled from within python the unique id generated should be
+        the same. If they aren't it could result in duplicate tasks.
+        """
+        # Sleep until the next second
+        now = datetime.datetime.utcnow()
+        time.sleep(1 - now.microsecond / 10.0 ** 6)
+
+        # After the first worker run, the periodic task will be queued.
+        # Note that since periodic tasks register with the Tiger instance, it
+        # must be the same instance that was used to decorate the task. We
+        # therefore use `tiger` from the tasks module instead of `self.tiger`.
+        self._ensure_queues()
+        Worker(tiger).run(once=True)
+        self._ensure_queues(scheduled={'periodic': 1})
+        time.sleep(1)
+        Worker(tiger).run(once=True)
+        self._ensure_queues(queued={'periodic': 1})
+
+        # generate the expected unique id
+        expected_unique_id = gen_unique_id(
+            serialize_func_name(periodic_task), [], {}
+        )
+
+        # pull task out of the queue by id. If found, then the id is correct
+        task = Task.from_id(tiger, 'periodic', QUEUED, expected_unique_id)
+        assert task is not None
+
+        # execute and reschedule the task
+        self._ensure_queues(queued={'periodic': 1})
+        Worker(tiger).run(once=True)
+        self._ensure_queues(scheduled={'periodic': 1})
+
+        # wait for the task to need to be queued
+        time.sleep(1)
+        Worker(tiger).run(once=True)
+        self._ensure_queues(queued={'periodic': 1})
+
+        # The unique id shouldn't change between executions. Try finding the
+        # task by id again
+        task = Task.from_id(tiger, 'periodic', QUEUED, expected_unique_id)
+        assert task is not None
+
+    def test_periodic_execution_unique_ids_manual_scheduling(self):
+        """
+        Periodic tasks should have the same unique ids when manually scheduled
+
+        When a periodic task is scheduled initially as part of worker startup
+        vs ``.delay``'d manually, the unique id generated should be the same.
+        If they aren't it could result in duplicate tasks.
+        """
+        # Sleep until the next second
+        now = datetime.datetime.utcnow()
+        time.sleep(1 - now.microsecond / 10.0 ** 6)
+
+        # After the first worker run, the periodic task will be queued.
+        # Note that since periodic tasks register with the Tiger instance, it
+        # must be the same instance that was used to decorate the task. We
+        # therefore use `tiger` from the tasks module instead of `self.tiger`.
+        self._ensure_queues()
+        Worker(tiger).run(once=True)
+        self._ensure_queues(scheduled={'periodic': 1})
+        time.sleep(1)
+        Worker(tiger).run(once=True)
+        self._ensure_queues(queued={'periodic': 1})
+
+        # schedule the task manually
+        periodic_task.delay()
+
+        # make sure a duplicate wasn't scheduled
+        self._ensure_queues(queued={'periodic': 1})
+
+    def test_periodic_execution_unique_ids_self_correct(self):
+        """
+        Test that periodic tasks will self-correct unique ids
+        """
+        # Sleep until the next second
+        now = datetime.datetime.utcnow()
+        time.sleep(1 - now.microsecond / 10.0 ** 6)
+
+        # generate the ids
+        correct_unique_id = gen_unique_id(
+            serialize_func_name(periodic_task), [], {}
+        )
+        malformed_unique_id = gen_unique_id(
+            serialize_func_name(periodic_task), None, None
+        )
+
+        task = Task(tiger, func=periodic_task)
+
+        # patch the id to something slightly wrong
+        assert task.id == correct_unique_id
+        task._data['id'] = malformed_unique_id
+        assert task.id == malformed_unique_id
+
+        # schedule the task
+        task.delay()
+        self._ensure_queues(queued={'periodic': 1})
+
+        # pull task out of the queue by the malformed id
+        task = Task.from_id(tiger, 'periodic', QUEUED, malformed_unique_id)
+        assert task is not None
+
+        Worker(tiger).run(once=True)
+        self._ensure_queues(scheduled={'periodic': 1})
+
+        # pull task out of the queue by the self-corrected id
+        task = Task.from_id(tiger, 'periodic', SCHEDULED, correct_unique_id)
+        assert task is not None

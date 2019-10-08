@@ -3,7 +3,7 @@ import redis
 import structlog
 from tasktiger import TaskTiger, Worker, fixed
 
-from .config import DELAY, TEST_DB
+from .config import DELAY, TEST_DB, REDIS_HOST
 
 TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when
@@ -51,7 +51,7 @@ def setup_structlog():
 
 
 def get_redis():
-    return redis.Redis(db=TEST_DB, decode_responses=True)
+    return redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
 
 
 def get_tiger():

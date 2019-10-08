@@ -1,0 +1,16 @@
+version: "3.7"
+services:
+  redis:
+    image: redis:4.0.6
+    expose:
+      - 6379
+  tasktiger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      REDIS_HOST: redis
+    volumes:
+      - .:/src
+    depends_on:
+      - redis
