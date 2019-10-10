@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 
-__all__ = [
-    'TaskTiger',
-]
+__all__ = ['TaskTiger']
 
 from collections import defaultdict
 import click
@@ -14,14 +12,7 @@ import structlog
 from .redis_semaphore import Semaphore
 from .redis_scripts import RedisScripts
 
-from ._internal import (
-    g,
-    serialize_func_name,
-    QUEUED,
-    SCHEDULED,
-    ACTIVE,
-    ERROR,
-)
+from ._internal import g, serialize_func_name, QUEUED, SCHEDULED, ACTIVE, ERROR
 from .retry import fixed
 from .task import Task
 from .worker import LOCK_REDIS_KEY, Worker
