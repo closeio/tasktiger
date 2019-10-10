@@ -525,6 +525,8 @@ class TaskTiger(object):
         # some sanity checking and kind error messages for arguments
         if last_execution_before:
             assert isinstance(last_execution_before, datetime.datetime)
+        if limit is not None:
+            assert limit > 0, 'If specified, limit must be greater than zero'
 
         only_queues = set(queues or self.config['ONLY_QUEUES'] or [])
         exclude_queues = set(
