@@ -148,9 +148,9 @@ def queue_matches(queue, only_queues=None, exclude_queues=None):
         '{kwarg} should be an iterable of strings, not a string directly. '
         'Did you mean `{kwarg}=[\'{val}\']`?'
     )
-    assert not isinstance(only_queues, six.string_types), error_template.format(
-        kwarg='queues', val=only_queues
-    )
+    assert not isinstance(
+        only_queues, six.string_types
+    ), error_template.format(kwarg='queues', val=only_queues)
     assert not isinstance(
         exclude_queues, six.string_types
     ), error_template.format(kwarg='exclude_queues', val=exclude_queues)
