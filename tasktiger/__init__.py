@@ -523,16 +523,6 @@ class TaskTiger(object):
         :returns: The total number of tasks purged
         """
         # some sanity checking and kind error messages for arguments
-        error_template = (
-            '{kwarg} should be an iterable of strings, not a string directly. '
-            'Did you mean `{kwarg}=[\'{val}\']`?'
-        )
-        assert not isinstance(queues, six.string_types), error_template.format(
-            kwarg='queues', val=queues
-        )
-        assert not isinstance(
-            exclude_queues, six.string_types
-        ), error_template.format(kwarg='exclude_queues', val=exclude_queues)
         if last_execution_before:
             assert isinstance(last_execution_before, datetime.datetime)
 
@@ -541,22 +531,14 @@ class TaskTiger(object):
             exclude_queues or self.config['EXCLUDE_QUEUES'] or []
         )
 
-        def match(queue):
-            """
-            Returns whether the given queue should be included by checking each
-            part of the queue name.
-            """
-            for part in reversed_dotted_parts(queue):
-                if part in exclude_queues:
-                    return False
-                if part in only_queues:
-                    return True
-            return not only_queues
-
         def errored_tasks():
             queues_with_errors = self.connection.smembers(self._key(ERROR))
             for queue in queues_with_errors:
-                if not match(queue):
+                if not queue_matches(
+                    queue,
+                    only_queues=only_queues,
+                    exclude_queues=exclude_queues,
+                ):
                     continue
 
                 skip = 0
