@@ -1,11 +1,13 @@
+from __future__ import absolute_import
+
 import structlog
 
-from .test_base import BaseTestCase
-
-from tasktiger import Worker
+from tasktiger import TaskTiger, Worker
 from tasktiger.logging import tasktiger_processor
 
-from .utils import get_tiger
+from .test_base import BaseTestCase
+from .utils import get_tiger, get_redis
+
 
 tiger = get_tiger()
 
@@ -56,3 +58,11 @@ class TestLogging(BaseTestCase):
                 wrapper_class=structlog.stdlib.BoundLogger,
                 cache_logger_on_first_use=True,
             )
+
+
+class TestSetupStructlog(BaseTestCase):
+    def test_setup_structlog_basic(self):
+        conn = get_redis()
+        tiger = TaskTiger(connection=conn, setup_structlog=True)
+        assert tiger
+        # no errors on init, cool
