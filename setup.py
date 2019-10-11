@@ -6,7 +6,7 @@ import sys
 with open('README.rst', encoding='utf-8') as file:
     long_description = file.read()
 
-install_requires = ['click', 'redis>=2,<3', 'structlog']
+install_requires = ['click', 'redis>=2,<3', 'six', 'structlog']
 
 if sys.version_info < (3, 3):
     install_requires += ['contextlib2>=0.5.5']
