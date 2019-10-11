@@ -534,9 +534,9 @@ class TaskTiger(object):
                     continue
 
                 skip = 0
-                total = None
+                total_tasks = None
                 task_limit = limit or 1000
-                while total is None or skip < total:
+                while total_tasks is None or skip < total_tasks:
                     total_tasks, tasks = Task.tasks_from_queue(
                         self, queue, ERROR, skip=skip, limit=task_limit
                     )
@@ -549,7 +549,6 @@ class TaskTiger(object):
                             continue
                         yield task
                     skip += task_limit
-                    total = total_tasks
 
         total_processed = 0
         for idx, task in enumerate(errored_tasks()):
