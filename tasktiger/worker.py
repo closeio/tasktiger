@@ -139,20 +139,15 @@ class Worker(object):
         starting with the name, followed by a date. For example, "foo" will
         match both "foo" and "foo.bar".
         """
-
-        def match(queue):
-            """
-            Returns whether the given queue should be included by checking each
-            part of the queue name.
-            """
-            for part in reversed_dotted_parts(queue):
-                if part in self.exclude_queues:
-                    return False
-                if part in self.only_queues:
-                    return True
-            return not self.only_queues
-
-        return [q for q in queues if match(q)]
+        return [
+            q
+            for q in queues
+            if queue_matches(
+                q,
+                only_queues=self.only_queues,
+                exclude_queues=self.exclude_queues,
+            )
+        ]
 
     def _worker_queue_scheduled_tasks(self):
         """

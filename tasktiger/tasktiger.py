@@ -4,6 +4,7 @@ __all__ = ['TaskTiger']
 
 from collections import defaultdict
 import click
+import datetime
 import importlib
 import logging
 import redis
@@ -12,7 +13,15 @@ import structlog
 from .redis_semaphore import Semaphore
 from .redis_scripts import RedisScripts
 
-from ._internal import g, serialize_func_name, QUEUED, SCHEDULED, ACTIVE, ERROR
+from ._internal import (
+    g,
+    serialize_func_name,
+    QUEUED,
+    SCHEDULED,
+    ACTIVE,
+    ERROR,
+    queue_matches,
+)
 from .retry import fixed
 from .task import Task
 from .worker import LOCK_REDIS_KEY, Worker
@@ -465,6 +474,91 @@ class TaskTiger(object):
                 queue_stats[queue][state] = card_results.pop(0)
 
         return queue_stats
+
+    def purge_errored_tasks(
+        self,
+        queues=None,
+        exclude_queues=None,
+        last_execution_before=None,
+        limit=5000,
+    ):
+        """Purge failed tasks left in the ERROR state
+
+        Example usage::
+
+            limit = 500
+            n_processed = limit
+            while n_processed == limit:
+                n_processed = tiger.purge_errored_tasks(
+                    queues=['my-queue'],
+                    exclude_queues=['other-queue'],
+                    last_execution_before=(
+                        datetime.datetime.utcnow()
+                        - datetime.timedelta(days=14)
+                    ),
+                    limit=limit,
+                ):
+                time.sleep(.1)  # don't overload redis
+
+            # or to purge all in one go
+            tiger.purge_errored_tasks(limit=None)
+
+        :param iterable(str) queues: Queues to include
+        :param iterable(str) exclude_queues: Queues to exclude
+        :param datetime last_execution_before: If provided, only deletes tasks
+            older than this.
+        :param int limit: Stops after purging ``limit`` tasks. Can be
+            explicitly set to None to remove limit and purge all at once.
+
+        :returns: The total number of tasks purged
+        """
+        # some sanity checking and kind error messages for arguments
+        if last_execution_before:
+            assert isinstance(last_execution_before, datetime.datetime)
+        if limit is not None:
+            assert limit > 0, 'If specified, limit must be greater than zero'
+
+        only_queues = set(queues or self.config['ONLY_QUEUES'] or [])
+        exclude_queues = set(
+            exclude_queues or self.config['EXCLUDE_QUEUES'] or []
+        )
+
+        def errored_tasks():
+            queues_with_errors = self.connection.smembers(self._key(ERROR))
+            for queue in queues_with_errors:
+                if not queue_matches(
+                    queue,
+                    only_queues=only_queues,
+                    exclude_queues=exclude_queues,
+                ):
+                    continue
+
+                skip = 0
+                total_tasks = None
+                task_limit = 5000
+                while total_tasks is None or skip < total_tasks:
+                    total_tasks, tasks = Task.tasks_from_queue(
+                        self, queue, ERROR, skip=skip, limit=task_limit
+                    )
+                    for task in tasks:
+                        if (
+                            last_execution_before
+                            and task.ts
+                            and task.ts > last_execution_before
+                        ):
+                            continue
+                        yield task
+                    skip += task_limit
+
+        total_processed = 0
+        for idx, task in enumerate(errored_tasks()):
+            task.delete()
+
+            total_processed = idx + 1
+            if limit and total_processed >= limit:
+                break
+
+        return total_processed
 
 
 @click.command()

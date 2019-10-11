@@ -8,6 +8,8 @@ import operator
 import os
 import threading
 
+import six
+
 from .exceptions import TaskImportError
 
 # Task states (represented by different queues)
@@ -125,3 +127,39 @@ def get_timestamp(when):
         # Convert to unixtime: utctimetuple drops microseconds so we add
         # them manually.
         return calendar.timegm(when.utctimetuple()) + when.microsecond / 1.0e6
+
+
+def queue_matches(queue, only_queues=None, exclude_queues=None):
+    """Checks if the given queue matches against only/exclude constraints
+
+    Returns whether the given queue should be included by checking each part of
+    the queue name.
+
+    :param str queue: The queue name to check
+    :param iterable(str) only_queues: Limit to only these queues
+    :param iterable(str) exclude_queues: Specifically excluded queues
+
+    :returns: A boolean indicating whether this queue matches against the given
+        ``only`` and ``excludes`` constraints
+    """
+    # Check arguments to prevent a common footgun of passing 'my_queue' instead
+    # of ``['my_queue']``
+    error_template = (
+        '{kwarg} should be an iterable of strings, not a string directly. '
+        'Did you mean `{kwarg}=[\'{val}\']`?'
+    )
+    assert not isinstance(
+        only_queues, six.string_types
+    ), error_template.format(kwarg='queues', val=only_queues)
+    assert not isinstance(
+        exclude_queues, six.string_types
+    ), error_template.format(kwarg='exclude_queues', val=exclude_queues)
+
+    only_queues = only_queues or []
+    exclude_queues = exclude_queues or []
+    for part in reversed_dotted_parts(queue):
+        if part in exclude_queues:
+            return False
+        if part in only_queues:
+            return True
+    return not only_queues

@@ -71,6 +71,11 @@ def unique_task(value=None):
     conn.lpush('unique_task', value)
 
 
+@tiger.task(unique=True)
+def unique_exception_task(value=None):
+    raise Exception('this failed')
+
+
 @tiger.task(lock=True)
 def locked_task(key, other=None):
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
