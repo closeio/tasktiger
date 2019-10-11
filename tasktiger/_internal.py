@@ -155,6 +155,8 @@ def queue_matches(queue, only_queues=None, exclude_queues=None):
         exclude_queues, six.string_types
     ), error_template.format(kwarg='exclude_queues', val=exclude_queues)
 
+    only_queues = only_queues or []
+    exclude_queues = exclude_queues or []
     for part in reversed_dotted_parts(queue):
         if part in exclude_queues:
             return False
