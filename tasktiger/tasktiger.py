@@ -535,7 +535,7 @@ class TaskTiger(object):
 
                 skip = 0
                 total_tasks = None
-                task_limit = limit or 1000
+                task_limit = 5000
                 while total_tasks is None or skip < total_tasks:
                     total_tasks, tasks = Task.tasks_from_queue(
                         self, queue, ERROR, skip=skip, limit=task_limit
