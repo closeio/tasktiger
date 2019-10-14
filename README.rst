@@ -727,7 +727,8 @@ Error'd tasks occasionally need to be purged from Redis, so ``TaskTiger``
 exposes a ``purge_errored_tasks`` method to help. It might be useful to set
 this up as a periodic task as follows:
 
-..code:: python
+.. code:: python
+
   from tasktiger import TaskTiger, periodic
 
   tiger = TaskTiger()
