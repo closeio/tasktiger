@@ -534,7 +534,7 @@ class Worker(object):
             flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
             flags = flags | os.O_NONBLOCK
             fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
-
+            opened_fd = os.fdopen(pipe_r)
             # A byte will be written to pipe_w if a signal occurs (and can be
             # read from pipe_r).
             old_wakeup_fd = signal.set_wakeup_fd(pipe_w)
@@ -569,12 +569,16 @@ class Worker(object):
 
                 # Wait until the timeout or a signal / child exit occurs.
                 try:
-                    select.select(
+                    result = select.select(
                         [pipe_r],
                         [],
                         [],
                         self.config['ACTIVE_TASK_UPDATE_TIMER'],
                     )
+
+                    if result[0]:
+                        # Purge pipe so select will pause on next call
+                        opened_fd.read(1)
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
                         raise
