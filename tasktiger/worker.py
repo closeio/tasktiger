@@ -1,4 +1,3 @@
-import binascii
 from collections import OrderedDict
 import errno
 import fcntl
