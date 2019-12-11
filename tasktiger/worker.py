@@ -461,7 +461,6 @@ class Worker(object):
         Updates the heartbeat for the given task IDs to prevent them from
         timing out and being requeued.
         """
-        self.log.debug('heartbeat')
         now = time.time()
         self.connection.zadd(
             self._key(ACTIVE, queue), **{task_id: now for task_id in task_ids}
@@ -533,10 +532,11 @@ class Worker(object):
             # Create a new pipe and apply the non-blocking flag (required for
             # set_wakeup_fd).
             pipe_r, pipe_w = os.pipe()
+            opened_fd = os.fdopen(pipe_r)
             flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
             flags = flags | os.O_NONBLOCK
             fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
-            opened_fd = os.fdopen(pipe_r)
+
             # A byte will be written to pipe_w if a signal occurs (and can be
             # read from pipe_r).
             old_wakeup_fd = signal.set_wakeup_fd(pipe_w)
@@ -582,13 +582,22 @@ class Worker(object):
                         # Purge pipe so select will pause on next call.
                         # This is a blocking call but the select should
                         # ensure at least one byte is available.
-                        r = opened_fd.read(1)
-                        self.log.debug('signal received', signal=binascii.hexlify(r.encode()))
+                        #
+                        # Linux signal behavior seen on pipe:
+                        #   - 0 when parent receives SIGTERM
+                        #   - select() exits with EINTR when child exit
+                        #     triggers signal, so the signal in the
+                        #     pipe is never seen since check_child_exit()
+                        #     will see the child is gone
+                        #
+                        # macOS signal behavior seen on pipe:
+                        #   - 15 (SIGTERM) when parent receives SIGTERM
+                        #   - 20 (SIGCHLD) when child exits
+                        opened_fd.read(1)
+
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
-                        self.log.debug('Raising error')
                         raise
-                    self.log.debug('Not raising error')
 
                 return_code = check_child_exit()
                 if return_code is not None:
@@ -611,7 +620,7 @@ class Worker(object):
             # Restore signals / clean up
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
             signal.set_wakeup_fd(old_wakeup_fd)
-            os.close(pipe_r)
+            opened_fd.close()
             os.close(pipe_w)
 
             success = return_code == 0
