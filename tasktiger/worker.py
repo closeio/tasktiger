@@ -1,3 +1,4 @@
+import binascii
 from collections import OrderedDict
 import errno
 import fcntl
@@ -460,6 +461,7 @@ class Worker(object):
         Updates the heartbeat for the given task IDs to prevent them from
         timing out and being requeued.
         """
+        self.log.debug('heartbeat')
         now = time.time()
         self.connection.zadd(
             self._key(ACTIVE, queue), **{task_id: now for task_id in task_ids}
@@ -577,11 +579,16 @@ class Worker(object):
                     )
 
                     if result[0]:
-                        # Purge pipe so select will pause on next call
-                        opened_fd.read(1)
+                        # Purge pipe so select will pause on next call.
+                        # This is a blocking call but the select should
+                        # ensure at least one byte is available.
+                        r = opened_fd.read(1)
+                        self.log.debug('signal received', signal=binascii.hexlify(r.encode()))
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
+                        self.log.debug('Raising error')
                         raise
+                    self.log.debug('Not raising error')
 
                 return_code = check_child_exit()
                 if return_code is not None:
