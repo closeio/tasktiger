@@ -531,7 +531,12 @@ class Worker(object):
             # Create a new pipe and apply the non-blocking flag (required for
             # set_wakeup_fd).
             pipe_r, pipe_w = os.pipe()
+
             opened_fd = os.fdopen(pipe_r)
+            flags = fcntl.fcntl(pipe_r, fcntl.F_GETFL, 0)
+            flags = flags | os.O_NONBLOCK
+            fcntl.fcntl(pipe_r, fcntl.F_SETFL, flags)
+
             flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
             flags = flags | os.O_NONBLOCK
             fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
@@ -570,29 +575,28 @@ class Worker(object):
 
                 # Wait until the timeout or a signal / child exit occurs.
                 try:
-                    result = select.select(
+                    # If observed the following behavior will be seen
+                    # in the pipe when the parent process receives a
+                    # SIGTERM while a task is running in a child process:
+                    # Linux:
+                    #   - 0 when parent receives SIGTERM
+                    #   - select() exits with EINTR when child exit
+                    #     triggers signal, so the signal in the
+                    #     pipe is never seen since check_child_exit()
+                    #     will see the child is gone
+                    #
+                    # macOS:
+                    #   - 15 (SIGTERM) when parent receives SIGTERM
+                    #   - 20 (SIGCHLD) when child exits
+                    select.select(
                         [pipe_r],
                         [],
                         [],
                         self.config['ACTIVE_TASK_UPDATE_TIMER'],
                     )
 
-                    if result[0]:
-                        # Purge pipe so select will pause on next call.
-                        # This is a blocking call but the select should
-                        # ensure at least one byte is available.
-                        #
-                        # Linux signal behavior seen on pipe:
-                        #   - 0 when parent receives SIGTERM
-                        #   - select() exits with EINTR when child exit
-                        #     triggers signal, so the signal in the
-                        #     pipe is never seen since check_child_exit()
-                        #     will see the child is gone
-                        #
-                        # macOS signal behavior seen on pipe:
-                        #   - 15 (SIGTERM) when parent receives SIGTERM
-                        #   - 20 (SIGCHLD) when child exits
-                        opened_fd.read(1)
+                    # Purge pipe so select will pause on next call
+                    opened_fd.read(1)
 
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
