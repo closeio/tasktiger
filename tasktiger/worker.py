@@ -588,15 +588,20 @@ class Worker(object):
                     # macOS:
                     #   - 15 (SIGTERM) when parent receives SIGTERM
                     #   - 20 (SIGCHLD) when child exits
-                    select.select(
+                    results = select.select(
                         [pipe_r],
                         [],
                         [],
                         self.config['ACTIVE_TASK_UPDATE_TIMER'],
                     )
 
-                    # Purge pipe so select will pause on next call
-                    opened_fd.read(1)
+                    if results[0]:
+                        # Purge pipe so select will pause on next call
+                        try:
+                            opened_fd.read(1)
+                        except IOError:
+                            # Raised if read would block
+                            pass
 
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
