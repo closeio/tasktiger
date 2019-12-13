@@ -598,11 +598,13 @@ class Worker(object):
                     if results[0]:
                         # Purge pipe so select will pause on next call
                         try:
+                            # Behavior of a would be blocking read()
                             # Linux:
-                            #   Raises IOError if it would block
+                            #   Python 2.7 Raises IOError
+                            #   Python 3.x returns empty string
                             #
                             # macOS:
-                            #   Returns empty string if it would block
+                            #   Returns empty string
                             opened_fd.read(1)
                         except IOError:
                             pass
