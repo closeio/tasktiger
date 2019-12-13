@@ -598,9 +598,13 @@ class Worker(object):
                     if results[0]:
                         # Purge pipe so select will pause on next call
                         try:
+                            # Linux:
+                            #   Raises IOError if it would block
+                            #
+                            # macOS:
+                            #   Returns empty string if it would block
                             opened_fd.read(1)
                         except IOError:
-                            # Raised if read would block
                             pass
 
                 except select.error as e:
