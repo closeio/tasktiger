@@ -531,6 +531,12 @@ class Worker(object):
             # Create a new pipe and apply the non-blocking flag (required for
             # set_wakeup_fd).
             pipe_r, pipe_w = os.pipe()
+
+            opened_fd = os.fdopen(pipe_r)
+            flags = fcntl.fcntl(pipe_r, fcntl.F_GETFL, 0)
+            flags = flags | os.O_NONBLOCK
+            fcntl.fcntl(pipe_r, fcntl.F_SETFL, flags)
+
             flags = fcntl.fcntl(pipe_w, fcntl.F_GETFL, 0)
             flags = flags | os.O_NONBLOCK
             fcntl.fcntl(pipe_w, fcntl.F_SETFL, flags)
@@ -569,12 +575,40 @@ class Worker(object):
 
                 # Wait until the timeout or a signal / child exit occurs.
                 try:
-                    select.select(
+                    # If observed the following behavior will be seen
+                    # in the pipe when the parent process receives a
+                    # SIGTERM while a task is running in a child process:
+                    # Linux:
+                    #   - 0 when parent receives SIGTERM
+                    #   - select() exits with EINTR when child exit
+                    #     triggers signal, so the signal in the
+                    #     pipe is never seen since check_child_exit()
+                    #     will see the child is gone
+                    #
+                    # macOS:
+                    #   - 15 (SIGTERM) when parent receives SIGTERM
+                    #   - 20 (SIGCHLD) when child exits
+                    results = select.select(
                         [pipe_r],
                         [],
                         [],
                         self.config['ACTIVE_TASK_UPDATE_TIMER'],
                     )
+
+                    if results[0]:
+                        # Purge pipe so select will pause on next call
+                        try:
+                            # Behavior of a would be blocking read()
+                            # Linux:
+                            #   Python 2.7 Raises IOError
+                            #   Python 3.x returns empty string
+                            #
+                            # macOS:
+                            #   Returns empty string
+                            opened_fd.read(1)
+                        except IOError:
+                            pass
+
                 except select.error as e:
                     if e.args[0] != errno.EINTR:
                         raise
@@ -600,7 +634,7 @@ class Worker(object):
             # Restore signals / clean up
             signal.signal(signal.SIGCHLD, signal.SIG_DFL)
             signal.set_wakeup_fd(old_wakeup_fd)
-            os.close(pipe_r)
+            opened_fd.close()
             os.close(pipe_w)
 
             success = return_code == 0
