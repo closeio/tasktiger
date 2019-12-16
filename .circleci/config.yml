@@ -53,7 +53,7 @@ jobs:
       - checkout
       - run:
           name: Install dependencies
-          command: sudo pip install black
+          command: sudo pip install black==19.10b0 regex==2019.11.1
       - run:
           name: Check formatting
           command: black --check .
