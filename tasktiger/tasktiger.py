@@ -158,10 +158,10 @@ class TaskTiger(object):
             # time to requeue a batch of tasks.
             'REQUEUE_EXPIRED_TASKS_INTERVAL': 30,
             'REQUEUE_EXPIRED_TASKS_BATCH_SIZE': 10,
-            # Maximum time the scheduled tasks queue lock is held. Other
+            # Time the scheduled tasks queue lock is held (in seconds). Other
             # workers processing the same queues won't be scheduling tasks as
             # long as the lock is held to prevent unnecessary load on Redis.
-            'QUEUE_SCHEDULED_TASKS_TIME': 10,
+            'QUEUE_SCHEDULED_TASKS_TIME': 1,
             # Set up queues that will be processed in batch, i.e. multiple jobs
             # are taken out of the queue at the same time and passed as a list
             # to the worker method. Takes a dict where the key represents the

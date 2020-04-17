@@ -175,7 +175,7 @@ class Worker(object):
             timeout=self.config['QUEUE_SCHEDULED_TASKS_TIME'],
         )
 
-        # Another worker is already doing this.
+        # See if any worker has recently queued scheduled tasks.
         acquired = lock.acquire(blocking=False)
         if not acquired:
             return
@@ -211,8 +211,6 @@ class Worker(object):
             if result:
                 self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
-
-        lock.release()
 
     def _wait_for_new_tasks(self, timeout=0, batch_timeout=0):
         """
