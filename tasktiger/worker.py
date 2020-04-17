@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import errno
 import fcntl
+import hashlib
 import json
 import os
 import random
@@ -113,6 +114,14 @@ class Worker(object):
 
         self._stop_requested = False
 
+        # A worker group is a group of workers that process the same set of
+        # queues. This allows us to use worker group-specific locks to reduce
+        # Redis load.
+        self.worker_group_name = hashlib.sha256(json.dumps([
+            sorted(self.only_queues),
+            sorted(self.exclude_queues),
+        ]).encode('utf8')).hexdigest()
+
     def _install_signal_handlers(self):
         """
         Sets up signal handlers for safely stopping the worker.
@@ -155,6 +164,22 @@ class Worker(object):
         them in the QUEUED queue for execution. This should be called
         periodically.
         """
+        lock_name = self._key(
+            'lock',
+            'queue_scheduled_tasks',
+            self.worker_group_name
+        )
+        lock = Lock(
+            self.connection,
+            lock_name,
+            timeout=self.config['QUEUE_SCHEDULED_TASKS_TIME'],
+        )
+
+        # Another worker is already doing this.
+        acquired = lock.acquire(blocking=False)
+        if not acquired:
+            return
+
         queues = set(
             self._filter_queues(self.connection.smembers(self._key(SCHEDULED)))
         )
@@ -186,6 +211,8 @@ class Worker(object):
             if result:
                 self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
+
+        lock.release()
 
     def _wait_for_new_tasks(self, timeout=0, batch_timeout=0):
         """
