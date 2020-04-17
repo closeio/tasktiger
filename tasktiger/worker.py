@@ -117,10 +117,11 @@ class Worker(object):
         # A worker group is a group of workers that process the same set of
         # queues. This allows us to use worker group-specific locks to reduce
         # Redis load.
-        self.worker_group_name = hashlib.sha256(json.dumps([
-            sorted(self.only_queues),
-            sorted(self.exclude_queues),
-        ]).encode('utf8')).hexdigest()
+        self.worker_group_name = hashlib.sha256(
+            json.dumps(
+                [sorted(self.only_queues), sorted(self.exclude_queues),]
+            ).encode('utf8')
+        ).hexdigest()
 
     def _install_signal_handlers(self):
         """
@@ -165,9 +166,7 @@ class Worker(object):
         periodically.
         """
         lock_name = self._key(
-            'lock',
-            'queue_scheduled_tasks',
-            self.worker_group_name
+            'lock', 'queue_scheduled_tasks', self.worker_group_name
         )
         lock = Lock(
             self.connection,
