@@ -165,19 +165,17 @@ class Worker(object):
         them in the QUEUED queue for execution. This should be called
         periodically.
         """
-        lock_name = self._key(
-            'lock', 'queue_scheduled_tasks', self.worker_group_name
-        )
-        lock = Lock(
-            self.connection,
-            lock_name,
-            timeout=self.config['QUEUE_SCHEDULED_TASKS_TIME'],
-        )
+        timeout = self.config['QUEUE_SCHEDULED_TASKS_TIME']
+        if timeout > 0:
+            lock_name = self._key(
+                'lock', 'queue_scheduled_tasks', self.worker_group_name
+            )
+            lock = Lock(self.connection, lock_name, timeout=timeout)
 
-        # See if any worker has recently queued scheduled tasks.
-        acquired = lock.acquire(blocking=False)
-        if not acquired:
-            return
+            # See if any worker has recently queued scheduled tasks.
+            acquired = lock.acquire(blocking=False)
+            if not acquired:
+                return
 
         queues = set(
             self._filter_queues(self.connection.smembers(self._key(SCHEDULED)))
