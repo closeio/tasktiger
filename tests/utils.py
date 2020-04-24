@@ -10,14 +10,15 @@ from .config import DELAY, TEST_DB, REDIS_HOST
 TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when
     # doing a single worker run.
-    'SELECT_TIMEOUT': 0,
     'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
-    'REQUEUE_EXPIRED_TASKS_INTERVAL': DELAY,
-    'LOCK_RETRY': DELAY * 2.0,
-    'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
     'BATCH_QUEUES': {'batch': 3},
-    'SINGLE_WORKER_QUEUES': ['swq'],
+    'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
     'EXCLUDE_QUEUES': ['periodic_ignore'],
+    'LOCK_RETRY': DELAY * 2.0,
+    'QUEUE_SCHEDULED_TASKS_TIME': DELAY,
+    'REQUEUE_EXPIRED_TASKS_INTERVAL': DELAY,
+    'SELECT_TIMEOUT': 0,
+    'SINGLE_WORKER_QUEUES': ['swq'],
 }
 
 
