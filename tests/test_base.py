@@ -1102,7 +1102,7 @@ class TestReliability(BaseTestCase):
         self._ensure_queues(active={'default': 1})
 
         # Wait for (at least) ACTIVE_TASK_UPDATE_TIMEOUT
-        time.sleep(2 * DELAY)
+        time.sleep(PROCESS_DELAY + DELAY)
 
         Worker(self.tiger).run(once=True)
 

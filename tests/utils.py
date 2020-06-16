@@ -7,12 +7,12 @@ import structlog
 import time
 from tasktiger import TaskTiger, Worker, fixed
 
-from .config import DELAY, TEST_DB, REDIS_HOST
+from .config import DELAY, PROCESS_DELAY, TEST_DB, REDIS_HOST
 
 TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when
     # doing a single worker run.
-    'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
+    'ACTIVE_TASK_UPDATE_TIMEOUT': PROCESS_DELAY + DELAY,
     'BATCH_QUEUES': {'batch': 3},
     'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
     'EXCLUDE_QUEUES': ['periodic_ignore'],

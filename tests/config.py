@@ -7,7 +7,7 @@ DELAY = 0.2
 # Note that on macOS Catalina, when using an unsigned Python version,
 # taskgated (com.apple.securityd) needs to approve launching the process.
 # We therefore need ample here in order to prevent test failures.
-PROCESS_DELAY = 0.4
+PROCESS_DELAY = 2 * DELAY
 
 # Redis database number which will be wiped and used for the tests
 TEST_DB = int(os.environ.get('REDIS_DB', 7))
