@@ -6,6 +6,7 @@ import redis
 import structlog
 import time
 from tasktiger import TaskTiger, Worker, fixed
+from tasktiger._internal import REDIS_PY_3
 
 from .config import DELAY, TEST_DB, REDIS_HOST
 

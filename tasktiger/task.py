@@ -239,7 +239,10 @@ class Task(object):
                     _key(to_state, queue), when, self.id, mode, client=pipeline
                 )
             else:
-                pipeline.zadd(_key(to_state, queue), self.id, when)
+                if REDIS_PY_3:
+                    pipeline.zadd(_key(to_state, queue), {self.id: when})
+                else:
+                    pipeline.zadd(_key(to_state, queue), self.id, when)
             pipeline.sadd(_key(to_state), queue)
         pipeline.zrem(_key(from_state, queue), self.id)
 
