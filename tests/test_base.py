@@ -22,7 +22,7 @@ from tasktiger import (
 )
 from tasktiger._internal import serialize_func_name
 
-from .config import DELAY
+from .config import DELAY, PROCESS_DELAY
 from .tasks import (
     batch_task,
     decorated_task,
@@ -1094,7 +1094,7 @@ class TestReliability(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(DELAY)
+        time.sleep(PROCESS_DELAY)
 
         # Kill the worker while it's still processing the task.
         os.kill(worker.pid, signal.SIGKILL)
@@ -1137,7 +1137,7 @@ class TestReliability(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(DELAY)
+        time.sleep(PROCESS_DELAY)
 
         # Get the PID of the worker subprocess actually executing the task
         current_process = psutil.Process(pid=worker.pid)
@@ -1170,7 +1170,7 @@ class TestReliability(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(DELAY)
+        time.sleep(PROCESS_DELAY)
 
         # Remove the task object while the task is processing.
         assert self.conn.delete('t:task:{}'.format(task.id)) == 1
