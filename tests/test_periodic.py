@@ -14,6 +14,7 @@ from tasktiger import (
 
 from .tasks_periodic import tiger, periodic_task
 from .test_base import BaseTestCase
+from .utils import sleep_until_next_second
 
 
 class TestPeriodicTasks(BaseTestCase):
@@ -71,6 +72,10 @@ class TestPeriodicTasks(BaseTestCase):
         Test periodic_task() runs as expected and periodic_task_ignore()
         is not queued.
         """
+        # Sleep until the next second to ensure we have enough time to start
+        # the worker and get the periodic task queued before the following
+        # second starts.
+        sleep_until_next_second()
 
         # After the first worker run, the periodic task will be queued.
         # Note that since periodic tasks register with the Tiger instance, it
@@ -105,8 +110,7 @@ class TestPeriodicTasks(BaseTestCase):
             self._ensure_queues(scheduled={'periodic': 1})
 
         # Sleep until the next second
-        now = datetime.datetime.utcnow()
-        time.sleep(1 - now.microsecond / 10.0 ** 6)
+        sleep_until_next_second()
 
         ensure_run(1)
 
@@ -124,8 +128,7 @@ class TestPeriodicTasks(BaseTestCase):
         the same. If they aren't it could result in duplicate tasks.
         """
         # Sleep until the next second
-        now = datetime.datetime.utcnow()
-        time.sleep(1 - now.microsecond / 10.0 ** 6)
+        sleep_until_next_second()
 
         # After the first worker run, the periodic task will be queued.
         # Note that since periodic tasks register with the Tiger instance, it
@@ -171,8 +174,7 @@ class TestPeriodicTasks(BaseTestCase):
         If they aren't it could result in duplicate tasks.
         """
         # Sleep until the next second
-        now = datetime.datetime.utcnow()
-        time.sleep(1 - now.microsecond / 10.0 ** 6)
+        sleep_until_next_second()
 
         # After the first worker run, the periodic task will be queued.
         # Note that since periodic tasks register with the Tiger instance, it
@@ -196,8 +198,7 @@ class TestPeriodicTasks(BaseTestCase):
         Test that periodic tasks will self-correct unique ids
         """
         # Sleep until the next second
-        now = datetime.datetime.utcnow()
-        time.sleep(1 - now.microsecond / 10.0 ** 6)
+        sleep_until_next_second()
 
         # generate the ids
         correct_unique_id = gen_unique_id(

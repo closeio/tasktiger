@@ -1,8 +1,10 @@
 from __future__ import absolute_import
 
+import datetime
 import logging
 import redis
 import structlog
+import time
 from tasktiger import TaskTiger, Worker, fixed
 
 from .config import DELAY, TEST_DB, REDIS_HOST
@@ -83,3 +85,8 @@ def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
         worker.max_workers_per_queue = max_workers_per_queue
 
     worker.run(once=True, force_once=True)
+
+
+def sleep_until_next_second():
+    now = datetime.datetime.utcnow()
+    time.sleep(1 - now.microsecond / 10.0 ** 6)
