@@ -11,7 +11,7 @@ import pytest
 from tasktiger import Task, Worker
 from tasktiger.exceptions import QueueFullException
 
-from .config import DELAY, PROCESS_DELAY
+from .config import DELAY
 from .tasks import decorated_task_max_queue_size, simple_task, sleep_task
 from .test_base import BaseTestCase
 from .utils import external_worker
@@ -55,7 +55,7 @@ class TestMaxQueue(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(PROCESS_DELAY)
+        time.sleep(DELAY)
 
         # Kill the worker while it's still processing the task.
         os.kill(worker.pid, signal.SIGKILL)

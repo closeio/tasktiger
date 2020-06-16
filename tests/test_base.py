@@ -22,7 +22,7 @@ from tasktiger import (
 )
 from tasktiger._internal import serialize_func_name
 
-from .config import DELAY, PROCESS_DELAY
+from .config import DELAY
 from .tasks import (
     batch_task,
     decorated_task,
@@ -1094,7 +1094,7 @@ class TestReliability(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(PROCESS_DELAY)
+        time.sleep(DELAY)
 
         # Kill the worker while it's still processing the task.
         os.kill(worker.pid, signal.SIGKILL)
@@ -1102,7 +1102,7 @@ class TestReliability(BaseTestCase):
         self._ensure_queues(active={'default': 1})
 
         # Wait for (at least) ACTIVE_TASK_UPDATE_TIMEOUT
-        time.sleep(PROCESS_DELAY + DELAY)
+        time.sleep(2 * DELAY)
 
         Worker(self.tiger).run(once=True)
 
@@ -1137,7 +1137,7 @@ class TestReliability(BaseTestCase):
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(PROCESS_DELAY)
+        time.sleep(DELAY)
 
         # Get the PID of the worker subprocess actually executing the task
         current_process = psutil.Process(pid=worker.pid)
@@ -1163,16 +1163,14 @@ class TestReliability(BaseTestCase):
         be gone. Make sure we log a "not found" error and move on.
         """
 
-        task = Task(
-            self.tiger, sleep_task, kwargs={'delay': 2 * PROCESS_DELAY}
-        )
+        task = Task(self.tiger, sleep_task, kwargs={'delay': 2 * DELAY})
         task.delay()
         self._ensure_queues(queued={'default': 1})
 
         # Start a worker and wait until it starts processing.
         worker = Process(target=external_worker)
         worker.start()
-        time.sleep(PROCESS_DELAY)
+        time.sleep(DELAY)
 
         # Remove the task object while the task is processing.
         assert self.conn.delete('t:task:{}'.format(task.id)) == 1
@@ -1206,7 +1204,7 @@ class TestReliability(BaseTestCase):
             assert self.conn.scard('t:scheduled') == 0
 
             # After waiting and re-running the worker, queues will clear.
-            time.sleep(2 * PROCESS_DELAY)
+            time.sleep(2 * DELAY)
             Worker(self.tiger).run(once=True)
             Worker(self.tiger).run(once=True)
 
