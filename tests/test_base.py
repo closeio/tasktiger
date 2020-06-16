@@ -1163,7 +1163,9 @@ class TestReliability(BaseTestCase):
         be gone. Make sure we log a "not found" error and move on.
         """
 
-        task = Task(self.tiger, sleep_task, kwargs={'delay': 2 * DELAY})
+        task = Task(
+            self.tiger, sleep_task, kwargs={'delay': 2 * PROCESS_DELAY}
+        )
         task.delay()
         self._ensure_queues(queued={'default': 1})
 
@@ -1204,7 +1206,7 @@ class TestReliability(BaseTestCase):
             assert self.conn.scard('t:scheduled') == 0
 
             # After waiting and re-running the worker, queues will clear.
-            time.sleep(2 * DELAY)
+            time.sleep(2 * PROCESS_DELAY)
             Worker(self.tiger).run(once=True)
             Worker(self.tiger).run(once=True)
 
