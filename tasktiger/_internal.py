@@ -8,9 +8,12 @@ import operator
 import os
 import threading
 
+import redis
 import six
 
 from .exceptions import TaskImportError
+
+REDIS_PY_3 = redis.VERSION[0] >= 3
 
 # Task states (represented by different queues)
 # Note some client code may rely on the string values (e.g. get_queue_stats).

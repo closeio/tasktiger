@@ -6,7 +6,7 @@ import sys
 with open('README.rst', encoding='utf-8') as file:
     long_description = file.read()
 
-install_requires = ['click', 'redis>=2,<3', 'six', 'structlog']
+install_requires = ['click', 'redis>=2', 'six', 'structlog']
 
 if sys.version_info < (3, 3):
     install_requires += ['contextlib2>=0.5.5']
@@ -34,9 +34,9 @@ setup(
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
     packages=['tasktiger'],
     package_data={'tasktiger': ['lua/*.lua']},
