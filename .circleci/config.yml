@@ -7,6 +7,7 @@ workflows:
       - test-2.7
       - test-3.5
       - test-3.6
+      - test-3.7
       - black
 
 defaults: &defaults
@@ -38,6 +39,11 @@ jobs:
     <<: *defaults
     docker:
     - image: circleci/python:3.6
+    - image: redis:4.0.6
+  test-3.7:
+    <<: *defaults
+    docker:
+    - image: circleci/python:3.7
     - image: redis:4.0.6
   black:
     working_directory: ~/code
