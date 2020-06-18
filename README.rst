@@ -7,10 +7,10 @@ TaskTiger
 *TaskTiger* is a Python task queue using Redis.
 
 
-(Interested in working on projects like this? `Close.io`_ is looking for `great engineers`_ to join our team)
+(Interested in working on projects like this? `Close`_ is looking for `great engineers`_ to join our team)
 
-.. _Close.io: http://close.io
-.. _great engineers: http://jobs.close.io
+.. _Close: http://close.com
+.. _great engineers: http://jobs.close.com
 
 
 .. contents:: Contents
@@ -718,3 +718,42 @@ reported to Rollbar. Here is a custom worker launch script:
   tiger.log.addHandler(rollbar_handler)
 
   tiger.run_worker_with_args(sys.argv[1:])
+
+
+Cleaning Up Error'd Tasks
+-------------------------
+
+Error'd tasks occasionally need to be purged from Redis, so ``TaskTiger``
+exposes a ``purge_errored_tasks`` method to help. It might be useful to set
+this up as a periodic task as follows:
+
+.. code:: python
+
+  from tasktiger import TaskTiger, periodic
+
+  tiger = TaskTiger()
+
+  @tiger.task(schedule=periodic(hours=1))
+  def purge_errored_tasks():
+      tiger.purge_errored_tasks(
+          limit=1000,
+          last_execution_before=(
+              datetime.datetime.utcnow() - datetime.timedelta(weeks=12)
+          )
+      )
+
+
+Running The Test Suite
+----------------------
+
+Tests can be run locally using the provided docker compose file. After installing docker, tests should be runnable with:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest
+
+Tests can be more granularly run using normal pytest flags. For example:
+
+.. code :: bash
+
+  docker-compose run --rm tasktiger pytest tests/test_base.py::TestCase

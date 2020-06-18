@@ -3,11 +3,14 @@
 import os
 import time
 
+from ._internal import REDIS_PY_3
+
 SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
 
 
 class Semaphore(object):
     """Semaphore lock using Redis ZSET."""
+
     def __init__(self, redis, name, lock_id, timeout, max_locks=1):
         """
         Semaphore lock.
@@ -29,8 +32,12 @@ class Semaphore(object):
         self.lock_id = lock_id
         self.max_locks = max_locks
         self.timeout = timeout
-        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               'lua/semaphore.lua')) as f:
+        with open(
+            os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                'lua/semaphore.lua',
+            )
+        ) as f:
             self._semaphore = self.redis.register_script(f.read())
 
     @classmethod
@@ -64,8 +71,13 @@ class Semaphore(object):
         """
 
         pipeline = redis.pipeline()
-        pipeline.zadd(name, SYSTEM_LOCK_ID, time.time() + timeout)
-        pipeline.expire(name, timeout + 10)  # timeout plus buffer for troubleshooting
+        if REDIS_PY_3:
+            pipeline.zadd(name, {SYSTEM_LOCK_ID: time.time() + timeout})
+        else:
+            pipeline.zadd(name, SYSTEM_LOCK_ID, time.time() + timeout)
+        pipeline.expire(
+            name, timeout + 10
+        )  # timeout plus buffer for troubleshooting
         pipeline.execute()
 
     def release(self):
@@ -81,9 +93,10 @@ class Semaphore(object):
                  locks in semaphore.
         """
 
-        acquired, locks = self._semaphore(keys=[self.name],
-                                          args=[self.lock_id, self.max_locks,
-                                                self.timeout, time.time()])
+        acquired, locks = self._semaphore(
+            keys=[self.name],
+            args=[self.lock_id, self.max_locks, self.timeout, time.time()],
+        )
 
         # Convert Lua boolean returns to Python booleans
         acquired = True if acquired == 1 else False

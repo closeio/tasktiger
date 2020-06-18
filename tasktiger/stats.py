@@ -3,6 +3,7 @@ import time
 
 from ._internal import g_fork_lock
 
+
 class StatsThread(threading.Thread):
     def __init__(self, tiger):
         super(StatsThread, self).__init__()
@@ -48,13 +49,14 @@ class StatsThread(threading.Thread):
                 self._task_start_time = None
 
         if time_total:
-            utilization = 100. / time_total * time_busy
+            utilization = 100.0 / time_total * time_busy
             with g_fork_lock:
                 self.tiger.log.info(
                     'stats',
                     time_total=time_total,
                     time_busy=time_busy,
-                    utilization=utilization)
+                    utilization=utilization,
+                )
 
     def run(self):
         while True:

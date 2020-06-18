@@ -8,17 +8,42 @@ import tempfile
 import time
 from multiprocessing import Pool, Process
 
-from tasktiger import (JobTimeoutException, StopRetry, Task, TaskNotFound,
-                       Worker, exponential, fixed, linear)
+from freezefrog import FreezeTime
+
+from tasktiger import (
+    JobTimeoutException,
+    StopRetry,
+    Task,
+    TaskNotFound,
+    Worker,
+    exponential,
+    fixed,
+    linear,
+)
 from tasktiger._internal import serialize_func_name
 
 from .config import DELAY
-from .tasks import (batch_task, decorated_task, decorated_task_simple_func,
-                    exception_task, file_args_task, locked_task,
-                    long_task_killed, long_task_ok, non_batch_task, retry_task,
-                    retry_task_2, simple_task, sleep_task, StaticTask,
-                    task_on_other_queue, unique_task,
-                    verify_current_task, verify_current_tasks)
+from .tasks import (
+    batch_task,
+    decorated_task,
+    decorated_task_simple_func,
+    exception_task,
+    file_args_task,
+    locked_task,
+    long_task_killed,
+    long_task_ok,
+    non_batch_task,
+    retry_task,
+    retry_task_2,
+    simple_task,
+    sleep_task,
+    StaticTask,
+    task_on_other_queue,
+    unique_task,
+    unique_exception_task,
+    verify_current_task,
+    verify_current_tasks,
+)
 from .utils import Patch, external_worker, get_tiger
 
 
@@ -31,19 +56,32 @@ class BaseTestCase:
     def teardown_method(self, method):
         self.conn.flushdb()
 
-    def _ensure_queues(self, queued=None, active=None, error=None,
-                       scheduled=None):
+    def _ensure_queues(
+        self, queued=None, active=None, error=None, scheduled=None
+    ):
+
+        expected_queues = {
+            'queued': {name for name, n in (queued or {}).items() if n},
+            'active': {name for name, n in (active or {}).items() if n},
+            'error': {name for name, n in (error or {}).items() if n},
+            'scheduled': {name for name, n in (scheduled or {}).items() if n},
+        }
+        actual_queues = {
+            i: self.conn.smembers('t:{}'.format(i))
+            for i in ('queued', 'active', 'error', 'scheduled')
+        }
+        assert expected_queues == actual_queues
 
         def _ensure_queue(typ, data):
             data = data or {}
-            data_names = set(name for name, n in data.items() if n)
-            assert self.conn.smembers('t:%s' % typ) == data_names
             ret = {}
             for name, n in data.items():
                 task_ids = self.conn.zrange('t:%s:%s' % (typ, name), 0, -1)
                 assert len(task_ids) == n
-                ret[name] = [json.loads(self.conn.get('t:task:%s' % task_id))
-                             for task_id in task_ids]
+                ret[name] = [
+                    json.loads(self.conn.get('t:task:%s' % task_id))
+                    for task_id in task_ids
+                ]
                 assert list(task['id'] for task in ret[name]) == task_ids
             return ret
 
@@ -81,8 +119,9 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
         assert not self.conn.exists('t:task:%s' % task['id'])
 
-    @pytest.mark.skipif(sys.version_info < (3, 3),
-                      reason='__qualname__ unavailable')
+    @pytest.mark.skipif(
+        sys.version_info < (3, 3), reason='__qualname__ unavailable'
+    )
     def test_staticmethod_task(self):
         self.tiger.delay(StaticTask.task)
         queues = self._ensure_queues(queued={'default': 1})
@@ -115,15 +154,15 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
 
         json_data = tmpfile.read().decode('utf8')
-        assert json.loads(json_data) == {
-            'args': [],
-            'kwargs': {}
-        }
+        assert json.loads(json_data) == {'args': [], 'kwargs': {}}
 
         tmpfile.seek(0)
 
-        self.tiger.delay(file_args_task, args=(tmpfile.name, 123, 'args'),
-                         kwargs={'more': [1, 2, 3]})
+        self.tiger.delay(
+            file_args_task,
+            args=(tmpfile.name, 123, 'args'),
+            kwargs={'more': [1, 2, 3]},
+        )
         self._ensure_queues(queued={'default': 1})
 
         worker.run(once=True)
@@ -131,7 +170,7 @@ class TestCase(BaseTestCase):
         json_data = tmpfile.read().decode('utf8')
         assert json.loads(json_data) == {
             'args': [123, 'args'],
-            'kwargs': {'more': [1, 2, 3]}
+            'kwargs': {'more': [1, 2, 3]},
         }
 
     def test_queue(self):
@@ -201,13 +240,16 @@ class TestCase(BaseTestCase):
         self.tiger.delay(exception_task)
 
         Worker(self.tiger).run(once=True)
-        queues = self._ensure_queues(queued={'default': 0},
-                                     error={'default': 1})
+        queues = self._ensure_queues(
+            queued={'default': 0}, error={'default': 1}
+        )
 
         task = queues['error']['default'][0]
         assert task['func'] == 'tests.tasks:exception_task'
 
-        executions = self.conn.lrange('t:task:%s:executions' % task['id'], 0, -1)
+        executions = self.conn.lrange(
+            't:task:%s:executions' % task['id'], 0, -1
+        )
         assert len(executions) == 1
         execution = json.loads(executions[0])
         assert execution['exception_name'] == serialize_func_name(Exception)
@@ -228,14 +270,15 @@ class TestCase(BaseTestCase):
         self.tiger.delay(long_task_killed)
         Worker(self.tiger).run(once=True)
         queues = self._ensure_queues(
-            queued={'default': 0},
-            error={'default': 1},
+            queued={'default': 0}, error={'default': 1}
         )
 
         task = queues['error']['default'][0]
         assert task['func'] == 'tests.tasks:long_task_killed'
 
-        executions = self.conn.lrange('t:task:%s:executions' % task['id'], 0, -1)
+        executions = self.conn.lrange(
+            't:task:%s:executions' % task['id'], 0, -1
+        )
         assert len(executions) == 1
         execution = json.loads(executions[0])
         exception_name = execution['exception_name']
@@ -247,8 +290,9 @@ class TestCase(BaseTestCase):
         self.tiger.delay(unique_task, kwargs={'value': 2})
         self.tiger.delay(unique_task, kwargs={'value': 2})
 
-        queues = self._ensure_queues(queued={'default': 2},
-                                     error={'default': 0})
+        queues = self._ensure_queues(
+            queued={'default': 2}, error={'default': 0}
+        )
 
         task_1, task_2 = queues['queued']['default']
 
@@ -276,88 +320,113 @@ class TestCase(BaseTestCase):
         self.tiger.delay(locked_task, kwargs={'key': '2'})
         self.tiger.delay(locked_task, kwargs={'key': '2'})
 
-        self._ensure_queues(queued={'default': 3},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 3},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
         Pool(3).map(external_worker, range(3))
 
         # One task with keys 1 and 2 executed, but one is scheduled because
         # it hit a lock.
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
         # Wait for task to exit, .1 extra for task startup time
-        time.sleep(DELAY + .1)
+        time.sleep(DELAY + 0.1)
 
         # Two runs: The first one picks the task up from the "scheduled" queue,
         # the second one processes it.
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 1},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 1},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
     def test_lock_key(self):
-        self.tiger.delay(locked_task, kwargs={'key': '1', 'other': 1},
-                         lock_key=('key',))
-        self.tiger.delay(locked_task, kwargs={'key': '2', 'other': 2},
-                         lock_key=('key',))
-        self.tiger.delay(locked_task, kwargs={'key': '2', 'other': 3},
-                         lock_key=('key',))
+        self.tiger.delay(
+            locked_task, kwargs={'key': '1', 'other': 1}, lock_key=('key',)
+        )
+        self.tiger.delay(
+            locked_task, kwargs={'key': '2', 'other': 2}, lock_key=('key',)
+        )
+        self.tiger.delay(
+            locked_task, kwargs={'key': '2', 'other': 3}, lock_key=('key',)
+        )
 
-        self._ensure_queues(queued={'default': 3},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 3},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
         Pool(3).map(external_worker, range(3))
 
         # One task with keys 1 and 2 executed, but one is scheduled because
         # it hit a lock.
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
         time.sleep(DELAY)
 
         # Two runs: The first one picks the task up from the "scheduled" queue,
         # the second one processes it.
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 1},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 1},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
     def test_retry(self):
         # Use the default retry method we configured.
         task = self.tiger.delay(exception_task, retry=True)
-        self._ensure_queues(queued={'default': 1},
-                            scheduled={'default': 0},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 1},
+            scheduled={'default': 0},
+            error={'default': 0},
+        )
 
         # First run
         Worker(self.tiger).run(once=True)
         assert task.n_executions() == 1
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
         # The task is scheduled, so nothing happens here.
         Worker(self.tiger).run(once=True)
         assert task.n_executions() == 1
 
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
         time.sleep(DELAY)
 
@@ -365,9 +434,11 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         Worker(self.tiger).run(once=True)
         assert task.n_executions() == 2
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
         time.sleep(DELAY)
 
@@ -375,52 +446,65 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         Worker(self.tiger).run(once=True)
         assert task.n_executions() == 3
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 0},
-                            error={'default': 1})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 0},
+            error={'default': 1},
+        )
 
     def test_retry_on_1(self):
         # Fails immediately
         self.tiger.delay(exception_task, retry_on=[ValueError, IndexError])
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 0},
-                            error={'default': 1})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 0},
+            error={'default': 1},
+        )
 
     def test_retry_on_2(self):
         # Will be retried
         self.tiger.delay(exception_task, retry_on=[ValueError, Exception])
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
     def test_retry_on_3(self):
         # Make sure we catch superclasses.
         self.tiger.delay(exception_task, retry_on=[Exception])
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 1},
-                            error={'default': 0})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 1},
+            error={'default': 0},
+        )
 
     def test_retry_on_invalid(self):
         """
         Ensure we handle exceptions that can't be imported.
         """
+
         class CustomException(Exception):
             """
             Since this is an inline exception, it's not possible to import it
             via dotted path.
             """
+
         self.tiger.delay(exception_task, retry_on=[CustomException])
         Worker(self.tiger).run(once=True)
-        self._ensure_queues(queued={'default': 0},
-                            scheduled={'default': 0},
-                            error={'default': 1})
+        self._ensure_queues(
+            queued={'default': 0},
+            scheduled={'default': 0},
+            error={'default': 1},
+        )
 
     def test_retry_method(self):
-        task = self.tiger.delay(exception_task,
-                                retry_method=linear(DELAY, DELAY, 3))
+        task = self.tiger.delay(
+            exception_task, retry_method=linear(DELAY, DELAY, 3)
+        )
 
         def _run(n_executions):
             Worker(self.tiger).run(once=True)
@@ -458,17 +542,17 @@ class TestCase(BaseTestCase):
 
     def test_retry_method_linear(self):
         f = linear(1, 2, 3)
-        assert f[0](1, *f[1]), 1
-        assert f[0](2, *f[1]), 3
-        assert f[0](3, *f[1]), 5
+        assert f[0](1, *f[1]) == 1
+        assert f[0](2, *f[1]) == 3
+        assert f[0](3, *f[1]) == 5
         pytest.raises(StopRetry, f[0], 4, *f[1])
 
     def test_retry_method_exponential(self):
         f = exponential(1, 2, 4)
-        assert f[0](1, *f[1]), 1
-        assert f[0](2, *f[1]), 2
-        assert f[0](3, *f[1]), 4
-        assert f[0](4, *f[1]), 8
+        assert f[0](1, *f[1]) == 1
+        assert f[0](2, *f[1]) == 2
+        assert f[0](3, *f[1]) == 4
+        assert f[0](4, *f[1]) == 8
         pytest.raises(StopRetry, f[0], 5, *f[1])
 
     def test_retry_exception_1(self):
@@ -521,9 +605,8 @@ class TestCase(BaseTestCase):
                 {'args': [1], 'kwargs': {}},
                 {'args': [2], 'kwargs': {}},
                 {'args': [3], 'kwargs': {}},
-            ], [
-                {'args': [4], 'kwargs': {}},
             ],
+            [{'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_2(self):
@@ -539,13 +622,11 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'batch': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
-            [
-                {'args': [1], 'kwargs': {}},
-                {'args': [2], 'kwargs': {}},
-            ], 5, [
-                {'args': [3], 'kwargs': {}},
-                {'args': [4], 'kwargs': {}},
-            ], 6, 7,
+            [{'args': [1], 'kwargs': {}}, {'args': [2], 'kwargs': {}}],
+            5,
+            [{'args': [3], 'kwargs': {}}, {'args': [4], 'kwargs': {}}],
+            6,
+            7,
         ]
 
     def test_batch_3(self):
@@ -558,15 +639,10 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'default': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
-            [
-                {'args': [1], 'kwargs': {}},
-            ], [
-                {'args': [2], 'kwargs': {}},
-            ], [
-                {'args': [3], 'kwargs': {}},
-            ], [
-                {'args': [4], 'kwargs': {}},
-            ],
+            [{'args': [1], 'kwargs': {}}],
+            [{'args': [2], 'kwargs': {}}],
+            [{'args': [3], 'kwargs': {}}],
+            [{'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_4(self):
@@ -583,9 +659,8 @@ class TestCase(BaseTestCase):
                 {'args': [1], 'kwargs': {}},
                 {'args': [2], 'kwargs': {}},
                 {'args': [3], 'kwargs': {}},
-            ], [
-                {'args': [4], 'kwargs': {}},
             ],
+            [{'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_exception_1(self):
@@ -617,12 +692,15 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'batch': 0}, error={'batch': 2})
 
     def test_batch_lock_key(self):
-        self.tiger.delay(batch_task, kwargs={'key': '1', 'other': 1},
-                         lock_key=('key,'))
-        self.tiger.delay(batch_task, kwargs={'key': '2', 'other': 2},
-                         lock_key=('key,'))
-        self.tiger.delay(batch_task, kwargs={'key': '2', 'other': 3},
-                         lock_key=('key,'))
+        self.tiger.delay(
+            batch_task, kwargs={'key': '1', 'other': 1}, lock_key=('key,')
+        )
+        self.tiger.delay(
+            batch_task, kwargs={'key': '2', 'other': 2}, lock_key=('key,')
+        )
+        self.tiger.delay(
+            batch_task, kwargs={'key': '2', 'other': 3}, lock_key=('key,')
+        )
 
         self._ensure_queues(queued={'batch': 3})
         Worker(self.tiger).run(once=True)
@@ -668,11 +746,135 @@ class TestCase(BaseTestCase):
 
         self._ensure_queues(queued={q: 1 for q in ignore_queues})
 
+    def test_purge_errored_tasks_basic(self):
+        self.tiger.delay(exception_task)
+
+        Worker(self.tiger).run(once=True)
+        queues = self._ensure_queues(
+            queued={'default': 0}, error={'default': 1}
+        )
+
+        task = queues['error']['default'][0]
+        assert task['func'] == 'tests.tasks:exception_task'
+
+        # purge errored tasks
+        assert 1 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(queued={'default': 0}, error={'default': 0})
+
+    def test_purge_errored_tasks_no_errored_tasks(self):
+        self._ensure_queues(queued={'default': 0}, error={'default': 0})
+        assert 0 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(queued={'default': 0}, error={'default': 0})
+
+    def test_purge_errored_tasks_both_errored_and_queued(self):
+        self.tiger.delay(exception_task)
+        Worker(self.tiger).run(once=True)
+        self.tiger.delay(simple_task)
+
+        self._ensure_queues(queued={'default': 1}, error={'default': 1})
+
+        assert 1 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(queued={'default': 1}, error={'default': 0})
+
+    def test_purge_errored_tasks_specific_queues(self):
+        self.tiger.delay(exception_task, queue='a.b.c')
+        self.tiger.delay(exception_task, queue='a.b.d')
+        self.tiger.delay(exception_task, queue='a')
+        self.tiger.delay(exception_task, queue='e')
+        self.tiger.delay(exception_task)
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(
+            queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+            error={'a.b.c': 1, 'a.b.d': 1, 'a': 1, 'e': 1, 'default': 1},
+        )
+
+        # create iterator, don't iterate over it
+        assert 1 == self.tiger.purge_errored_tasks(queues=['a.b.c'])
+        self._ensure_queues(
+            queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+            error={'a.b.c': 0, 'a.b.d': 1, 'a': 1, 'e': 1, 'default': 1},
+        )
+        assert 1 == self.tiger.purge_errored_tasks(
+            queues=['a'], exclude_queues=['a.b.d']
+        )
+        self._ensure_queues(
+            queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+            error={'a.b.c': 0, 'a.b.d': 1, 'a': 0, 'e': 1, 'default': 1},
+        )
+        assert 2 == self.tiger.purge_errored_tasks(exclude_queues=['e'])
+        self._ensure_queues(
+            queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+            error={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 1, 'default': 0},
+        )
+        assert 1 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(
+            queued={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+            error={'a.b.c': 0, 'a.b.d': 0, 'a': 0, 'e': 0, 'default': 0},
+        )
+
+    def test_purge_errored_tasks_older_than(self):
+        task_timestamps = [
+            datetime.datetime(2015, 1, 1),
+            datetime.datetime(2016, 1, 1),
+            datetime.datetime(2017, 1, 1),
+            datetime.datetime(2018, 1, 1),
+        ]
+        for task_timestamp in task_timestamps:
+            with FreezeTime(task_timestamp):
+                self.tiger.delay(exception_task)
+                Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0}, error={'default': 4})
+
+        _, tasks = Task.tasks_from_queue(self.tiger, 'default', 'error')
+        actual_timestamps = [task.ts for task in tasks]
+        assert task_timestamps == actual_timestamps
+
+        assert 2 == self.tiger.purge_errored_tasks(
+            last_execution_before=datetime.datetime(2016, 6, 1)
+        )
+        self._ensure_queues(queued={'default': 0}, error={'default': 2})
+
+    def test_purge_errored_tasks_limit(self):
+        for _ in range(10):
+            self.tiger.delay(exception_task)
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(queued={'default': 0}, error={'default': 10})
+
+        # purge 1
+        assert 1 == self.tiger.purge_errored_tasks(limit=1)
+        self._ensure_queues(queued={'default': 0}, error={'default': 9})
+
+        # purge 4
+        assert 4 == self.tiger.purge_errored_tasks(limit=4)
+        self._ensure_queues(queued={'default': 0}, error={'default': 5})
+
+        # purge the rest
+        assert 5 == self.tiger.purge_errored_tasks(limit=None)
+        self._ensure_queues(queued={'default': 0}, error={'default': 0})
+
+    def test_purge_errored_tasks_only_errored_unique_task(self):
+        # only one of these should actually schedule (since it's unique)
+        self.tiger.delay(unique_exception_task)
+        self.tiger.delay(unique_exception_task)
+        self._ensure_queues(queued={'default': 1})
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={'default': 1})
+
+        self.tiger.delay(unique_exception_task)
+        self._ensure_queues(queued={'default': 1}, error={'default': 1})
+
+        assert 1 == self.tiger.purge_errored_tasks()
+        self._ensure_queues(queued={'default': 1}, error={'default': 0})
+
 
 class TestTasks(BaseTestCase):
     """
     Task class test cases.
     """
+
     def test_delay(self):
         task = Task(self.tiger, simple_task)
         self._ensure_queues()
@@ -706,7 +908,9 @@ class TestTasks(BaseTestCase):
         pytest.raises(TaskNotFound, task.cancel)
 
         # We can look up a task by its ID.
-        fetch_task = lambda: Task.from_id(self.tiger, 'a', 'scheduled', task_id)
+        fetch_task = lambda: Task.from_id(
+            self.tiger, 'a', 'scheduled', task_id
+        )
 
         task = fetch_task()
         task.cancel()
@@ -794,13 +998,15 @@ class TestTasks(BaseTestCase):
         Worker(self.tiger).run(once=True)
         Worker(self.tiger).run(once=True)
 
-        n, tasks = Task.tasks_from_queue(self.tiger, 'default', 'scheduled',
-                                         load_executions=1)
+        n, tasks = Task.tasks_from_queue(
+            self.tiger, 'default', 'scheduled', load_executions=1
+        )
         assert n == 1
         assert len(tasks[0].executions) == 1
 
-        n, tasks = Task.tasks_from_queue(self.tiger, 'default', 'scheduled',
-                                         load_executions=10)
+        n, tasks = Task.tasks_from_queue(
+            self.tiger, 'default', 'scheduled', load_executions=10
+        )
         assert n == 1
         assert len(tasks[0].executions) == 2
 
@@ -828,8 +1034,7 @@ class TestTasks(BaseTestCase):
         self._ensure_queues()
 
         # Ensure there is an exception if we can't serialize the task.
-        task = Task(self.tiger, decorated_task,
-                    args=[object()])
+        task = Task(self.tiger, decorated_task, args=[object()])
         pytest.raises(TypeError, task.delay)
         self._ensure_queues()
 

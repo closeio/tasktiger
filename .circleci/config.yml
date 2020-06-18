@@ -5,17 +5,21 @@ workflows:
   workflow:
     jobs:
       - test-2.7
-      - test-3.4
       - test-3.5
       - test-3.6
+      - test-3.7
+      - black
 
 defaults: &defaults
   working_directory: ~/code
+  environment:
+    # circleci exposes services on localhost
+    REDIS_HOST: localhost
   steps:
   - checkout
   - run:
       name: Install dependencies
-      command: sudo pip install -r requirements.txt freezefrog psutil pytest
+      command: sudo pip install -r requirements.txt -r requirements-test.txt
   - run:
       name: Test
       command: pytest
@@ -25,11 +29,6 @@ jobs:
     <<: *defaults
     docker:
     - image: circleci/python:2.7
-    - image: redis:4.0.6
-  test-3.4:
-    <<: *defaults
-    docker:
-    - image: circleci/python:3.4
     - image: redis:4.0.6
   test-3.5:
     <<: *defaults
@@ -41,3 +40,20 @@ jobs:
     docker:
     - image: circleci/python:3.6
     - image: redis:4.0.6
+  test-3.7:
+    <<: *defaults
+    docker:
+    - image: circleci/python:3.7
+    - image: redis:4.0.6
+  black:
+    working_directory: ~/code
+    docker:
+    - image: circleci/python:3.6
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: sudo pip install black==19.10b0 regex==2019.11.1
+      - run:
+          name: Check formatting
+          command: black --check .

@@ -22,7 +22,9 @@ class TaskTigerTestMixin(object):
         state = 'error'
         has_errors = False
         for queue in tiger.connection.smembers('{}:{}'.format(prefix, state)):
-            n_tasks, tasks = Task.tasks_from_queue(tiger, queue, state, load_executions=1)
+            n_tasks, tasks = Task.tasks_from_queue(
+                tiger, queue, state, load_executions=1
+            )
             for task in tasks:
                 print('')
                 print(task, 'failed:')

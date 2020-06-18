@@ -1,7 +1,7 @@
 import pytest
 import redis
 
-from .utils import get_tiger
+from .utils import get_tiger, REDIS_PY_3
 
 
 class TestRedisScripts:
@@ -11,11 +11,17 @@ class TestRedisScripts:
         self.conn.flushdb()
         self.scripts = self.tiger.scripts
 
+    def _zadd(self, key, mapping):
+        if REDIS_PY_3:
+            return self.conn.zadd(key, mapping)
+        else:
+            return self.conn.zadd(key, **mapping)
+
     def teardown_method(self, method):
         self.conn.flushdb()
 
     def _test_zadd(self, mode):
-        self.conn.zadd('z', key1=2)
+        self._zadd('z', {'key1': 2})
         self.scripts.zadd('z', 4, 'key1', mode=mode)
         self.scripts.zadd('z', 3, 'key1', mode=mode)
         self.scripts.zadd('z', 1, 'key2', mode=mode)
@@ -40,7 +46,7 @@ class TestRedisScripts:
         assert entries == [('key2', 2.0), ('key1', 4.0)]
 
     def test_zpoppush_1(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         result = self.scripts.zpoppush('src', 'dst', 3, None, 10)
         assert result == ['a', 'b', 'c']
 
@@ -51,7 +57,7 @@ class TestRedisScripts:
         assert dst == [('a', 10.0), ('b', 10.0), ('c', 10.0)]
 
     def test_zpoppush_2(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         result = self.scripts.zpoppush('src', 'dst', 100, None, 10)
         assert result == ['a', 'b', 'c', 'd']
 
@@ -62,7 +68,7 @@ class TestRedisScripts:
         assert dst == [('a', 10.0), ('b', 10.0), ('c', 10.0), ('d', 10.0)]
 
     def test_zpoppush_3(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         result = self.scripts.zpoppush('src', 'dst', 3, 2, 10)
         assert result == ['a', 'b']
 
@@ -73,8 +79,10 @@ class TestRedisScripts:
         assert dst == [('a', 10.0), ('b', 10.0)]
 
     def test_zpoppush_withscores_1(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
-        result = self.scripts.zpoppush('src', 'dst', 3, None, 10, withscores=True)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
+        result = self.scripts.zpoppush(
+            'src', 'dst', 3, None, 10, withscores=True
+        )
         assert result == ['a', '1', 'b', '2', 'c', '3']
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -84,8 +92,10 @@ class TestRedisScripts:
         assert dst == [('a', 10.0), ('b', 10.0), ('c', 10.0)]
 
     def test_zpoppush_withscores_2(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
-        result = self.scripts.zpoppush('src', 'dst', 100, None, 10, withscores=True)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
+        result = self.scripts.zpoppush(
+            'src', 'dst', 100, None, 10, withscores=True
+        )
         assert result == ['a', '1', 'b', '2', 'c', '3', 'd', '4']
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -95,7 +105,7 @@ class TestRedisScripts:
         assert dst == [('a', 10.0), ('b', 10.0), ('c', 10.0), ('d', 10.0)]
 
     def test_zpoppush_withscores_3(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         result = self.scripts.zpoppush('src', 'dst', 3, 2, 10, withscores=True)
         assert result == ['a', '1', 'b', '2']
 
@@ -109,15 +119,20 @@ class TestRedisScripts:
         """
         2 out of 4 items moved, so add_set contains "val"
         """
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         # Whether the members are in the destination ZSET doesn't make any
         # difference here.
-        self.conn.zadd('dst', a=5, b=5)
+        self._zadd('dst', {'a': 5, 'b': 5})
         self.conn.sadd('remove_set', 'val')
-        result = self.scripts.zpoppush('src', 'dst',
-                count=2, score=None, new_score=10,
-                on_success=('update_sets', 'val', 'remove_set', 'add_set'),
-                **kwargs)
+        result = self.scripts.zpoppush(
+            'src',
+            'dst',
+            count=2,
+            score=None,
+            new_score=10,
+            on_success=('update_sets', 'val', 'remove_set', 'add_set'),
+            **kwargs
+        )
         assert result == ['a', 'b']
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -133,12 +148,17 @@ class TestRedisScripts:
         """
         0 out of 4 items moved, so no sets were changed
         """
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         self.conn.sadd('remove_set', 'val')
-        result = self.scripts.zpoppush('src', 'dst',
-                count=2, score=0, new_score=10,
-                on_success=('update_sets', 'val', 'remove_set', 'add_set'),
-                **kwargs)
+        result = self.scripts.zpoppush(
+            'src',
+            'dst',
+            count=2,
+            score=0,
+            new_score=10,
+            on_success=('update_sets', 'val', 'remove_set', 'add_set'),
+            **kwargs
+        )
         assert result == []
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -154,12 +174,17 @@ class TestRedisScripts:
         """
         4 out of 4 items moved, so both sets were changed
         """
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         self.conn.sadd('remove_set', 'val')
-        result = self.scripts.zpoppush('src', 'dst',
-                count=4, score=None, new_score=10,
-                on_success=('update_sets', 'val', 'remove_set', 'add_set'),
-                **kwargs)
+        result = self.scripts.zpoppush(
+            'src',
+            'dst',
+            count=4,
+            score=None,
+            new_score=10,
+            on_success=('update_sets', 'val', 'remove_set', 'add_set'),
+            **kwargs
+        )
         assert result == ['a', 'b', 'c', 'd']
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -172,14 +197,19 @@ class TestRedisScripts:
         assert self.conn.smembers('add_set') == set(['val'])
 
     def test_zpoppush_ignore_if_exists_1(self):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         # Members that are in the destination ZSET are not updated here.
-        self.conn.zadd('dst', a=5, b=5)
+        self._zadd('dst', {'a': 5, 'b': 5})
         self.conn.sadd('remove_set', 'val')
-        result = self.scripts.zpoppush('src', 'dst',
-                count=2, score=None, new_score=10,
-                on_success=('update_sets', 'val', 'remove_set', 'add_set'),
-                if_exists=('noupdate',))
+        result = self.scripts.zpoppush(
+            'src',
+            'dst',
+            count=2,
+            score=None,
+            new_score=10,
+            on_success=('update_sets', 'val', 'remove_set', 'add_set'),
+            if_exists=('noupdate',),
+        )
         assert result == []
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -198,16 +228,26 @@ class TestRedisScripts:
         self.test_zpoppush_on_success_3(if_exists=('noupdate',))
 
     def _test_zpoppush_min_if_exists(self, expected_if_exists_score):
-        self.conn.zadd('src', a=1, b=2, c=3, d=4)
+        self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
         # Members that are in the destination ZSET are added to the if_exists
         # ZSET.
-        self.conn.zadd('dst', a=5)
+        self._zadd('dst', {'a': 5})
         self.conn.sadd('remove_set', 'val')
-        result = self.scripts.zpoppush('src', 'dst',
-                count=2, score=None, new_score=10,
-                on_success=('update_sets', 'val', 'remove_set', 'add_set',
-                            'add_set_if_exists'),
-                if_exists=('add', 'if_exists', 20, 'min'))
+        result = self.scripts.zpoppush(
+            'src',
+            'dst',
+            count=2,
+            score=None,
+            new_score=10,
+            on_success=(
+                'update_sets',
+                'val',
+                'remove_set',
+                'add_set',
+                'add_set_if_exists',
+            ),
+            if_exists=('add', 'if_exists', 20, 'min'),
+        )
         assert result == ['b']
 
         src = self.conn.zrange('src', 0, -1, withscores=True)
@@ -227,11 +267,11 @@ class TestRedisScripts:
         self._test_zpoppush_min_if_exists(20)
 
     def test_zpoppush_min_if_exists_2(self):
-        self.conn.zadd('if_exists', a=10)
+        self._zadd('if_exists', {'a': 10})
         self._test_zpoppush_min_if_exists(10)
 
     def test_zpoppush_min_if_exists_3(self):
-        self.conn.zadd('if_exists', a=30)
+        self._zadd('if_exists', {'a': 30})
         self._test_zpoppush_min_if_exists(20)
 
     def test_srem_if_not_exists_1(self):
@@ -249,28 +289,30 @@ class TestRedisScripts:
 
     def test_delete_if_not_in_zsets_1(self):
         self.conn.set('key', 0)
-        self.conn.zadd('z2', other=0)
-        result = self.scripts.delete_if_not_in_zsets('key', 'member',
-            ['z1', 'z2'])
+        self._zadd('z2', {'other': 0})
+        result = self.scripts.delete_if_not_in_zsets(
+            'key', 'member', ['z1', 'z2']
+        )
         assert result == 1
         assert self.conn.exists('key') == 0
 
     def test_delete_if_not_in_zsets_2(self):
         self.conn.set('key', 0)
-        self.conn.zadd('z2', member=0)
-        result = self.scripts.delete_if_not_in_zsets('key', 'member',
-            ['z1', 'z2'])
+        self._zadd('z2', {'member': 0})
+        result = self.scripts.delete_if_not_in_zsets(
+            'key', 'member', ['z1', 'z2']
+        )
         assert result == 0
         assert self.conn.exists('key') == 1
 
     def test_get_expired_tasks(self):
         self.conn.sadd('t:active', 'q1', 'q2', 'q3', 'q4')
-        self.conn.zadd('t:active:q1', 't1', 500)
-        self.conn.zadd('t:active:q1', 't2', 1000)
-        self.conn.zadd('t:active:q1', 't3', 1500)
-        self.conn.zadd('t:active:q2', 't4', 1200)
-        self.conn.zadd('t:active:q3', 't5', 1800)
-        self.conn.zadd('t:active:q4', 't6', 200)
+        self._zadd('t:active:q1', {'t1': 500})
+        self._zadd('t:active:q1', {'t2': 1000})
+        self._zadd('t:active:q1', {'t3': 1500})
+        self._zadd('t:active:q2', {'t4': 1200})
+        self._zadd('t:active:q3', {'t5': 1800})
+        self._zadd('t:active:q4', {'t6': 200})
 
         expired_task_set = set([('q1', 't1'), ('q1', 't2'), ('q4', 't6')])
 
@@ -289,7 +331,10 @@ class TestRedisScripts:
         p.lpush('x', 'a')
         p.lpush('x', 'b')
         p.lrange('x', 0, -1)
-        p.zadd('src', a=1, b=2, c=3, d=4)
+        if REDIS_PY_3:
+            p.zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
+        else:
+            p.zadd('src', a=1, b=2, c=3, d=4)
         # Ensure custom scripts work (ZPOPPUSH has both KEYS and ARGS)
         self.scripts.zpoppush('src', 'dst', 3, None, 10, client=p)
         # Ensure raw responses ('OK') are converted into Python values (True)

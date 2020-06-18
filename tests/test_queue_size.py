@@ -16,6 +16,7 @@ from .tasks import decorated_task_max_queue_size, simple_task, sleep_task
 from .test_base import BaseTestCase
 from .utils import external_worker
 
+
 class TestMaxQueue(BaseTestCase):
     """TaskTiger test max queue size."""
 
@@ -61,15 +62,19 @@ class TestMaxQueue(BaseTestCase):
         self._ensure_queues(active={'a': 1})
 
         # Scheduled
-        self.tiger.delay(simple_task, queue='a', max_queue_size=3,
-                         when=datetime.timedelta(seconds=10))
+        self.tiger.delay(
+            simple_task,
+            queue='a',
+            max_queue_size=3,
+            when=datetime.timedelta(seconds=10),
+        )
 
         # Queued
         self.tiger.delay(simple_task, queue='a', max_queue_size=3)
 
-        self._ensure_queues(active={'a': 1},
-                            queued={'a': 1},
-                            scheduled={'a': 1})
+        self._ensure_queues(
+            active={'a': 1}, queued={'a': 1}, scheduled={'a': 1}
+        )
 
         # Should fail to queue task to run immediately
         with pytest.raises(QueueFullException):
@@ -77,5 +82,9 @@ class TestMaxQueue(BaseTestCase):
 
         # Should fail to queue task to run in the future
         with pytest.raises(QueueFullException):
-            self.tiger.delay(simple_task, queue='a', max_queue_size=3,
-                             when=datetime.timedelta(seconds=10))
+            self.tiger.delay(
+                simple_task,
+                queue='a',
+                max_queue_size=3,
+                when=datetime.timedelta(seconds=10),
+            )

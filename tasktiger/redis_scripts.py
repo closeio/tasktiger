@@ -7,10 +7,10 @@ ZADD_NOUPDATE_TEMPLATE = """
         redis.call('zadd', {key}, {score}, {member})
     end
 """
-ZADD_NOUPDATE =  ZADD_NOUPDATE_TEMPLATE.format(
+ZADD_NOUPDATE = ZADD_NOUPDATE_TEMPLATE.format(
     key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition='not'
 )
-ZADD_UPDATE_EXISTING =  ZADD_NOUPDATE_TEMPLATE.format(
+ZADD_UPDATE_EXISTING = ZADD_NOUPDATE_TEMPLATE.format(
     key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition=''
 )
 ZADD_UPDATE_TEMPLATE = """
@@ -24,9 +24,11 @@ ZADD_UPDATE_TEMPLATE = """
     {ret} redis.call('zadd', {key}, new_score, {member})
 """
 ZADD_UPDATE_MIN = ZADD_UPDATE_TEMPLATE.format(
-    f='min', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return')
+    f='min', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+)
 ZADD_UPDATE_MAX = ZADD_UPDATE_TEMPLATE.format(
-    f='max', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return')
+    f='max', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+)
 
 _ZPOPPUSH_EXISTS_TEMPLATE = """
     -- Load keys and arguments
@@ -116,11 +118,17 @@ _ON_SUCCESS_UPDATE_SETS_TEMPLATE = """
 # ARGV = { score, count, new_score, set_value, if_exists_score }
 ZPOPPUSH_EXISTS_MIN_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
     if_exists_template=ZADD_UPDATE_TEMPLATE.format(
-        f='min', key='if_exists_key', score='if_exists_score',
-        member='member', ret=''),
+        f='min',
+        key='if_exists_key',
+        score='if_exists_score',
+        member='member',
+        ret='',
+    ),
     on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='set_value', add_to_set='add_to_set',
-        remove_from_set='remove_from_set')
+        set_value='set_value',
+        add_to_set='add_to_set',
+        remove_from_set='remove_from_set',
+    ),
 )
 
 # KEYS = { source, destination, remove_from_set, add_to_set }
@@ -128,8 +136,10 @@ ZPOPPUSH_EXISTS_MIN_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
 ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
     if_exists_template='',
     on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='set_value', add_to_set='add_to_set',
-        remove_from_set='remove_from_set')
+        set_value='set_value',
+        add_to_set='add_to_set',
+        remove_from_set='remove_from_set',
+    ),
 )
 
 # KEYS = { source, destination, ... }
@@ -171,12 +181,11 @@ ZPOPPUSH = _ZPOPPUSH_TEMPLATE.format(on_success='')
 
 # KEYS = { source, destination, remove_from_set, add_to_set }
 # ARGV = { score, count, new_score, set_value }
-ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(on_success=
-    _ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='ARGV[4]',
-        add_to_set='KEYS[4]',
-        remove_from_set='KEYS[3]',
-))
+ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(
+    on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
+        set_value='ARGV[4]', add_to_set='KEYS[4]', remove_from_set='KEYS[3]'
+    )
+)
 
 # ARGV = { score, count, new_score }
 ZPOPPUSH_WITHSCORES = """
@@ -272,30 +281,37 @@ class RedisScripts(object):
         self.redis = redis
 
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
-        self._zadd_update_existing = redis.register_script(ZADD_UPDATE_EXISTING)
+        self._zadd_update_existing = redis.register_script(
+            ZADD_UPDATE_EXISTING
+        )
         self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
         self._zadd_update_max = redis.register_script(ZADD_UPDATE_MAX)
 
         self._zpoppush = redis.register_script(ZPOPPUSH)
-        self._zpoppush_update_sets = redis.register_script(ZPOPPUSH_UPDATE_SETS)
+        self._zpoppush_update_sets = redis.register_script(
+            ZPOPPUSH_UPDATE_SETS
+        )
         self._zpoppush_withscores = redis.register_script(ZPOPPUSH_WITHSCORES)
         self._zpoppush_exists_min_update_sets = redis.register_script(
-            ZPOPPUSH_EXISTS_MIN_UPDATE_SETS)
+            ZPOPPUSH_EXISTS_MIN_UPDATE_SETS
+        )
         self._zpoppush_exists_ignore_update_sets = redis.register_script(
-            ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS)
+            ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS
+        )
 
         self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
 
         self._delete_if_not_in_zsets = redis.register_script(
-            DELETE_IF_NOT_IN_ZSETS)
+            DELETE_IF_NOT_IN_ZSETS
+        )
 
-        self._fail_if_not_in_zset = redis.register_script(
-            FAIL_IF_NOT_IN_ZSET)
+        self._fail_if_not_in_zset = redis.register_script(FAIL_IF_NOT_IN_ZSET)
 
-        self._get_expired_tasks = redis.register_script(
-            GET_EXPIRED_TASKS)
+        self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
 
-        self._execute_pipeline = self.register_script_from_file('lua/execute_pipeline.lua')
+        self._execute_pipeline = self.register_script_from_file(
+            'lua/execute_pipeline.lua'
+        )
 
     @property
     def can_replicate_commands(self):
@@ -311,8 +327,9 @@ class RedisScripts(object):
         return self._can_replicate_commands
 
     def register_script_from_file(self, filename):
-        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               filename)) as f:
+        with open(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
+        ) as f:
             return self.redis.register_script(f.read())
 
     def zadd(self, key, score, member, mode, client=None):
@@ -336,9 +353,18 @@ class RedisScripts(object):
             raise NotImplementedError('mode "%s" unsupported' % mode)
         return f(keys=[key], args=[score, member], client=client)
 
-    def zpoppush(self, source, destination, count, score, new_score,
-                 client=None, withscores=False, on_success=None,
-                 if_exists=None):
+    def zpoppush(
+        self,
+        source,
+        destination,
+        count,
+        score,
+        new_score,
+        client=None,
+        withscores=False,
+        on_success=None,
+        if_exists=None,
+    ):
         """
         Pops the first ``count`` members from the ZSET ``source`` and adds them
         to the ZSET ``destination`` with a score of ``new_score``. If ``score``
@@ -372,14 +398,15 @@ class RedisScripts(object):
         (their score will not be updated).
         """
         if score is None:
-            score = '+inf' # Include all elements.
+            score = '+inf'  # Include all elements.
         if withscores:
             if on_success:
                 raise NotImplementedError()
             return self._zpoppush_withscores(
                 keys=[source, destination],
                 args=[score, count, new_score],
-                client=client)
+                client=client,
+            )
         else:
             if if_exists and if_exists[0] == 'add':
                 _, if_exists_key, if_exists_score, if_exists_mode = if_exists
@@ -388,23 +415,32 @@ class RedisScripts(object):
 
                 if not on_success or on_success[0] != 'update_sets':
                     raise NotImplementedError()
-                set_value, remove_from_set, add_to_set, add_to_set_if_exists \
-                    = on_success[1:]
+                (
+                    set_value,
+                    remove_from_set,
+                    add_to_set,
+                    add_to_set_if_exists,
+                ) = on_success[1:]
 
                 return self._zpoppush_exists_min_update_sets(
-                        keys=[source, destination, remove_from_set, add_to_set,
-                              add_to_set_if_exists, if_exists_key],
-                        args=[score, count, new_score, set_value, if_exists_score],
+                    keys=[
+                        source,
+                        destination,
+                        remove_from_set,
+                        add_to_set,
+                        add_to_set_if_exists,
+                        if_exists_key,
+                    ],
+                    args=[score, count, new_score, set_value, if_exists_score],
                 )
             elif if_exists and if_exists[0] == 'noupdate':
                 if not on_success or on_success[0] != 'update_sets':
                     raise NotImplementedError()
-                set_value, remove_from_set, add_to_set \
-                    = on_success[1:]
+                set_value, remove_from_set, add_to_set = on_success[1:]
 
                 return self._zpoppush_exists_ignore_update_sets(
-                        keys=[source, destination, remove_from_set, add_to_set],
-                        args=[score, count, new_score, set_value],
+                    keys=[source, destination, remove_from_set, add_to_set],
+                    args=[score, count, new_score, set_value],
                 )
 
             if on_success:
@@ -413,14 +449,21 @@ class RedisScripts(object):
                 else:
                     set_value, remove_from_set, add_to_set = on_success[1:]
                     return self._zpoppush_update_sets(
-                        keys=[source, destination, remove_from_set, add_to_set],
+                        keys=[
+                            source,
+                            destination,
+                            remove_from_set,
+                            add_to_set,
+                        ],
                         args=[score, count, new_score, set_value],
-                        client=client)
+                        client=client,
+                    )
             else:
                 return self._zpoppush(
                     keys=[source, destination],
                     args=[score, count, new_score],
-                    client=client)
+                    client=client,
+                )
 
     def srem_if_not_exists(self, key, member, other_key, client=None):
         """
@@ -428,9 +471,8 @@ class RedisScripts(object):
         exist (i.e. is empty). Returns the number of removed elements (0 or 1).
         """
         return self._srem_if_not_exists(
-            keys=[key, other_key],
-            args=[member],
-            client=client)
+            keys=[key, other_key], args=[member], client=client
+        )
 
     def delete_if_not_in_zsets(self, key, member, set_list, client=None):
         """
@@ -438,9 +480,8 @@ class RedisScripts(object):
         ``set_list``. Returns the number of removed elements (0 or 1).
         """
         return self._delete_if_not_in_zsets(
-            keys=[key]+set_list,
-            args=[member],
-            client=client)
+            keys=[key] + set_list, args=[member], client=client
+        )
 
     def fail_if_not_in_zset(self, key, member, client=None):
         """
@@ -457,8 +498,9 @@ class RedisScripts(object):
         active queues. The list is capped at ``batch_size``. The list contains
         tuples (queue, task_id).
         """
-        result = self._get_expired_tasks(args=[key_prefix, time, batch_size],
-                                         client=client)
+        result = self._get_expired_tasks(
+            args=[key_prefix, time, batch_size], client=client
+        )
 
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
@@ -491,7 +533,7 @@ class RedisScripts(object):
             stack = pipeline.command_stack
             script_args = [int(self.can_replicate_commands), len(stack)]
             for args, options in stack:
-                script_args += [len(args)-1] + list(args)
+                script_args += [len(args) - 1] + list(args)
 
             # Run the pipeline
             if self.can_replicate_commands:  # Redis 3.2 or higher
@@ -499,8 +541,9 @@ class RedisScripts(object):
                 if pipeline.scripts:
                     pipeline.load_scripts()
 
-                raw_results = self._execute_pipeline(args=script_args,
-                                                     client=client)
+                raw_results = self._execute_pipeline(
+                    args=script_args, client=client
+                )
             else:
                 executing_pipeline = client.pipeline()
 
@@ -510,8 +553,9 @@ class RedisScripts(object):
                     executing_pipeline.script_load(s.script)
 
                 # Run actual pipeline lua script
-                self._execute_pipeline(args=script_args,
-                                       client=executing_pipeline)
+                self._execute_pipeline(
+                    args=script_args, client=executing_pipeline
+                )
 
                 # Always load all scripts and run actual pipeline lua script
                 raw_results = executing_pipeline.execute()[-1]
@@ -522,8 +566,9 @@ class RedisScripts(object):
             for ((args, options), result) in zip(stack, raw_results):
                 command_name = args[0]
                 if command_name in response_callbacks:
-                    result = response_callbacks[command_name](result,
-                                                              **options)
+                    result = response_callbacks[command_name](
+                        result, **options
+                    )
                 results.append(result)
 
             return results
