@@ -55,6 +55,9 @@ class BaseTestCase:
 
     def teardown_method(self, method):
         self.conn.flushdb()
+        self.conn.close()
+        # Force disconnect so we don't get Too many open files
+        self.conn.connection_pool.disconnect()
 
     def _ensure_queues(
         self, queued=None, active=None, error=None, scheduled=None

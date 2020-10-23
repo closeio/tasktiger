@@ -86,6 +86,7 @@ def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
         worker.max_workers_per_queue = max_workers_per_queue
 
     worker.run(once=True, force_once=True)
+    tiger.connection.close()
 
 
 def sleep_until_next_second():

@@ -14,6 +14,7 @@ from .utils import get_tiger
 LONG_TASK_SIGNAL_KEY = 'long_task_ok'
 
 tiger = get_tiger()
+tiger.connection.close()
 
 
 def simple_task():
@@ -41,7 +42,9 @@ def task_on_other_queue():
 
 
 def file_args_task(filename, *args, **kwargs):
-    open(filename, 'w').write(json.dumps({'args': args, 'kwargs': kwargs}))
+    f = open(filename, 'w')
+    f.write(json.dumps({'args': args, 'kwargs': kwargs}))
+    f.close()
 
 
 @tiger.task(hard_timeout=DELAY)
@@ -54,13 +57,14 @@ def long_task_ok():
     # Signal task has started
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.lpush(LONG_TASK_SIGNAL_KEY, '1')
-
+    conn.close()
     time.sleep(DELAY)
 
 
 def wait_for_long_task():
     """Waits for a long task to start."""
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
+    conn.close()
     result = conn.blpop(LONG_TASK_SIGNAL_KEY, int(ceil(DELAY * 3)))
     assert result[1] == '1'
 
@@ -69,6 +73,7 @@ def wait_for_long_task():
 def unique_task(value=None):
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.lpush('unique_task', value)
+    conn.close()
 
 
 @tiger.task(unique=True)
@@ -84,6 +89,7 @@ def locked_task(key, other=None):
         raise Exception('task failed, key already set')
     time.sleep(DELAY)
     conn.delete(key)
+    conn.close()
 
 
 @tiger.task(queue='batch', batch=True)
@@ -91,6 +97,7 @@ def batch_task(params):
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     try:
         conn.rpush('batch_task', json.dumps(params))
+        conn.close()
     except Exception:
         pass
     if any(p['args'][0] == 10 for p in params if p['args']):
@@ -101,6 +108,7 @@ def batch_task(params):
 def non_batch_task(arg):
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.rpush('batch_task', arg)
+    conn.close()
     if arg == 10:
         raise Exception('exception')
 
@@ -122,6 +130,7 @@ def verify_current_task():
         # This is expected (we need to use current_task)
         task = tiger.current_task
         conn.set('task_id', task.id)
+    conn.close()
 
 
 @tiger.task(batch=True, queue='batch')
@@ -135,6 +144,7 @@ def verify_current_tasks(tasks):
 
         tasks = tiger.current_tasks
         conn.rpush('task_ids', *[t.id for t in tasks])
+    conn.close()
 
 
 @tiger.task()

@@ -24,6 +24,9 @@ class TestSemaphore:
         """Test teardown."""
 
         self.conn.flushdb()
+        self.conn.close()
+        # Force disconnect so we don't get Too many open files
+        self.conn.connection_pool.disconnect()
 
     def test_simple_semaphore(self):
         """Test semaphore."""
