@@ -14,7 +14,6 @@ from .utils import get_tiger
 LONG_TASK_SIGNAL_KEY = 'long_task_ok'
 
 tiger = get_tiger()
-tiger.connection.close()
 
 
 def simple_task():
