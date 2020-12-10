@@ -31,6 +31,7 @@ class ContextManagerTester(object):
         self.conn.incr('cm:{}:exit'.format(self.name))
         if exc_type is not None:
             self.conn.incr('cm:{}:exit_with_error'.format(self.name))
+        self.conn.close()
 
 
 class TestChildContextManagers(BaseTestCase):

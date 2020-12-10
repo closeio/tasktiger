@@ -65,4 +65,5 @@ class TestSetupStructlog(BaseTestCase):
         conn = get_redis()
         tiger = TaskTiger(connection=conn, setup_structlog=True)
         assert tiger
+        conn.close()
         # no errors on init, cool
