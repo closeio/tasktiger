@@ -732,7 +732,7 @@ class Worker(object):
                 tasks.append(task)
 
         # List of task IDs that exist and we will update the heartbeat on.
-        valid_task_ids = set(task.id for task in tasks)
+        valid_task_ids = {task.id for task in tasks}
 
         # Group by task func
         tasks_by_func = OrderedDict()
