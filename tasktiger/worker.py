@@ -119,10 +119,7 @@ class Worker(object):
         # Redis load.
         self.worker_group_name = hashlib.sha256(
             json.dumps(
-                [
-                    sorted(self.only_queues),
-                    sorted(self.exclude_queues),
-                ]
+                [sorted(self.only_queues), sorted(self.exclude_queues),]
             ).encode('utf8')
         ).hexdigest()
 
