@@ -309,7 +309,7 @@ class TestCase(BaseTestCase):
 
         results = self.conn.lrange('unique_task', 0, -1)
         assert len(results) == 2
-        assert set(results) == set(['1', '2'])
+        assert set(results) == {'1', '2'}
 
     def test_unique_task_2(self):
         self.tiger.delay(unique_task)
