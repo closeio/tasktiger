@@ -119,7 +119,10 @@ class Worker(object):
         # Redis load.
         self.worker_group_name = hashlib.sha256(
             json.dumps(
-                [sorted(self.only_queues), sorted(self.exclude_queues),]
+                [
+                    sorted(self.only_queues),
+                    sorted(self.exclude_queues),
+                ]
             ).encode('utf8')
         ).hexdigest()
 
@@ -371,7 +374,11 @@ class Worker(object):
                 if is_batch_func:
                     # Batch process if the task supports it.
                     params = [
-                        {'args': task.args, 'kwargs': task.kwargs}
+                        {
+                            'id': task.id,
+                            'args': task.args,
+                            'kwargs': task.kwargs,
+                        }
                         for task in tasks
                     ]
                     task_timeouts = [
