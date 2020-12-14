@@ -144,8 +144,8 @@ class TestRedisScripts:
         dst = self.conn.zrange('dst', 0, -1, withscores=True)
         assert dst == [('a', 10.0), ('b', 10.0)]
 
-        assert self.conn.smembers('remove_set') == set(['val'])
-        assert self.conn.smembers('add_set') == set(['val'])
+        assert self.conn.smembers('remove_set') == {'val'}
+        assert self.conn.smembers('add_set') == {'val'}
 
     def test_zpoppush_on_success_2(self, **kwargs):
         """
@@ -170,7 +170,7 @@ class TestRedisScripts:
         dst = self.conn.zrange('dst', 0, -1, withscores=True)
         assert dst == []
 
-        assert self.conn.smembers('remove_set') == set(['val'])
+        assert self.conn.smembers('remove_set') == {'val'}
         assert self.conn.smembers('add_set') == set()
 
     def test_zpoppush_on_success_3(self, **kwargs):
@@ -197,7 +197,7 @@ class TestRedisScripts:
         assert dst == [('a', 10), ('b', 10), ('c', 10), ('d', 10)]
 
         assert self.conn.smembers('remove_set') == set()
-        assert self.conn.smembers('add_set') == set(['val'])
+        assert self.conn.smembers('add_set') == {'val'}
 
     def test_zpoppush_ignore_if_exists_1(self):
         self._zadd('src', {'a': 1, 'b': 2, 'c': 3, 'd': 4})
@@ -221,8 +221,8 @@ class TestRedisScripts:
         dst = self.conn.zrange('dst', 0, -1, withscores=True)
         assert dst == [('a', 5.0), ('b', 5.0)]
 
-        assert self.conn.smembers('remove_set') == set(['val'])
-        assert self.conn.smembers('add_set') == set(['val'])
+        assert self.conn.smembers('remove_set') == {'val'}
+        assert self.conn.smembers('add_set') == {'val'}
 
     def test_zpoppush_ignore_if_exists_2(self):
         self.test_zpoppush_on_success_2(if_exists=('noupdate',))
@@ -262,9 +262,9 @@ class TestRedisScripts:
         if_exists = self.conn.zrange('if_exists', 0, -1, withscores=True)
         assert if_exists == [('a', expected_if_exists_score)]
 
-        assert self.conn.smembers('remove_set') == set(['val'])
-        assert self.conn.smembers('add_set') == set(['val'])
-        assert self.conn.smembers('add_set_if_exists') == set(['val'])
+        assert self.conn.smembers('remove_set') == {'val'}
+        assert self.conn.smembers('add_set') == {'val'}
+        assert self.conn.smembers('add_set_if_exists') == {'val'}
 
     def test_zpoppush_min_if_exists_1(self):
         self._test_zpoppush_min_if_exists(20)
@@ -288,7 +288,7 @@ class TestRedisScripts:
         self.conn.set('other_key', 0)
         result = self.scripts.srem_if_not_exists('set', 'member', 'other_key')
         assert result == 0
-        assert self.conn.smembers('set') == set(['member'])
+        assert self.conn.smembers('set') == {'member'}
 
     def test_delete_if_not_in_zsets_1(self):
         self.conn.set('key', 0)
@@ -317,7 +317,7 @@ class TestRedisScripts:
         self._zadd('t:active:q3', {'t5': 1800})
         self._zadd('t:active:q4', {'t6': 200})
 
-        expired_task_set = set([('q1', 't1'), ('q1', 't2'), ('q4', 't6')])
+        expired_task_set = {('q1', 't1'), ('q1', 't2'), ('q4', 't6')}
 
         result = self.scripts.get_expired_tasks('t', 1000, 10)
         assert len(result) == 3
