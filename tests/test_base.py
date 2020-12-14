@@ -1052,6 +1052,10 @@ class TestTasks(BaseTestCase):
         task.delay(when=datetime.timedelta(seconds=5))
         self._ensure_queues(scheduled={'default': 1})
 
+        # Test batch task
+        task = Task(self.tiger, batch_task)
+        task.delay()
+
 
 class TestCurrentTask(BaseTestCase):
     def test_current_task(self):

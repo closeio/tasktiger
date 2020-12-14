@@ -298,7 +298,9 @@ class Task(object):
 
         try:
             if is_batch_func:
-                return func([{'args': self.args, 'kwargs': self.kwargs}])
+                return func(
+                    [{'id': self.id, 'args': self.args, 'kwargs': self.kwargs}]
+                )
             else:
                 return func(*self.args, **self.kwargs)
         finally:

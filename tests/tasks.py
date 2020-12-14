@@ -96,6 +96,8 @@ def locked_task(key, other=None):
 
 @tiger.task(queue='batch', batch=True)
 def batch_task(params):
+    assert all(p['id'] for p in params)
+
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
