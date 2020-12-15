@@ -249,7 +249,7 @@ class Task(object):
         if not to_state:  # Remove the task if necessary
             if self.unique:
                 # Only delete if it's not in any other queue
-                check_states = set([ACTIVE, QUEUED, ERROR, SCHEDULED])
+                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
                 check_states.remove(from_state)
                 # TODO: Do the following two in one call.
                 scripts.delete_if_not_in_zsets(
