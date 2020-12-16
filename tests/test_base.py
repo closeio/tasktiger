@@ -43,6 +43,7 @@ from .tasks import (
     unique_exception_task,
     verify_current_task,
     verify_current_tasks,
+    verify_tasktiger_instance,
 )
 from .utils import Patch, external_worker, get_tiger
 
@@ -1048,6 +1049,9 @@ class TestTasks(BaseTestCase):
 
 
 class TestCurrentTask(BaseTestCase):
+    """
+    Ensure current_task/current_tasks are set.
+    """
     def test_current_task(self):
         task = Task(self.tiger, verify_current_task)
         task.delay()
@@ -1078,6 +1082,22 @@ class TestCurrentTask(BaseTestCase):
         task.delay()
         assert not self.conn.exists('runtime_error')
         assert self.conn.lrange('task_ids', 0, -1) == [task.id]
+
+
+class TestTaskTigerGlobal(BaseTestCase):
+    """
+    Ensure TaskTiger.current_instance is set.
+    """
+    def test_task(self):
+        task = Task(self.tiger, verify_tasktiger_instance)
+        task.delay()
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues()
+
+    def test_eager(self):
+        self.tiger.config['ALWAYS_EAGER'] = True
+        task = Task(self.tiger, verify_tasktiger_instance)
+        task.delay()
 
 
 class TestReliability(BaseTestCase):
