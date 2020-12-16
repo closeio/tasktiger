@@ -36,7 +36,7 @@ g_fork_lock = threading.Lock()
 # Global task context. We store this globally (and not on the TaskTiger
 # instance) for consistent results just in case the user has multiple TaskTiger
 # instances.
-g = {'current_task_is_batch': None, 'current_tasks': None}
+g = {'tiger': None, 'current_task_is_batch': None, 'current_tasks': None}
 
 # from rq
 def import_attribute(name):
