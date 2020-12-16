@@ -174,5 +174,6 @@ class classproperty(property):
 
     Works like @property but on classes.
     """
+
     def __get__(desc, self, cls):
         return desc.fget(cls)
