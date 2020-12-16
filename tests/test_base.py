@@ -1052,6 +1052,7 @@ class TestCurrentTask(BaseTestCase):
     """
     Ensure current_task/current_tasks are set.
     """
+
     def test_current_task(self):
         task = Task(self.tiger, verify_current_task)
         task.delay()
@@ -1088,6 +1089,7 @@ class TestTaskTigerGlobal(BaseTestCase):
     """
     Ensure TaskTiger.current_instance is set.
     """
+
     def test_task(self):
         task = Task(self.tiger, verify_tasktiger_instance)
         task.delay()
