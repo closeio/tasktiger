@@ -166,3 +166,13 @@ def queue_matches(queue, only_queues=None, exclude_queues=None):
         if part in only_queues:
             return True
     return not only_queues
+
+
+class classproperty(property):
+    """
+    Simple class property implementation.
+
+    Works like @property but on classes.
+    """
+    def __get__(desc, self, cls):
+        return desc.fget(cls)
