@@ -4,7 +4,7 @@ import time
 
 import redis
 
-from tasktiger import RetryException
+from tasktiger import RetryException, TaskTiger
 from tasktiger.retry import fixed
 
 from .config import DELAY, TEST_DB, REDIS_HOST
@@ -150,6 +150,19 @@ def verify_current_tasks(tasks):
 
             tasks = tiger.current_tasks
             conn.rpush('task_ids', *[t.id for t in tasks])
+
+
+@tiger.task()
+def verify_tasktiger_instance():
+    # Not necessarily the same object, but the same configuration.
+    config_1 = dict(TaskTiger.current_instance.config)
+    config_2 = dict(tiger.config)
+
+    # Changed during the test case, so this may differ.
+    config_1.pop("ALWAYS_EAGER")
+    config_2.pop("ALWAYS_EAGER")
+
+    assert config_1 == config_2
 
 
 @tiger.task()

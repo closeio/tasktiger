@@ -295,6 +295,7 @@ class Task(object):
 
         g['current_task_is_batch'] = is_batch_func
         g['current_tasks'] = [self]
+        g['tiger'] = self.tiger
 
         try:
             if is_batch_func:
@@ -304,6 +305,7 @@ class Task(object):
         finally:
             g['current_task_is_batch'] = None
             g['current_tasks'] = None
+            g['tiger'] = None
 
     def delay(self, when=None, max_queue_size=None):
         tiger = self.tiger

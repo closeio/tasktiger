@@ -36,7 +36,7 @@ g_fork_lock = threading.Lock()
 # Global task context. We store this globally (and not on the TaskTiger
 # instance) for consistent results just in case the user has multiple TaskTiger
 # instances.
-g = {'current_task_is_batch': None, 'current_tasks': None}
+g = {'tiger': None, 'current_task_is_batch': None, 'current_tasks': None}
 
 # from rq
 def import_attribute(name):
@@ -166,3 +166,14 @@ def queue_matches(queue, only_queues=None, exclude_queues=None):
         if part in only_queues:
             return True
     return not only_queues
+
+
+class classproperty(property):
+    """
+    Simple class property implementation.
+
+    Works like @property but on classes.
+    """
+
+    def __get__(desc, self, cls):
+        return desc.fget(cls)

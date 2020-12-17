@@ -363,6 +363,7 @@ class Worker(object):
             func = tasks[0].func
 
             is_batch_func = getattr(func, '_task_batch', False)
+            g['tiger'] = self.tiger
             g['current_task_is_batch'] = is_batch_func
 
             with WorkerContextManagerStack(

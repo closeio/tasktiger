@@ -14,6 +14,7 @@ from .redis_semaphore import Semaphore
 from .redis_scripts import RedisScripts
 
 from ._internal import (
+    classproperty,
     g,
     serialize_func_name,
     QUEUED,
@@ -225,14 +226,14 @@ class TaskTiger(object):
 
     def _get_current_task(self):
         if g['current_tasks'] is None:
-            raise RuntimeError('Must be accessed from within a task')
+            raise RuntimeError('Must be accessed from within a task.')
         if g['current_task_is_batch']:
             raise RuntimeError('Must use current_tasks in a batch task.')
         return g['current_tasks'][0]
 
     def _get_current_tasks(self):
         if g['current_tasks'] is None:
-            raise RuntimeError('Must be accessed from within a task')
+            raise RuntimeError('Must be accessed from within a task.')
         if not g['current_task_is_batch']:
             raise RuntimeError('Must use current_task in a non-batch task.')
         return g['current_tasks']
@@ -243,6 +244,15 @@ class TaskTiger(object):
     """
     current_task = property(_get_current_task)
     current_tasks = property(_get_current_tasks)
+
+    @classproperty
+    def current_instance(self):
+        """
+        Access the current TaskTiger instance from within a task.
+        """
+        if g['tiger'] is None:
+            raise RuntimeError('Must be accessed from within a task.')
+        return g['tiger']
 
     def _key(self, *parts):
         """
