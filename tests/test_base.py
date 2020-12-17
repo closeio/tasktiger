@@ -596,29 +596,29 @@ class TestCase(BaseTestCase):
         pytest.raises(TaskNotFound, task.n_executions)
 
     def test_batch_1(self):
-        self.tiger.delay(batch_task, args=[1])
-        self.tiger.delay(batch_task, args=[2])
-        self.tiger.delay(batch_task, args=[3])
-        self.tiger.delay(batch_task, args=[4])
+        id1 = self.tiger.delay(batch_task, args=[1]).id
+        id2 = self.tiger.delay(batch_task, args=[2]).id
+        id3 = self.tiger.delay(batch_task, args=[3]).id
+        id4 = self.tiger.delay(batch_task, args=[4]).id
         self._ensure_queues(queued={'batch': 4})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
             [
-                {'args': [1], 'kwargs': {}},
-                {'args': [2], 'kwargs': {}},
-                {'args': [3], 'kwargs': {}},
+                {'id': id1, 'args': [1], 'kwargs': {}},
+                {'id': id2, 'args': [2], 'kwargs': {}},
+                {'id': id3, 'args': [3], 'kwargs': {}},
             ],
-            [{'args': [4], 'kwargs': {}}],
+            [{'id': id4, 'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_2(self):
-        self.tiger.delay(batch_task, args=[1])
+        id1 = self.tiger.delay(batch_task, args=[1]).id
         self.tiger.delay(non_batch_task, args=[5])
-        self.tiger.delay(batch_task, args=[2])
-        self.tiger.delay(batch_task, args=[3])
-        self.tiger.delay(batch_task, args=[4])
+        id2 = self.tiger.delay(batch_task, args=[2]).id
+        id3 = self.tiger.delay(batch_task, args=[3]).id
+        id4 = self.tiger.delay(batch_task, args=[4]).id
         self.tiger.delay(non_batch_task, args=[6])
         self.tiger.delay(non_batch_task, args=[7])
         self._ensure_queues(queued={'batch': 7})
@@ -626,45 +626,51 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={'batch': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
-            [{'args': [1], 'kwargs': {}}, {'args': [2], 'kwargs': {}}],
+            [
+                {'id': id1, 'args': [1], 'kwargs': {}},
+                {'id': id2, 'args': [2], 'kwargs': {}},
+            ],
             5,
-            [{'args': [3], 'kwargs': {}}, {'args': [4], 'kwargs': {}}],
+            [
+                {'id': id3, 'args': [3], 'kwargs': {}},
+                {'id': id4, 'args': [4], 'kwargs': {}},
+            ],
             6,
             7,
         ]
 
     def test_batch_3(self):
-        self.tiger.delay(batch_task, queue='default', args=[1])
-        self.tiger.delay(batch_task, queue='default', args=[2])
-        self.tiger.delay(batch_task, queue='default', args=[3])
-        self.tiger.delay(batch_task, queue='default', args=[4])
+        id1 = self.tiger.delay(batch_task, queue='default', args=[1]).id
+        id2 = self.tiger.delay(batch_task, queue='default', args=[2]).id
+        id3 = self.tiger.delay(batch_task, queue='default', args=[3]).id
+        id4 = self.tiger.delay(batch_task, queue='default', args=[4]).id
         self._ensure_queues(queued={'default': 4})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'default': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
-            [{'args': [1], 'kwargs': {}}],
-            [{'args': [2], 'kwargs': {}}],
-            [{'args': [3], 'kwargs': {}}],
-            [{'args': [4], 'kwargs': {}}],
+            [{'id': id1, 'args': [1], 'kwargs': {}}],
+            [{'id': id2, 'args': [2], 'kwargs': {}}],
+            [{'id': id3, 'args': [3], 'kwargs': {}}],
+            [{'id': id4, 'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_4(self):
-        self.tiger.delay(batch_task, queue='batch.sub', args=[1])
-        self.tiger.delay(batch_task, queue='batch.sub', args=[2])
-        self.tiger.delay(batch_task, queue='batch.sub', args=[3])
-        self.tiger.delay(batch_task, queue='batch.sub', args=[4])
+        id1 = self.tiger.delay(batch_task, queue='batch.sub', args=[1]).id
+        id2 = self.tiger.delay(batch_task, queue='batch.sub', args=[2]).id
+        id3 = self.tiger.delay(batch_task, queue='batch.sub', args=[3]).id
+        id4 = self.tiger.delay(batch_task, queue='batch.sub', args=[4]).id
         self._ensure_queues(queued={'batch.sub': 4})
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={'batch.sub': 0})
         data = [json.loads(d) for d in self.conn.lrange('batch_task', 0, -1)]
         assert data == [
             [
-                {'args': [1], 'kwargs': {}},
-                {'args': [2], 'kwargs': {}},
-                {'args': [3], 'kwargs': {}},
+                {'id': id1, 'args': [1], 'kwargs': {}},
+                {'id': id2, 'args': [2], 'kwargs': {}},
+                {'id': id3, 'args': [3], 'kwargs': {}},
             ],
-            [{'args': [4], 'kwargs': {}}],
+            [{'id': id4, 'args': [4], 'kwargs': {}}],
         ]
 
     def test_batch_exception_1(self):
@@ -1046,6 +1052,10 @@ class TestTasks(BaseTestCase):
         task = Task(self.tiger, simple_task)
         task.delay(when=datetime.timedelta(seconds=5))
         self._ensure_queues(scheduled={'default': 1})
+
+        # Test batch task
+        task = Task(self.tiger, batch_task)
+        task.delay()
 
 
 class TestCurrentTask(BaseTestCase):

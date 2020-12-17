@@ -372,7 +372,11 @@ class Worker(object):
                 if is_batch_func:
                     # Batch process if the task supports it.
                     params = [
-                        {'args': task.args, 'kwargs': task.kwargs}
+                        {
+                            'id': task.id,
+                            'args': task.args,
+                            'kwargs': task.kwargs,
+                        }
                         for task in tasks
                     ]
                     task_timeouts = [
