@@ -304,6 +304,7 @@ class Task(object):
         finally:
             g['current_task_is_batch'] = None
             g['current_tasks'] = None
+            g['current_batch_task'] = None
 
     def delay(self, when=None, max_queue_size=None):
         tiger = self.tiger

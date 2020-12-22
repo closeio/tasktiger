@@ -364,6 +364,7 @@ class Worker(object):
 
             is_batch_func = getattr(func, '_task_batch', False)
             g['current_task_is_batch'] = is_batch_func
+            g['current_batch_task'] = None
 
             with WorkerContextManagerStack(
                 self.config['CHILD_CONTEXT_MANAGERS']
