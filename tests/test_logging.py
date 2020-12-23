@@ -4,7 +4,8 @@ import pytest
 import structlog
 
 from tasktiger import TaskTiger, Worker, g
-from tasktiger.logging import tasktiger_processor, batch_param_iterator
+from tasktiger.logging import tasktiger_processor
+from tasktiger.utils import batch_param_iterator
 
 from .test_base import BaseTestCase
 from .utils import get_tiger, get_redis

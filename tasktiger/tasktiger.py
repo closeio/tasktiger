@@ -226,8 +226,12 @@ class TaskTiger(object):
     def _get_current_task(self):
         if g['current_tasks'] is None:
             raise RuntimeError('Must be accessed from within a task')
-        if g['current_task_is_batch']:
-            raise RuntimeError('Must use current_tasks in a batch task.')
+
+        if g['current_task_is_batch'] and g['current_batch_task']:
+            return g['current_batch_task']
+        elif g['current_task_is_batch'] and not g['current_batch_task']:
+            raise RuntimeError('Must use batch_param_iterator in batch task.')
+
         return g['current_tasks'][0]
 
     def _get_current_tasks(self):

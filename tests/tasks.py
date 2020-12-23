@@ -2,10 +2,12 @@ import json
 from math import ceil
 import time
 
+import pytest
 import redis
 
-from tasktiger import RetryException
+from tasktiger import RetryException, g
 from tasktiger.retry import fixed
+from tasktiger.utils import batch_param_iterator
 
 from .config import DELAY, TEST_DB, REDIS_HOST
 from .utils import get_tiger
@@ -139,17 +141,23 @@ def verify_current_task():
 
 
 @tiger.task(batch=True, queue='batch')
-def verify_current_tasks(tasks):
+def verify_current_tasks(params):
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
         try:
-            tasks = tiger.current_task
+            tiger.current_task
         except RuntimeError:
             # This is expected (we need to use current_tasks)
 
             tasks = tiger.current_tasks
             conn.rpush('task_ids', *[t.id for t in tasks])
+
+    for i, p in enumerate(batch_param_iterator(params)):
+        assert tiger.current_task.id == g['current_tasks'][i].id
+
+    with pytest.raises(RuntimeError):
+        tiger.current_task.id
 
 
 @tiger.task()
