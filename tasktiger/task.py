@@ -5,7 +5,7 @@ import redis
 import time
 
 from ._internal import *
-from .exceptions import QueueFullException, TaskNotFound
+from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 
 __all__ = ['Task']
 
@@ -26,6 +26,7 @@ class Task(object):
         retry_on=None,
         retry_method=None,
         max_queue_size=None,
+        runner_class=None,
         # internal variables
         _data=None,
         _state=None,
@@ -76,6 +77,9 @@ class Task(object):
         if max_queue_size is None:
             max_queue_size = getattr(func, '_task_max_queue_size', None)
 
+        if runner_class is None:
+            runner_class = getattr(func, '_task_runner_class', None)
+
         # normalize falsy args/kwargs to empty structures
         args = args or []
         kwargs = kwargs or {}
@@ -110,6 +114,8 @@ class Task(object):
                 ]
         if max_queue_size:
             task['max_queue_size'] = max_queue_size
+        if runner_class:
+            task['runner_class'] = runner_class
 
         self._data = task
 
@@ -190,6 +196,10 @@ class Task(object):
         if not self._func:
             self._func = import_attribute(self.serialized_func)
         return self._func
+
+    @property
+    def serialized_runner_class(self):
+        return self._data.get('runner_class')
 
     @property
     def ts(self):

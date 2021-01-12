@@ -276,6 +276,7 @@ class TaskTiger(object):
         schedule=None,
         batch=False,
         max_queue_size=None,
+        runner_class=None,
     ):
         """
         Function decorator that defines the behavior of the function when it is
@@ -318,6 +319,8 @@ class TaskTiger(object):
                 func._task_schedule = schedule
             if max_queue_size is not None:
                 func._task_max_queue_size = max_queue_size
+            if runner_class is not None:
+                func._task_runner_class = runner_class
 
             func.delay = _delay(func)
 
@@ -389,6 +392,7 @@ class TaskTiger(object):
         retry_on=None,
         retry_method=None,
         max_queue_size=None,
+        runner_class=None,
     ):
         """
         Queues a task. See README.rst for an explanation of the options.
@@ -407,6 +411,7 @@ class TaskTiger(object):
             retry=retry,
             retry_on=retry_on,
             retry_method=retry_method,
+            runner_class=runner_class,
         )
 
         task.delay(when=when, max_queue_size=max_queue_size)
