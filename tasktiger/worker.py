@@ -364,7 +364,7 @@ class Worker(object):
             func = tasks[0].func
 
             runner_class = get_runner_class(log, tasks)
-            runner = runner_class()
+            runner = runner_class(self.tiger)
 
             is_batch_func = getattr(func, '_task_batch', False)
             g['tiger'] = self.tiger
@@ -403,8 +403,7 @@ class Worker(object):
 
                         g['current_tasks'] = [task]
                         with UnixSignalDeathPenalty(hard_timeout):
-                            with UnixSignalDeathPenalty(hard_timeout):
-                                runner.run_single_task(task)
+                            runner.run_single_task(task)
 
         except RetryException as exc:
             execution['retry'] = True
@@ -1018,6 +1017,10 @@ class Worker(object):
                 _mark_done()
             else:
                 task._move(from_state=ACTIVE, to_state=state, when=when)
+                if state == ERROR and task.serialized_runner_class:
+                    runner_class = get_runner_class(log, [task])
+                    runner = runner_class(self.tiger)
+                    runner.on_permanent_error(task, execution)
 
     def _worker_run(self):
         """

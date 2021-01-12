@@ -2,7 +2,18 @@ from ._internal import import_attribute
 from .exceptions import TaskImportError
 
 
-class DefaultRunner:
+class BaseRunner:
+    def __init__(self, tiger):
+        self.tiger = tiger
+
+    def run_single_task(self, task):
+        raise NotImplementedError("Single tasks are not supported.")
+
+    def run_batch_tasks(self, tasks):
+        raise NotImplementedError("Batch tasks are not supported.")
+
+
+class DefaultRunner(BaseRunner):
     def run_single_task(self, task):
         task.func(*task.args, **task.kwargs)
 
