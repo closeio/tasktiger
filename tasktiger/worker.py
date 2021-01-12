@@ -374,8 +374,6 @@ class Worker(object):
                 self.config['CHILD_CONTEXT_MANAGERS']
             ):
                 if is_batch_func:
-                    runner.run_batch_tasks(tasks)
-
                     # Batch process if the task supports it.
                     task_timeouts = [
                         task.hard_timeout
