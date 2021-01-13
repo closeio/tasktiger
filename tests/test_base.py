@@ -1257,7 +1257,9 @@ class TestRunnerClass(BaseTestCase):
         self._ensure_queues()
 
     def test_permanent_error(self):
-        task = self.tiger.delay(exception_task, runner_class=MyErrorRunnerClass)
+        task = self.tiger.delay(
+            exception_task, runner_class=MyErrorRunnerClass
+        )
         Worker(self.tiger).run(once=True)
         assert self.conn.get('task_id') == task.id
         self.conn.delete('task_id')

@@ -7,6 +7,7 @@ class BaseRunner:
     """
     Base implementation of the task runner.
     """
+
     def __init__(self, tiger):
         self.tiger = tiger
 
@@ -41,6 +42,7 @@ class DefaultRunner(BaseRunner):
     """
     Default implementation of the task runner.
     """
+
     def run_single_task(self, task, hard_timeout):
         with UnixSignalDeathPenalty(hard_timeout):
             task.func(*task.args, **task.kwargs)
