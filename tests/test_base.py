@@ -32,6 +32,8 @@ from .tasks import (
     locked_task,
     long_task_killed,
     long_task_ok,
+    MyErrorRunnerClass,
+    MyRunnerClass,
     non_batch_task,
     retry_task,
     retry_task_2,
@@ -1236,3 +1238,27 @@ class TestReliability(BaseTestCase):
             self._ensure_queues()
             assert len(errors) == 1
             assert "not found" in errors[0]
+
+
+class TestRunnerClass(BaseTestCase):
+    def test_custom_runner_class_single_task(self):
+        task = self.tiger.delay(simple_task, runner_class=MyRunnerClass)
+        Worker(self.tiger).run(once=True)
+        assert self.conn.get('task_id') == task.id
+        self.conn.delete('task_id')
+        self._ensure_queues()
+
+    def test_customer_runner_class_batch_task(self):
+        self.tiger.delay(batch_task, args=[1], runner_class=MyRunnerClass)
+        self.tiger.delay(batch_task, args=[2], runner_class=MyRunnerClass)
+        Worker(self.tiger).run(once=True)
+        assert self.conn.get('task_args') == "1,2"
+        self.conn.delete('task_args')
+        self._ensure_queues()
+
+    def test_permanent_error(self):
+        task = self.tiger.delay(exception_task, runner_class=MyErrorRunnerClass)
+        Worker(self.tiger).run(once=True)
+        assert self.conn.get('task_id') == task.id
+        self.conn.delete('task_id')
+        self._ensure_queues(error={'default': 1})

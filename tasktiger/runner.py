@@ -1,26 +1,55 @@
 from ._internal import import_attribute
 from .exceptions import TaskImportError
+from .timeouts import UnixSignalDeathPenalty
 
 
 class BaseRunner:
+    """
+    Base implementation of the task runner.
+    """
     def __init__(self, tiger):
         self.tiger = tiger
 
-    def run_single_task(self, task):
+    def run_single_task(self, task, hard_timeout):
+        """
+        Run the given task using the hard timeout in seconds.
+
+        This is called inside of the forked process.
+        """
         raise NotImplementedError("Single tasks are not supported.")
 
-    def run_batch_tasks(self, tasks):
+    def run_batch_tasks(self, tasks, hard_timeout):
+        """
+        Run the given tasks using the hard timeout in seconds.
+
+        This is called inside of the forked process.
+        """
         raise NotImplementedError("Batch tasks are not supported.")
+
+    def on_permanent_error(self, task, execution):
+        """
+        Called if the task fails permanently.
+
+        A task fails permanently if its status is set to ERROR and it is no
+        longer retried.
+
+        This is called in the main worker process.
+        """
 
 
 class DefaultRunner(BaseRunner):
-    def run_single_task(self, task):
-        task.func(*task.args, **task.kwargs)
+    """
+    Default implementation of the task runner.
+    """
+    def run_single_task(self, task, hard_timeout):
+        with UnixSignalDeathPenalty(hard_timeout):
+            task.func(*task.args, **task.kwargs)
 
-    def run_batch_tasks(self, tasks):
+    def run_batch_tasks(self, tasks, hard_timeout):
         params = [{'args': task.args, 'kwargs': task.kwargs} for task in tasks]
         func = tasks[0].func
-        func(params)
+        with UnixSignalDeathPenalty(hard_timeout):
+            func(params)
 
 
 def get_runner_class(log, tasks):

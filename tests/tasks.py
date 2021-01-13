@@ -6,6 +6,7 @@ import redis
 
 from tasktiger import RetryException, TaskTiger
 from tasktiger.retry import fixed
+from tasktiger.runner import BaseRunner, DefaultRunner
 
 from .config import DELAY, TEST_DB, REDIS_HOST
 from .utils import get_tiger
@@ -179,3 +180,35 @@ class StaticTask(object):
     @staticmethod
     def task():
         pass
+
+
+class MyRunnerClass(BaseRunner):
+    def run_single_task(self, task, hard_timeout):
+        assert self.tiger.config == tiger.config
+        assert hard_timeout == 300
+        assert task.func is simple_task
+
+        with redis.Redis(
+            host=REDIS_HOST, db=TEST_DB, decode_responses=True
+        ) as conn:
+            conn.set('task_id', task.id)
+
+    def run_batch_tasks(self, tasks, hard_timeout):
+        assert self.tiger.config == tiger.config
+        assert hard_timeout == 300
+        assert len(tasks) == 2
+
+        with redis.Redis(
+            host=REDIS_HOST, db=TEST_DB, decode_responses=True
+        ) as conn:
+            conn.set('task_args', ",".join(str(t.args[0]) for t in tasks))
+
+
+class MyErrorRunnerClass(DefaultRunner):
+    def on_permanent_error(self, task, execution):
+        assert task.func is exception_task
+        assert execution["exception_name"] == "builtins:Exception"
+        with redis.Redis(
+            host=REDIS_HOST, db=TEST_DB, decode_responses=True
+        ) as conn:
+            conn.set('task_id', task.id)

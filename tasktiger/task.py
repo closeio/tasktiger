@@ -115,7 +115,8 @@ class Task(object):
         if max_queue_size:
             task['max_queue_size'] = max_queue_size
         if runner_class:
-            task['runner_class'] = runner_class
+            serialized_runner_class = serialize_func_name(runner_class)
+            task['runner_class'] = serialized_runner_class
 
         self._data = task
 

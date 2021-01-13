@@ -23,7 +23,7 @@ from .retry import *
 from .runner import get_runner_class
 from .stats import StatsThread
 from .task import Task
-from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
+from .timeouts import JobTimeoutException
 
 if sys.version_info < (3, 3):
     from contextlib2 import ExitStack
@@ -387,8 +387,7 @@ class Worker(object):
                     )
 
                     g['current_tasks'] = tasks
-                    with UnixSignalDeathPenalty(hard_timeout):
-                        runner.run_batch_tasks(tasks)
+                    runner.run_batch_tasks(tasks, hard_timeout)
 
                 else:
                     # Process sequentially.
@@ -400,8 +399,7 @@ class Worker(object):
                         )
 
                         g['current_tasks'] = [task]
-                        with UnixSignalDeathPenalty(hard_timeout):
-                            runner.run_single_task(task)
+                        runner.run_single_task(task, hard_timeout)
 
         except RetryException as exc:
             execution['retry'] = True
