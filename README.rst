@@ -340,9 +340,9 @@ The following options are supported by both ``delay`` and the task decorator:
 - ``runner_class``
 
   If given, a Python class can be specified to influence task running behavior.
-  The runner class should inherit `tasktiger.runner.BaseRunner` and implement
+  The runner class should inherit ``tasktiger.runner.BaseRunner`` and implement
   the task execution behavior. The default implementation is available in
-  `tasktiger.runner.DefaultRunner`. The following behavior can be achieved:
+  ``tasktiger.runner.DefaultRunner``. The following behavior can be achieved:
 
   - Execute specific code before or after the task is executed (in the forked
     child process), or customize the way task functions are called in either
