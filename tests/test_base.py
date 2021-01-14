@@ -1248,13 +1248,21 @@ class TestRunnerClass(BaseTestCase):
         self.conn.delete('task_id')
         self._ensure_queues()
 
-    def test_customer_runner_class_batch_task(self):
+    def test_custom_runner_class_batch_task(self):
         self.tiger.delay(batch_task, args=[1], runner_class=MyRunnerClass)
         self.tiger.delay(batch_task, args=[2], runner_class=MyRunnerClass)
         Worker(self.tiger).run(once=True)
         assert self.conn.get('task_args') == "1,2"
         self.conn.delete('task_args')
         self._ensure_queues()
+
+    def test_mixed_runner_class_batch_task(self):
+        """Ensure all tasks in a batch task must have the same runner class."""
+        self.tiger.delay(batch_task, args=[1], runner_class=MyRunnerClass)
+        self.tiger.delay(batch_task, args=[2])
+        Worker(self.tiger).run(once=True)
+        assert self.conn.get('task_args') is None
+        self._ensure_queues(error={'batch': 2})
 
     def test_permanent_error(self):
         task = self.tiger.delay(
