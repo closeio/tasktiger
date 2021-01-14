@@ -27,6 +27,14 @@ class BaseRunner:
         """
         raise NotImplementedError("Batch tasks are not supported.")
 
+    def run_eager_task(self, task):
+        """
+        Run the task eagerly and return the value.
+
+        Note that the task function could be a batch function.
+        """
+        raise NotImplementedError("Eager tasks are not supported.")
+
     def on_permanent_error(self, task, execution):
         """
         Called if the task fails permanently.
@@ -52,6 +60,15 @@ class DefaultRunner(BaseRunner):
         func = tasks[0].func
         with UnixSignalDeathPenalty(hard_timeout):
             func(params)
+
+    def run_eager_task(self, task):
+        func = task.func
+        is_batch_func = getattr(func, '_task_batch', False)
+
+        if is_batch_func:
+            return func([{'args': task.args, 'kwargs': task.kwargs}])
+        else:
+            return func(*task.args, **task.kwargs)
 
 
 def get_runner_class(log, tasks):

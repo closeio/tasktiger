@@ -203,6 +203,9 @@ class MyRunnerClass(BaseRunner):
         ) as conn:
             conn.set('task_args', ",".join(str(t.args[0]) for t in tasks))
 
+    def run_eager_task(self, task):
+        return 123
+
 
 class MyErrorRunnerClass(DefaultRunner):
     def on_permanent_error(self, task, execution):

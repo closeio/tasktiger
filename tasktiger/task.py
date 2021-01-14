@@ -6,6 +6,7 @@ import time
 
 from ._internal import *
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
+from .runner import get_runner_class
 
 __all__ = ['Task']
 
@@ -309,10 +310,9 @@ class Task(object):
         g['tiger'] = self.tiger
 
         try:
-            if is_batch_func:
-                return func([{'args': self.args, 'kwargs': self.kwargs}])
-            else:
-                return func(*self.args, **self.kwargs)
+            runner_class = get_runner_class(self.tiger.log, [self])
+            runner = runner_class(self.tiger)
+            return runner.run_eager_task(self)
         finally:
             g['current_task_is_batch'] = None
             g['current_tasks'] = None

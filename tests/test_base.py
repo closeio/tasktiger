@@ -1272,3 +1272,9 @@ class TestRunnerClass(BaseTestCase):
         assert self.conn.get('task_id') == task.id
         self.conn.delete('task_id')
         self._ensure_queues(error={'default': 1})
+
+    def test_eager_task(self):
+        self.tiger.config['ALWAYS_EAGER'] = True
+        task = Task(self.tiger, simple_task, runner_class=MyRunnerClass)
+        assert task.delay() == 123
+        self._ensure_queues()
