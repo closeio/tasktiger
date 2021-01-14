@@ -344,16 +344,17 @@ The following options are supported by both ``delay`` and the task decorator:
   the task execution behavior. The default implementation is available in
   `tasktiger.runner.DefaultRunner`. The following behavior can be achieved:
 
-  - Execute specific code before or after the task is executed (while forked),
-    or customize the way task functions are called in either single or batch
-    processing.
+  - Execute specific code before or after the task is executed (in the forked
+    child process), or customize the way task functions are called in either
+    single or batch processing.
 
     Note that if you want to execute specific code for all tasks,
     you should use the ``CHILD_CONTEXT_MANAGERS`` configuration option.
 
   - Control the hard timeout behavior of a task.
 
-  - Execute specific code after a task is failing permanently.
+  - Execute specific code in the main worker process after a task failed
+    permanently.
 
   This is an advanced feature and the interface and requirements of the runner
   class can change in future TaskTiger versions.
