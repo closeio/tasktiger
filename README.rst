@@ -337,6 +337,28 @@ The following options are supported by both ``delay`` and the task decorator:
   For example, to retry a task 3 times (for a total of 4 executions), and wait
   60 seconds between executions, pass ``retry_method=fixed(60, 3)``.
 
+- ``runner_class``
+
+  If given, a Python class can be specified to influence task running behavior.
+  The runner class should inherit ``tasktiger.runner.BaseRunner`` and implement
+  the task execution behavior. The default implementation is available in
+  ``tasktiger.runner.DefaultRunner``. The following behavior can be achieved:
+
+  - Execute specific code before or after the task is executed (in the forked
+    child process), or customize the way task functions are called in either
+    single or batch processing.
+
+    Note that if you want to execute specific code for all tasks,
+    you should use the ``CHILD_CONTEXT_MANAGERS`` configuration option.
+
+  - Control the hard timeout behavior of a task.
+
+  - Execute specific code in the main worker process after a task failed
+    permanently.
+
+  This is an advanced feature and the interface and requirements of the runner
+  class can change in future TaskTiger versions.
+
 The following options can be only specified in the task decorator:
 
 - ``batch``
@@ -408,6 +430,7 @@ Example usage:
 .. code:: python
 
   from tasktiger.exceptions import RetryException
+  from tasktiger.retry import exponential, fixed
 
   def my_task():
       if not ready():
