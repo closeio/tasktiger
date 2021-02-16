@@ -222,6 +222,14 @@ class Worker(object):
            3. Timeout seconds have passed, this is the maximum time to stay in
               this method
         """
+        if not self._pubsub:
+            if self._did_work:
+                self._refresh_queue_set()
+            else:
+                if not self._queue_set:
+                    time.sleep(self.config["POLL_QUEUED_TASKS"])
+                    self._refresh_queue_set()
+            return
 
         new_queue_found = False
         start_time = batch_exit = time.time()
@@ -1089,6 +1097,11 @@ class Worker(object):
                 'queued periodic task', func=task.serialized_func, when=when
             )
 
+    def _refresh_queue_set(self):
+        self._queue_set = set(
+            self._filter_queues(self.connection.smembers(self._key(QUEUED)))
+        )
+
     def run(self, once=False, force_once=False):
         """
         Main loop of the worker.
@@ -1123,12 +1136,13 @@ class Worker(object):
         # Then, listen to the activity channel.
         # XXX: This can get inefficient when having lots of queues.
 
-        self._pubsub = self.connection.pubsub()
-        self._pubsub.subscribe(self._key('activity'))
+        if self.config["POLL_QUEUED_TASKS"]:
+            self._pubsub = None
+        else:
+            self._pubsub = self.connection.pubsub()
+            self._pubsub.subscribe(self._key('activity'))
 
-        self._queue_set = set(
-            self._filter_queues(self.connection.smembers(self._key(QUEUED)))
-        )
+        self._refresh_queue_set()
 
         try:
             while True:
@@ -1160,5 +1174,6 @@ class Worker(object):
                 self.stats_thread = None
 
             # Free up Redis connection
-            self._pubsub.reset()
+            if self._pubsub:
+                self._pubsub.reset()
             self.log.info('done')
