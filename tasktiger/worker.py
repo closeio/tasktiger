@@ -209,9 +209,23 @@ class Worker(object):
                 self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
 
-    def _wait_for_new_tasks(self, timeout=0, batch_timeout=0):
+    def _poll_for_queues(self):
         """
-        Check activity channel and wait as necessary.
+        Refresh list of queues.
+
+        Wait if we did not do any work.
+
+        This is only used when using polling to get queues with queued tasks.
+        """
+        if not self._did_work:
+            time.sleep(self.config["POLL_QUEUED_TASKS"])
+        self._refresh_queue_set()
+
+    def _pubsub_for_queues(self, timeout=0, batch_timeout=0):
+        """
+        Check activity channel for new queues and wait as necessary.
+
+        This is only used when using pubsub to get queues with queued tasks.
 
         This method is also used to slow down the main processing loop to reduce
         the effects of rapidly sending Redis commands.  This method will exit
@@ -222,15 +236,6 @@ class Worker(object):
            3. Timeout seconds have passed, this is the maximum time to stay in
               this method
         """
-        if not self._pubsub:
-            if self._did_work:
-                self._refresh_queue_set()
-            else:
-                if not self._queue_set:
-                    time.sleep(self.config["POLL_QUEUED_TASKS"])
-                    self._refresh_queue_set()
-            return
-
         new_queue_found = False
         start_time = batch_exit = time.time()
         while True:
@@ -1148,10 +1153,13 @@ class Worker(object):
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
-                self._wait_for_new_tasks(
-                    timeout=self.config['SELECT_TIMEOUT'],
-                    batch_timeout=self.config['SELECT_BATCH_TIMEOUT'],
-                )
+                if self._pubsub:
+                    self._pubsub_for_queues(
+                        timeout=self.config['SELECT_TIMEOUT'],
+                        batch_timeout=self.config['SELECT_BATCH_TIMEOUT'],
+                    )
+                else:
+                    self._poll_for_queues()
 
                 self._install_signal_handlers()
                 self._did_work = False
