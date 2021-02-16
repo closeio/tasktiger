@@ -5,7 +5,8 @@ import redis
 import time
 
 from ._internal import *
-from .exceptions import QueueFullException, TaskNotFound
+from .exceptions import QueueFullException, TaskImportError, TaskNotFound
+from .runner import get_runner_class
 
 __all__ = ['Task']
 
@@ -26,6 +27,7 @@ class Task(object):
         retry_on=None,
         retry_method=None,
         max_queue_size=None,
+        runner_class=None,
         # internal variables
         _data=None,
         _state=None,
@@ -76,6 +78,9 @@ class Task(object):
         if max_queue_size is None:
             max_queue_size = getattr(func, '_task_max_queue_size', None)
 
+        if runner_class is None:
+            runner_class = getattr(func, '_task_runner_class', None)
+
         # normalize falsy args/kwargs to empty structures
         args = args or []
         kwargs = kwargs or {}
@@ -110,6 +115,9 @@ class Task(object):
                 ]
         if max_queue_size:
             task['max_queue_size'] = max_queue_size
+        if runner_class:
+            serialized_runner_class = serialize_func_name(runner_class)
+            task['runner_class'] = serialized_runner_class
 
         self._data = task
 
@@ -190,6 +198,10 @@ class Task(object):
         if not self._func:
             self._func = import_attribute(self.serialized_func)
         return self._func
+
+    @property
+    def serialized_runner_class(self):
+        return self._data.get('runner_class')
 
     @property
     def ts(self):
@@ -298,10 +310,9 @@ class Task(object):
         g['tiger'] = self.tiger
 
         try:
-            if is_batch_func:
-                return func([{'args': self.args, 'kwargs': self.kwargs}])
-            else:
-                return func(*self.args, **self.kwargs)
+            runner_class = get_runner_class(self.tiger.log, [self])
+            runner = runner_class(self.tiger)
+            return runner.run_eager_task(self)
         finally:
             g['current_task_is_batch'] = None
             g['current_tasks'] = None

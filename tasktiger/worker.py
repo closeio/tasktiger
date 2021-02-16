@@ -20,9 +20,10 @@ from ._internal import *
 from .exceptions import RetryException, TaskNotFound
 from .redis_semaphore import Semaphore
 from .retry import *
+from .runner import get_runner_class
 from .stats import StatsThread
 from .task import Task
-from .timeouts import UnixSignalDeathPenalty, JobTimeoutException
+from .timeouts import JobTimeoutException
 
 if sys.version_info < (3, 3):
     from contextlib2 import ExitStack
@@ -362,6 +363,9 @@ class Worker(object):
         try:
             func = tasks[0].func
 
+            runner_class = get_runner_class(log, tasks)
+            runner = runner_class(self.tiger)
+
             is_batch_func = getattr(func, '_task_batch', False)
             g['tiger'] = self.tiger
             g['current_task_is_batch'] = is_batch_func
@@ -371,10 +375,6 @@ class Worker(object):
             ):
                 if is_batch_func:
                     # Batch process if the task supports it.
-                    params = [
-                        {'args': task.args, 'kwargs': task.kwargs}
-                        for task in tasks
-                    ]
                     task_timeouts = [
                         task.hard_timeout
                         for task in tasks
@@ -387,8 +387,7 @@ class Worker(object):
                     )
 
                     g['current_tasks'] = tasks
-                    with UnixSignalDeathPenalty(hard_timeout):
-                        func(params)
+                    runner.run_batch_tasks(tasks, hard_timeout)
 
                 else:
                     # Process sequentially.
@@ -400,8 +399,7 @@ class Worker(object):
                         )
 
                         g['current_tasks'] = [task]
-                        with UnixSignalDeathPenalty(hard_timeout):
-                            func(*task.args, **task.kwargs)
+                        runner.run_single_task(task, hard_timeout)
 
         except RetryException as exc:
             execution['retry'] = True
@@ -1015,6 +1013,10 @@ class Worker(object):
                 _mark_done()
             else:
                 task._move(from_state=ACTIVE, to_state=state, when=when)
+                if state == ERROR and task.serialized_runner_class:
+                    runner_class = get_runner_class(log, [task])
+                    runner = runner_class(self.tiger)
+                    runner.on_permanent_error(task, execution)
 
     def _worker_run(self):
         """
