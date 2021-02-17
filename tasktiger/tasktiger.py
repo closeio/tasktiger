@@ -198,7 +198,7 @@ class TaskTiger(object):
             # Set to > 0 to poll periodically for queues with tasks. Otherwise
             # subscribe to the activity channel. Use for more efficient task
             # processing with a large amount of workers.
-            'POLL_QUEUED_TASKS': 0,
+            'POLL_TASK_QUEUES_INTERVAL': 0,
         }
         if config:
             self.config.update(config)

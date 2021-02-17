@@ -219,7 +219,7 @@ class Worker(object):
         This is only used when using polling to get queues with queued tasks.
         """
         if not self._did_work:
-            time.sleep(self.config["POLL_QUEUED_TASKS"])
+            time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
         self._refresh_queue_set()
 
     def _pubsub_for_queues(self, timeout=0, batch_timeout=0):
@@ -1143,7 +1143,7 @@ class Worker(object):
         # Then, listen to the activity channel.
         # XXX: This can get inefficient when having lots of queues.
 
-        if self.config["POLL_QUEUED_TASKS"]:
+        if self.config["POLL_TASK_QUEUES_INTERVAL"]:
             self._pubsub = None
         else:
             self._pubsub = self.connection.pubsub()
