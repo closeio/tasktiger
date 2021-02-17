@@ -285,7 +285,7 @@ class Task(object):
             _key(from_state), queue, _key(from_state, queue), client=pipeline
         )
 
-        if to_state == QUEUED:
+        if to_state == QUEUED and self.tiger.config["PUBLISH_QUEUED_TASKS"]:
             pipeline.publish(_key('activity'), queue)
 
         try:
@@ -361,7 +361,7 @@ class Task(object):
             mode='nx',
             client=pipeline,
         )
-        if state == QUEUED:
+        if state == QUEUED and tiger.config["PUBLISH_QUEUED_TASKS"]:
             pipeline.publish(tiger._key('activity'), self.queue)
         pipeline.execute()
 

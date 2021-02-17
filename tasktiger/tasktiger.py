@@ -195,6 +195,13 @@ class TaskTiger(object):
             # increase Redis storage requirements and therefore can be disabled
             # if that is a concern.
             'STORE_TRACEBACKS': True,
+            # Set to > 0 to poll periodically for queues with tasks. Otherwise
+            # subscribe to the activity channel. Use for more efficient task
+            # processing with a large amount of workers.
+            'POLL_TASK_QUEUES_INTERVAL': 0,
+            # Whether to publish new tasks to the activity channel. Only set to
+            # False if all the workers are polling queues.
+            'PUBLISH_QUEUED_TASKS': True,
         }
         if config:
             self.config.update(config)
