@@ -207,7 +207,8 @@ class Worker(object):
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
-                self.connection.publish(self._key('activity'), queue)
+                if self.config["PUBLISH_QUEUED_TASKS"]:
+                    self.connection.publish(self._key('activity'), queue)
                 self._did_work = True
 
     def _poll_for_queues(self):

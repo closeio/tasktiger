@@ -199,6 +199,9 @@ class TaskTiger(object):
             # subscribe to the activity channel. Use for more efficient task
             # processing with a large amount of workers.
             'POLL_TASK_QUEUES_INTERVAL': 0,
+            # Whether to publish new tasks to the activity channel. Only set to
+            # False if all the workers are polling queues.
+            'PUBLISH_QUEUED_TASKS': True,
         }
         if config:
             self.config.update(config)
