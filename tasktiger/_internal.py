@@ -57,14 +57,19 @@ def gen_id():
     return binascii.b2a_hex(os.urandom(32)).decode('utf8')
 
 
-def gen_unique_id(serialized_name, args, kwargs):
+def gen_unique_id(queue, serialized_name, args, kwargs):
     """
     Generates and returns a hex-encoded 256-bit ID for the given task name and
     args. Used to generate IDs for unique tasks or for task locks.
     """
     return hashlib.sha256(
         json.dumps(
-            {'func': serialized_name, 'args': args, 'kwargs': kwargs},
+            {
+                'queue': queue,
+                'func': serialized_name,
+                'args': args,
+                'kwargs': kwargs,
+            },
             sort_keys=True,
         ).encode('utf8')
     ).hexdigest()
