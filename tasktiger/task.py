@@ -91,12 +91,13 @@ class Task(object):
         if unique or unique_key:
             if unique_key:
                 task_id = gen_unique_id(
+                    queue,
                     serialized_name,
                     None,
                     {key: kwargs.get(key) for key in unique_key},
                 )
             else:
-                task_id = gen_unique_id(serialized_name, args, kwargs)
+                task_id = gen_unique_id(queue, serialized_name, args, kwargs)
         else:
             task_id = gen_id()
 
@@ -581,7 +582,7 @@ class Task(object):
             # between executions
             task = self.clone()
             task._data['id'] = gen_unique_id(
-                task.serialized_func, task.args, task.kwargs
+                task.queue, task.serialized_func, task.args, task.kwargs
             )
             task.delay(when=when)
         return when

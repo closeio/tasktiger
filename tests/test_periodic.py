@@ -143,7 +143,7 @@ class TestPeriodicTasks(BaseTestCase):
 
         # generate the expected unique id
         expected_unique_id = gen_unique_id(
-            serialize_func_name(periodic_task), [], {}
+            "periodic", serialize_func_name(periodic_task), [], {}
         )
 
         # pull task out of the queue by id. If found, then the id is correct
@@ -202,10 +202,10 @@ class TestPeriodicTasks(BaseTestCase):
 
         # generate the ids
         correct_unique_id = gen_unique_id(
-            serialize_func_name(periodic_task), [], {}
+            "periodic", serialize_func_name(periodic_task), [], {}
         )
         malformed_unique_id = gen_unique_id(
-            serialize_func_name(periodic_task), None, None
+            "periodic", serialize_func_name(periodic_task), None, None
         )
 
         task = Task(tiger, func=periodic_task)
