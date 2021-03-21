@@ -857,13 +857,14 @@ class Worker(object):
                 if task.lock_key:
                     kwargs = task.kwargs
                     lock_id = gen_unique_id(
+                        None,
                         task.serialized_func,
                         None,
                         {key: kwargs.get(key) for key in task.lock_key},
                     )
                 else:
                     lock_id = gen_unique_id(
-                        task.serialized_func, task.args, task.kwargs
+                        None, task.serialized_func, task.args, task.kwargs
                     )
 
                 if lock_id not in lock_ids:

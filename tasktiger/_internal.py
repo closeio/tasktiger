@@ -62,16 +62,15 @@ def gen_unique_id(queue, serialized_name, args, kwargs):
     Generates and returns a hex-encoded 256-bit ID for the given task name and
     args. Used to generate IDs for unique tasks or for task locks.
     """
+    data = {
+        'func': serialized_name,
+        'args': args,
+        'kwargs': kwargs,
+    }
+    if queue is not None:
+        data['queue'] = queue
     return hashlib.sha256(
-        json.dumps(
-            {
-                'queue': queue,
-                'func': serialized_name,
-                'args': args,
-                'kwargs': kwargs,
-            },
-            sort_keys=True,
-        ).encode('utf8')
+        json.dumps(data, sort_keys=True).encode('utf8')
     ).hexdigest()
 
 
