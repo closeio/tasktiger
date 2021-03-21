@@ -43,6 +43,7 @@ from .tasks import (
     task_on_other_queue,
     unique_task,
     unique_exception_task,
+    unique_key_task,
     verify_current_task,
     verify_current_tasks,
     verify_tasktiger_instance,
@@ -291,7 +292,7 @@ class TestCase(BaseTestCase):
         assert exception_name == 'tasktiger.exceptions:JobTimeoutException'
         assert not execution['success']
 
-    def test_unique_task(self):
+    def test_unique_task_1(self):
         self.tiger.delay(unique_task, kwargs={'value': 1})
         self.tiger.delay(unique_task, kwargs={'value': 2})
         self.tiger.delay(unique_task, kwargs={'value': 2})
@@ -320,6 +321,31 @@ class TestCase(BaseTestCase):
         self.tiger.delay(unique_task)
 
         self._ensure_queues(queued={'default': 1}, error={'default': 0})
+
+    def test_unique_key_task(self):
+        self.tiger.delay(unique_key_task, kwargs={'a': 1, 'b': 1})
+        self.tiger.delay(unique_key_task, kwargs={'a': 1, 'b': 2})
+        self.tiger.delay(unique_key_task, kwargs={'a': 2, 'b': 1})
+        self.tiger.delay(unique_key_task, kwargs={'a': 2, 'b': 2})
+        self.tiger.delay(unique_key_task)
+        self.tiger.delay(unique_key_task, kwargs={'b': 1})
+
+        queues = self._ensure_queues(
+            queued={'default': 3}, error={'default': 0}
+        )
+
+        task_1, task_2, task_3 = queues['queued']['default']
+
+        # Note the last queued value is used.
+
+        assert task_1['func'] == 'tests.tasks:unique_key_task'
+        assert task_1['kwargs'] == {'a': 1, 'b': 2}
+
+        assert task_2['func'] == 'tests.tasks:unique_key_task'
+        assert task_2['kwargs'] == {'a': 2, 'b': 2}
+
+        assert task_3['func'] == 'tests.tasks:unique_key_task'
+        assert task_3['kwargs'] == {'b': 1}
 
     def test_locked_task(self):
         self.tiger.delay(locked_task, kwargs={'key': '1'})

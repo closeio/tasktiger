@@ -21,6 +21,7 @@ class Task(object):
         queue=None,
         hard_timeout=None,
         unique=None,
+        unique_key=None,
         lock=None,
         lock_key=None,
         retry=None,
@@ -60,6 +61,9 @@ class Task(object):
         if unique is None:
             unique = getattr(func, '_task_unique', False)
 
+        if unique_key is None:
+            unique_key = getattr(func, '_task_unique_key', None)
+
         if lock is None:
             lock = getattr(func, '_task_lock', False)
 
@@ -84,14 +88,23 @@ class Task(object):
         # normalize falsy args/kwargs to empty structures
         args = args or []
         kwargs = kwargs or {}
-        if unique:
-            task_id = gen_unique_id(serialized_name, args, kwargs)
+        if unique or unique_key:
+            if unique_key:
+                task_id = gen_unique_id(
+                    serialized_name,
+                    None,
+                    {key: kwargs.get(key) for key in unique_key},
+                )
+            else:
+                task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
             task_id = gen_id()
 
         task = {'id': task_id, 'func': serialized_name}
-        if unique:
+        if unique or unique_key:
             task['unique'] = True
+            if unique_key:
+                task['unique_key'] = unique_key
         if lock or lock_key:
             task['lock'] = True
             if lock_key:
@@ -164,6 +177,10 @@ class Task(object):
     @property
     def unique(self):
         return self._data.get('unique', False)
+
+    @property
+    def unique_key(self):
+        return self._data.get('unique_key')
 
     @property
     def retry_method(self):
