@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from contextlib import ExitStack
 import errno
 import fcntl
 import hashlib
@@ -24,11 +25,6 @@ from .runner import get_runner_class
 from .stats import StatsThread
 from .task import Task
 from .timeouts import JobTimeoutException
-
-if sys.version_info < (3, 3):
-    from contextlib2 import ExitStack
-else:
-    from contextlib import ExitStack
 
 LOCK_REDIS_KEY = 'qslock'
 
