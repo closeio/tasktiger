@@ -3,7 +3,7 @@ from setuptools import setup
 with open('README.rst', encoding='utf-8') as file:
     long_description = file.read()
 
-install_requires = ['click', 'redis>=2,<4', 'structlog']
+install_requires = ['click', 'redis>=3,<4', 'structlog']
 
 tests_require = install_requires + ['freezefrog', 'pytest', 'psutil']
 

@@ -496,10 +496,7 @@ class Worker(object):
         """
         now = time.time()
         mapping = {task_id: now for task_id in task_ids}
-        if REDIS_PY_3:
-            self.connection.zadd(self._key(ACTIVE, queue), mapping)
-        else:
-            self.connection.zadd(self._key(ACTIVE, queue), **mapping)
+        self.connection.zadd(self._key(ACTIVE, queue), mapping)
 
     def _execute(self, queue, tasks, log, locks, queue_lock, all_task_ids):
         """

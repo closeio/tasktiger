@@ -3,8 +3,6 @@
 import os
 import time
 
-from ._internal import REDIS_PY_3
-
 SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
 
 
@@ -71,10 +69,7 @@ class Semaphore(object):
         """
 
         pipeline = redis.pipeline()
-        if REDIS_PY_3:
-            pipeline.zadd(name, {SYSTEM_LOCK_ID: time.time() + timeout})
-        else:
-            pipeline.zadd(name, SYSTEM_LOCK_ID, time.time() + timeout)
+        pipeline.zadd(name, {SYSTEM_LOCK_ID: time.time() + timeout})
         pipeline.expire(
             name, timeout + 10
         )  # timeout plus buffer for troubleshooting
