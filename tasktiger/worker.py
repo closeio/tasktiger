@@ -13,8 +13,6 @@ import uuid
 
 from redis.exceptions import LockError
 
-from .redis_lock import Lock
-
 from ._internal import *
 from .exceptions import RetryException, TaskNotFound
 from .redis_semaphore import Semaphore
@@ -162,30 +160,13 @@ class Worker(object):
         """
         timeout = self.config['QUEUE_SCHEDULED_TASKS_TIME']
         if timeout > 0:
-            lock_v2_name = self._key(
+            lock_name = self._key(
                 'lockv2', 'queue_scheduled_tasks', self.worker_group_name
             )
-            lock_v2 = self.connection.lock(lock_v2_name, timeout=timeout)
-
-            # See if any worker has recently queued scheduled tasks.
-            if not lock_v2.acquire(blocking=False):
-                return
-
-            lock_name = self._key(
-                'lock', 'queue_scheduled_tasks', self.worker_group_name
-            )
-            lock = Lock(self.connection, lock_name, timeout=timeout)
+            lock = self.connection.lock(lock_name, timeout=timeout)
 
             # See if any worker has recently queued scheduled tasks.
             if not lock.acquire(blocking=False):
-                try:
-                    lock_v2.release()
-                except LockError:
-                    # Not really a problem if releasing lock_v2 fails. It will
-                    # expire soon enough.
-                    self.log.warning(
-                        'failed to release lock queue_scheduled_tasks'
-                    )
                 return
 
         queues = set(
@@ -301,25 +282,11 @@ class Worker(object):
         # workers from requeueing expired tasks, as well as to space out
         # this task (i.e. we don't release the lock unless we've exhausted our
         # batch size, which will hopefully never happen)
-        lock_v2 = self.connection.lock(
+        lock = self.connection.lock(
             self._key('lockv2', 'queue_expired_tasks'),
             timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'],
         )
-        if not lock_v2.acquire(blocking=False):
-            return
-
-        lock = Lock(
-            self.connection,
-            self._key('lock', 'queue_expired_tasks'),
-            timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'],
-        )
         if not lock.acquire(blocking=False):
-            try:
-                lock_v2.release()
-            except LockError:
-                # Not really a problem if releasing lock_v2 fails. It will
-                # expire soon anyway.
-                self.log.warning('failed to release lock queue_expired_tasks')
             return
 
         now = time.time()
@@ -374,12 +341,11 @@ class Worker(object):
         # another process will be able to pick up another batch immediately
         # without waiting for the lock to time out.
         if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
-            lock.release()
             try:
-                lock_v2.release()
+                lock.release()
             except LockError:
-                # Not really a problem if releasing lock_v2 fails. It will
-                # expire soon anyway.
+                # Not really a problem if releasing lock fails. It will expire
+                # soon anyway.
                 self.log.warning(
                     'failed to release lock queue_expired_tasks on full batch'
                 )
@@ -531,9 +497,7 @@ class Worker(object):
         mapping = {task_id: now for task_id in task_ids}
         self.connection.zadd(self._key(ACTIVE, queue), mapping)
 
-    def _execute(
-        self, queue, tasks, log, locks, locks_v2, queue_lock, all_task_ids
-    ):
+    def _execute(self, queue, tasks, log, locks, queue_lock, all_task_ids):
         """
         Executes the given tasks. Returns a boolean indicating whether
         the tasks were executed successfully.
@@ -686,13 +650,11 @@ class Worker(object):
                 try:
                     self._heartbeat(queue, all_task_ids)
                     for lock in locks:
-                        lock.renew(self.config['ACTIVE_TASK_UPDATE_TIMEOUT'])
-                    for lock_v2 in locks_v2:
                         try:
-                            lock_v2.reacquire()
+                            lock.reacquire()
                         except LockError:
                             log.warning(
-                                'could not reacquire lock', lock=lock_v2.name
+                                'could not reacquire lock', lock=lock.name
                             )
                     if queue_lock:
                         acquired, current_locks = queue_lock.renew()
@@ -882,7 +844,6 @@ class Worker(object):
         log = self.log.bind(queue=queue)
 
         locks = []
-        locks_v2 = []
         # Keep track of the acquired locks: If two tasks in the list require
         # the same lock we only acquire it once.
         lock_ids = set()
@@ -903,42 +864,12 @@ class Worker(object):
                     )
 
                 if lock_id not in lock_ids:
-                    lock_v2 = self.connection.lock(
+                    lock = self.connection.lock(
                         self._key('lockv2', lock_id),
-                        timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
-                    )
-                    if not lock_v2.acquire(blocking=False):
-                        log.info('could not acquire lock', task_id=task.id)
-
-                        # Reschedule the task (but if the task is already
-                        # scheduled in case of a unique task, don't prolong
-                        # the schedule date).
-                        when = time.time() + self.config['LOCK_RETRY']
-                        task._move(
-                            from_state=ACTIVE,
-                            to_state=SCHEDULED,
-                            when=when,
-                            mode='min',
-                        )
-                        # Make sure to remove it from this list so we don't
-                        # re-add to the ACTIVE queue by updating the heartbeat.
-                        all_task_ids.remove(task.id)
-                        continue
-
-                    lock = Lock(
-                        self.connection,
-                        self._key('lock', lock_id),
                         timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
                     )
                     if not lock.acquire(blocking=False):
                         log.info('could not acquire lock', task_id=task.id)
-
-                        try:
-                            lock_v2.release()
-                        except LockError:
-                            log.warning(
-                                'could not release lock', task_id=task.id
-                            )
 
                         # Reschedule the task (but if the task is already
                         # scheduled in case of a unique task, don't prolong
@@ -957,7 +888,6 @@ class Worker(object):
 
                     lock_ids.add(lock_id)
                     locks.append(lock)
-                    locks_v2.append(lock_v2)
 
             ready_tasks.append(task)
 
@@ -967,18 +897,16 @@ class Worker(object):
         if self.stats_thread:
             self.stats_thread.report_task_start()
         success = self._execute(
-            queue, ready_tasks, log, locks, locks_v2, queue_lock, all_task_ids
+            queue, ready_tasks, log, locks, queue_lock, all_task_ids
         )
         if self.stats_thread:
             self.stats_thread.report_task_end()
 
         for lock in locks:
-            lock.release()
-        for lock_v2 in locks_v2:
             try:
-                lock_v2.release()
+                lock.release()
             except LockError:
-                log.warning('could not release lock', lock=lock_v2.name)
+                log.warning('could not release lock', lock=lock.name)
 
         return success, ready_tasks
 
