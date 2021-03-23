@@ -400,18 +400,24 @@ class Task(object):
         to indicate how many executions should be loaded (starting from the
         latest). If the task doesn't exist, None is returned.
         """
+        pipeline = tiger.connection.pipeline()
+        pipeline.get(tiger._key('task', task_id))
+        pipeline.zscore(tiger._key(state, queue), task_id)
         if load_executions:
-            pipeline = tiger.connection.pipeline()
-            pipeline.get(tiger._key('task', task_id))
             pipeline.lrange(
                 tiger._key('task', task_id, 'executions'), -load_executions, -1
             )
-            serialized_data, serialized_executions = pipeline.execute()
+            (
+                serialized_data,
+                is_queued,
+                serialized_executions,
+            ) = pipeline.execute()
         else:
-            serialized_data = tiger.connection.get(tiger._key('task', task_id))
+            serialized_data, is_queued = pipeline.execute()
             serialized_executions = []
+
         # XXX: No timestamp for now
-        if serialized_data:
+        if serialized_data and is_queued:
             data = json.loads(serialized_data)
             executions = [json.loads(e) for e in serialized_executions if e]
             return Task(
