@@ -274,16 +274,23 @@ class Task(object):
 
         if not to_state:  # Remove the task if necessary
             if self.unique:
-                # Only delete if it's not in any other queue
-                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
-                check_states.remove(from_state)
                 # TODO: Do the following two in one call.
+
+                # Delete executions if there were no errors.
+                if from_state == ERROR:
+                    check_states = {}
+                else:
+                    check_states = {ERROR}
                 scripts.delete_if_not_in_zsets(
                     _key('task', self.id, 'executions'),
                     self.id,
                     [_key(state, queue) for state in check_states],
                     client=pipeline,
                 )
+
+                # Only delete task if it's not in any other queue
+                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
+                check_states.remove(from_state)
                 scripts.delete_if_not_in_zsets(
                     _key('task', self.id),
                     self.id,
