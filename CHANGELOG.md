@@ -11,6 +11,12 @@
 * Make the `TaskTiger` instance available for the task via global state ([#170](https://github.com/closeio/tasktiger/pull/170))
 * Support for custom task runners ([#175](https://github.com/closeio/tasktiger/pull/175))
 * Add ability to configure a poll- vs push-method for task runners to discover new tasks ([#176](https://github.com/closeio/tasktiger/pull/176))
+* `unique_key` specifies the list of kwargs to use to construct the unique key ([#180](https://github.com/closeio/tasktiger/pull/180))
+
+### Bugfixes
+
+* Ensure task exists in the given queue when retrieving it ([#184](https://github.com/closeio/tasktiger/pull/184))
+* Clear retried executions from successful periodic tasks ([#188](https://github.com/closeio/tasktiger/pull/188))
 
 ## Version 0.11
 
