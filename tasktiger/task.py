@@ -21,6 +21,7 @@ class Task(object):
         queue=None,
         hard_timeout=None,
         unique=None,
+        unique_key=None,
         lock=None,
         lock_key=None,
         retry=None,
@@ -60,6 +61,9 @@ class Task(object):
         if unique is None:
             unique = getattr(func, '_task_unique', False)
 
+        if unique_key is None:
+            unique_key = getattr(func, '_task_unique_key', None)
+
         if lock is None:
             lock = getattr(func, '_task_lock', False)
 
@@ -84,14 +88,23 @@ class Task(object):
         # normalize falsy args/kwargs to empty structures
         args = args or []
         kwargs = kwargs or {}
-        if unique:
-            task_id = gen_unique_id(serialized_name, args, kwargs)
+        if unique or unique_key:
+            if unique_key:
+                task_id = gen_unique_id(
+                    serialized_name,
+                    None,
+                    {key: kwargs.get(key) for key in unique_key},
+                )
+            else:
+                task_id = gen_unique_id(serialized_name, args, kwargs)
         else:
             task_id = gen_id()
 
         task = {'id': task_id, 'func': serialized_name}
-        if unique:
+        if unique or unique_key:
             task['unique'] = True
+            if unique_key:
+                task['unique_key'] = unique_key
         if lock or lock_key:
             task['lock'] = True
             if lock_key:
@@ -164,6 +177,10 @@ class Task(object):
     @property
     def unique(self):
         return self._data.get('unique', False)
+
+    @property
+    def unique_key(self):
+        return self._data.get('unique_key')
 
     @property
     def retry_method(self):
@@ -257,16 +274,23 @@ class Task(object):
 
         if not to_state:  # Remove the task if necessary
             if self.unique:
-                # Only delete if it's not in any other queue
-                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
-                check_states.remove(from_state)
                 # TODO: Do the following two in one call.
+
+                # Delete executions if there were no errors.
+                if from_state == ERROR:
+                    check_states = {}
+                else:
+                    check_states = {ERROR}
                 scripts.delete_if_not_in_zsets(
                     _key('task', self.id, 'executions'),
                     self.id,
                     [_key(state, queue) for state in check_states],
                     client=pipeline,
                 )
+
+                # Only delete task if it's not in any other queue
+                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
+                check_states.remove(from_state)
                 scripts.delete_if_not_in_zsets(
                     _key('task', self.id),
                     self.id,
@@ -400,18 +424,24 @@ class Task(object):
         to indicate how many executions should be loaded (starting from the
         latest). If the task doesn't exist, None is returned.
         """
+        pipeline = tiger.connection.pipeline()
+        pipeline.get(tiger._key('task', task_id))
+        pipeline.zscore(tiger._key(state, queue), task_id)
         if load_executions:
-            pipeline = tiger.connection.pipeline()
-            pipeline.get(tiger._key('task', task_id))
             pipeline.lrange(
                 tiger._key('task', task_id, 'executions'), -load_executions, -1
             )
-            serialized_data, serialized_executions = pipeline.execute()
+            (
+                serialized_data,
+                is_queued,
+                serialized_executions,
+            ) = pipeline.execute()
         else:
-            serialized_data = tiger.connection.get(tiger._key('task', task_id))
+            serialized_data, is_queued = pipeline.execute()
             serialized_executions = []
+
         # XXX: No timestamp for now
-        if serialized_data:
+        if serialized_data and is_queued:
             data = json.loads(serialized_data)
             executions = [json.loads(e) for e in serialized_executions if e]
             return Task(

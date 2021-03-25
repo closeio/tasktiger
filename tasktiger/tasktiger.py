@@ -275,6 +275,7 @@ class TaskTiger(object):
         queue=None,
         hard_timeout=None,
         unique=None,
+        unique_key=None,
         lock=None,
         lock_key=None,
         retry=None,
@@ -310,6 +311,8 @@ class TaskTiger(object):
                 func._task_queue = queue
             if unique is not None:
                 func._task_unique = unique
+            if unique_key is not None:
+                func._task_unique_key = unique_key
             if lock is not None:
                 func._task_lock = lock
             if lock_key is not None:
@@ -392,6 +395,7 @@ class TaskTiger(object):
         queue=None,
         hard_timeout=None,
         unique=None,
+        unique_key=None,
         lock=None,
         lock_key=None,
         when=None,
@@ -413,6 +417,7 @@ class TaskTiger(object):
             queue=queue,
             hard_timeout=hard_timeout,
             unique=unique,
+            unique_key=unique_key,
             lock=lock,
             lock_key=lock_key,
             retry=retry,

@@ -83,6 +83,11 @@ def unique_exception_task(value=None):
     raise Exception('this failed')
 
 
+@tiger.task(unique_key=('a',))
+def unique_key_task(a, b):
+    pass
+
+
 @tiger.task(lock=True)
 def locked_task(key, other=None):
     with redis.Redis(
