@@ -229,3 +229,97 @@ class TestPeriodicTasks(BaseTestCase):
         # pull task out of the queue by the self-corrected id
         task = Task.from_id(tiger, 'periodic', SCHEDULED, correct_unique_id)
         assert task is not None
+
+    def test_successful_execution_clears_executions_from_retries(self):
+        """
+        Ensure previous executions from retries are cleared after a successful
+        execution.
+        """
+        sleep_until_next_second()
+
+        # Queue the periodic task.
+        self._ensure_queues()
+        Worker(tiger).run(once=True)
+
+        # Prepare to execute the periodic task (as retriable failure).
+        tiger.connection.set('fail-periodic-task', 'retriable')
+        n_total, tasks = Task.tasks_from_queue(tiger, 'periodic', SCHEDULED)
+        task_id = tasks[0].id
+        time.sleep(1)
+
+        # Queue the periodic task.
+        self._ensure_queues(scheduled={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Run the failing periodic task.
+        self._ensure_queues(queued={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        task = Task.from_id(
+            tiger, 'periodic', SCHEDULED, task_id, load_executions=10
+        )
+        assert len(task.executions) == 1
+
+        tiger.connection.delete('fail-periodic-task')
+        time.sleep(1)
+
+        # Queue the periodic task.
+        self._ensure_queues(scheduled={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Run the successful periodic task.
+        self._ensure_queues(queued={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Ensure we cleared any previous executions.
+        task = Task.from_id(
+            tiger, 'periodic', SCHEDULED, task_id, load_executions=10
+        )
+        assert len(task.executions) == 0
+
+    def test_successful_execution_doesnt_clear_previous_errors(self):
+        """
+        Ensure previous executions are not cleared if we have had non-retriable
+        errors.
+        """
+        sleep_until_next_second()
+
+        # Queue the periodic task.
+        self._ensure_queues()
+        Worker(tiger).run(once=True)
+
+        # Prepare to execute the periodic task (as permanent failure).
+        tiger.connection.set('fail-periodic-task', 'permanent')
+        n_total, tasks = Task.tasks_from_queue(tiger, 'periodic', SCHEDULED)
+        task_id = tasks[0].id
+        time.sleep(1)
+
+        # Queue the periodic task.
+        self._ensure_queues(scheduled={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Run the failing periodic task.
+        self._ensure_queues(queued={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        task = Task.from_id(
+            tiger, 'periodic', SCHEDULED, task_id, load_executions=10
+        )
+        assert len(task.executions) == 1
+
+        tiger.connection.delete('fail-periodic-task')
+        time.sleep(1)
+
+        # Queue the periodic task.
+        self._ensure_queues(scheduled={'periodic': 1}, error={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Run the successful periodic task.
+        self._ensure_queues(queued={'periodic': 1}, error={'periodic': 1})
+        Worker(tiger).run(once=True)
+
+        # Ensure we didn't clear previous executions.
+        task = Task.from_id(
+            tiger, 'periodic', SCHEDULED, task_id, load_executions=10
+        )
+        assert len(task.executions) == 1
