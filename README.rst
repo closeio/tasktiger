@@ -272,8 +272,8 @@ The following options are supported by both ``delay`` and the task decorator:
 - ``unique_key``
 
   If set, this implies ``unique=True`` and specifies the list of kwargs to use
-  use to construct the unique key. By default, all args and kwargs are
-  serialized and hashed.
+  to construct the unique key. By default, all args and kwargs are serialized
+  and hashed.
 
 - ``lock``
 

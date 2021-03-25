@@ -1,6 +1,31 @@
-# Version 0.11
+# Changelog
 
-* Add support for py-redis 3.x (#163)
-* Drop support for Python 3.4 and add testing for Python 3.7 (#163)
-* Fix test timings (#164)
-* Allow custom context managers to see task errors (#165). Thanks @igor47.
+## Version 0.12
+
+### Breaking changes
+
+* Drop support for redis-py 2 ([#183](https://github.com/closeio/tasktiger/pull/183))
+
+### Other changes
+
+* Make the `TaskTiger` instance available for the task via global state ([#170](https://github.com/closeio/tasktiger/pull/170))
+* Support for custom task runners ([#175](https://github.com/closeio/tasktiger/pull/175))
+* Add ability to configure a poll- vs push-method for task runners to discover new tasks ([#176](https://github.com/closeio/tasktiger/pull/176))
+* `unique_key` specifies the list of kwargs to use to construct the unique key ([#180](https://github.com/closeio/tasktiger/pull/180))
+
+### Bugfixes
+
+* Ensure task exists in the given queue when retrieving it ([#184](https://github.com/closeio/tasktiger/pull/184))
+* Clear retried executions from successful periodic tasks ([#188](https://github.com/closeio/tasktiger/pull/188))
+
+## Version 0.11
+
+### Breaking changes
+
+* Drop support for Python 3.4 and add testing for Python 3.7 ([#163](https://github.com/closeio/tasktiger/pull/163))
+
+### Other changes
+
+* Add support for redis-py 3 ([#163](https://github.com/closeio/tasktiger/pull/163))
+* Fix test timings ([#164](https://github.com/closeio/tasktiger/pull/164))
+* Allow custom context managers to see task errors ([#165](https://github.com/closeio/tasktiger/pull/165)). Thanks @igor47
