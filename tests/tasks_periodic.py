@@ -10,11 +10,18 @@ from .utils import get_tiger
 tiger = get_tiger()
 
 
-@tiger.task(schedule=periodic(seconds=1), queue='periodic')
+@tiger.task(
+    schedule=periodic(seconds=1), queue='periodic', retry_on=(ValueError,)
+)
 def periodic_task():
     """Periodic task."""
     conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
     conn.incr('period_count', 1)
+    fail = conn.get('fail-periodic-task')
+    if fail == 'retriable':
+        raise ValueError('retriable failure')
+    elif fail == 'permanent':
+        raise Exception('permanent failure')
 
 
 @tiger.task(schedule=periodic(seconds=1), queue='periodic_ignore')

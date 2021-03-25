@@ -269,6 +269,12 @@ The following options are supported by both ``delay`` and the task decorator:
   is being processed. Requeueing an already scheduled unique task will not
   change the time it was originally scheduled to execute at.
 
+- ``unique_key``
+
+  If set, this implies ``unique=True`` and specifies the list of kwargs to use
+  to construct the unique key. By default, all args and kwargs are serialized
+  and hashed.
+
 - ``lock``
 
   Boolean to indicate whether to hold a lock while the task is being executed
