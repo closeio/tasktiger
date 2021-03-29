@@ -36,10 +36,10 @@ The flags:
 
 - `--host`: The Redis host. Required.
 - `--port`: The port the Redis instance is listening on. Defaults to `6379`.
-- `--db`: The Redis database.
+- `--db`: The Redis database. Defaults to `0`.
 - `--print`: If you want the script to print which keys it is modifying, use this.
-- `--match`: What pattern to look for. If you didn't change the default prefix TaskTiger uses for keys, this will be `t:lock:*`, otherwise it will be `PREFIX:lock:*`.
-- `--ttl`: A TTL to set. A TTL of 300 will give you time to undo if you want to halt the migration for whatever reason. (Just call this command again with `--ttl -1`.)
+- `--match`: What pattern to look for. If you didn't change the default prefix TaskTiger uses for keys, this will be `t:lock:*`, otherwise it will be `PREFIX:lock:*`. By default, scans all keys.
+- `--ttl`: A TTL to set. A TTL of 300 will give you time to undo if you want to halt the migration for whatever reason. (Just call this command again with `--ttl -1`.) By default, does not change keys' TTLs.
 
 Plus, there is:
 
