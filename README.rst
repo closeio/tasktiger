@@ -792,7 +792,6 @@ Releasing a New Version
 -----------------------
 
 #. Make sure the code has been thoroughly reviewed and tested in a realistic production environment.
-#. Merge to master.
 #. Update ``setup.py`` and ``CHANGELOG.md``. Make sure you include any breaking changes.
 #. Run ``python setup.py sdist`` and ``twine upload dist/<PACKAGE_TO_UPLOAD>``.
 #. Push a new tag pointing to the released commit, format: ``v0.13`` for example.
