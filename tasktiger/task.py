@@ -143,6 +143,12 @@ class Task(object):
         return self._data
 
     @property
+    def time_last_queued(self):
+        return datetime.datetime.utcfromtimestamp(
+            self._data["time_last_queued"]
+        )
+
+    @property
     def state(self):
         return self._state
 
