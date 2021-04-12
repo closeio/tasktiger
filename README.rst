@@ -786,3 +786,15 @@ Tests can be more granularly run using normal pytest flags. For example:
 .. code :: bash
 
   docker-compose run --rm tasktiger pytest tests/test_base.py::TestCase
+
+
+Releasing a New Version
+-----------------------
+
+#. Make sure the code has been thoroughly reviewed and tested in a realistic production environment.
+#. Merge to master.
+#. Update ``setup.py`` and ``CHANGELOG.md``. Make sure you include any breaking changes.
+#. Run ``python setup.py sdist`` and ``twine upload dist/<PACKAGE_TO_UPLOAD>``.
+#. Push a new tag pointing to the released commit, format: ``v0.13`` for example.
+#. Mark the tag as a release in GitHub's UI and include in the description the changelog entry for the version.
+   An example would be: https://github.com/closeio/tasktiger/releases/tag/v0.13.
