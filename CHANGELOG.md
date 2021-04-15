@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 0.14
+
+### Other changes
+
+* Add `Task.time_last_queued` property getter ([6d2285d](https://github.com/closeio/tasktiger/commit/6d2285da5bd5f82455765e6b132594d4ceab2d82))
+
 ## Version 0.13
 
 ### Breaking changes
