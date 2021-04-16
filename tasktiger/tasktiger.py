@@ -591,6 +591,12 @@ class TaskTiger(object):
 
         return total_processed
 
+    def would_process_queue(self, queue_name):
+        """
+        Return if a queue_name would be processed by this tasktiger instance. It does not consider explicit
+        --queue param.
+        """
+        return queue_matches(queue_name, self.config['ONLY_QUEUES'], self.config['EXCLUDE_QUEUES'])
 
 @click.command()
 @click.option(
