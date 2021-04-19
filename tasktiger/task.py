@@ -441,15 +441,15 @@ class Task(object):
             )
             (
                 serialized_data,
-                is_queued,
+                score,
                 serialized_executions,
             ) = pipeline.execute()
         else:
-            serialized_data, is_queued = pipeline.execute()
+            serialized_data, score = pipeline.execute()
             serialized_executions = []
 
         # XXX: No timestamp for now
-        if serialized_data and is_queued:
+        if serialized_data and score:
             data = json.loads(serialized_data)
             executions = [json.loads(e) for e in serialized_executions if e]
             return Task(
@@ -458,6 +458,7 @@ class Task(object):
                 _data=data,
                 _state=state,
                 _executions=executions,
+                _ts=datetime.datetime.utcfromtimestamp(score),
             )
         else:
             raise TaskNotFound('Task {} not found.'.format(task_id))
