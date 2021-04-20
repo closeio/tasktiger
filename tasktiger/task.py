@@ -448,7 +448,6 @@ class Task(object):
             serialized_data, score = pipeline.execute()
             serialized_executions = []
 
-        # XXX: No timestamp for now
         if serialized_data and score:
             data = json.loads(serialized_data)
             executions = [json.loads(e) for e in serialized_executions if e]
