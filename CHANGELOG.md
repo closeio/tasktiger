@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 0.15
+
+### Other changes
+
+* Populate `Task.ts` field in `Task.from_id` function ([019bf18](https://github.com/closeio/tasktiger/commit/019bf189c9622b299691dbe3b71cefa0bf2ee8dc))
+* Add `TaskTiger.would_process_configured_queue()` function  ([TODO](TODO))
+
 ## Version 0.14
 
 ### Other changes
