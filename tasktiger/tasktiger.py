@@ -183,7 +183,7 @@ class TaskTiger(object):
             # The following settings are only considered if no explicit queues
             # are passed in the command line (or to the queues argument in the
             # run_worker() method).
-            # If non-empty, a worker only processeses the given queues.
+            # If non-empty, a worker only processes the given queues.
             'ONLY_QUEUES': [],
             # If non-empty, a worker excludes the given queues from processing.
             'EXCLUDE_QUEUES': [],

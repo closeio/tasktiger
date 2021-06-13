@@ -30,7 +30,7 @@ class TestMaxQueue(BaseTestCase):
         with pytest.raises(QueueFullException):
             self.tiger.delay(simple_task, queue='a', max_queue_size=1)
 
-        # Process first task and then queing a second should succeed
+        # Process first task and then queuing a second should succeed
         Worker(self.tiger).run(once=True, force_once=True)
         self.tiger.delay(simple_task, queue='a', max_queue_size=1)
         self._ensure_queues(queued={'a': 1})
