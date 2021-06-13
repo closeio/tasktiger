@@ -279,7 +279,7 @@ class Worker(object):
         """
 
         # Note that we use the lock both to unnecessarily prevent multiple
-        # workers from requeueing expired tasks, as well as to space out
+        # workers from requeuing expired tasks, as well as to space out
         # this task (i.e. we don't release the lock unless we've exhausted our
         # batch size, which will hopefully never happen)
         lock = self.connection.lock(
