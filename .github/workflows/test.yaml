@@ -1,0 +1,43 @@
+name: test-workflow
+on:
+  # When any branch in the repository is pushed
+  push:
+  # When a pull request is created
+  pull_request:
+  # When manually triggered to run
+  workflow_dispatch:
+
+jobs:
+  # Run tests
+  test:
+    strategy:
+      matrix:
+        python-version: ['3.6', '3.7', '3.8', '3.9']
+        os: ['ubuntu-20.04']
+      # Do not cancel any jobs when a single job fails
+      fail-fast: false
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    container: python:${{ matrix.python-version }}
+    services:
+      redis:
+        image: redis
+        # Set health checks to wait until redis has started
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          pip install --requirement requirements.txt --requirement requirements-test.txt
+
+      - name: Run tests
+        run: pytest
+        env:
+          # The hostname used to communicate with the Redis service container
+          REDIS_HOST: redis
