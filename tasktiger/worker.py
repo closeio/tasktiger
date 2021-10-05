@@ -350,6 +350,28 @@ class Worker(object):
                     'failed to release lock queue_expired_tasks on full batch'
                 )
 
+    def _get_hard_timeouts(self, func, tasks):
+        is_batch_func = getattr(func, '_task_batch', False)
+        if is_batch_func:
+            task_timeouts = [
+                task.hard_timeout
+                for task in tasks
+                if task.hard_timeout is not None
+            ]
+            hard_timeout = (
+                (max(task_timeouts) if task_timeouts else None)
+                or getattr(func, '_task_hard_timeout', None)
+                or self.config['DEFAULT_HARD_TIMEOUT']
+            )
+            return [hard_timeout]
+        else:
+            return [
+                task.hard_timeout
+                or getattr(func, '_task_hard_timeout', None)
+                or self.config['DEFAULT_HARD_TIMEOUT']
+                for task in tasks
+            ]
+
     def _execute_forked(self, tasks, log):
         """
         Executes the tasks in the forked process. Multiple tasks can be passed
@@ -379,34 +401,18 @@ class Worker(object):
             g['tiger'] = self.tiger
             g['current_task_is_batch'] = is_batch_func
 
+            hard_timeouts = self._get_hard_timeouts(func, tasks)
+
             with WorkerContextManagerStack(
                 self.config['CHILD_CONTEXT_MANAGERS']
             ):
                 if is_batch_func:
                     # Batch process if the task supports it.
-                    task_timeouts = [
-                        task.hard_timeout
-                        for task in tasks
-                        if task.hard_timeout is not None
-                    ]
-                    hard_timeout = (
-                        (max(task_timeouts) if task_timeouts else None)
-                        or getattr(func, '_task_hard_timeout', None)
-                        or self.config['DEFAULT_HARD_TIMEOUT']
-                    )
-
                     g['current_tasks'] = tasks
-                    runner.run_batch_tasks(tasks, hard_timeout)
-
+                    runner.run_batch_tasks(tasks, hard_timeouts[0])
                 else:
                     # Process sequentially.
-                    for task in tasks:
-                        hard_timeout = (
-                            task.hard_timeout
-                            or getattr(func, '_task_hard_timeout', None)
-                            or self.config['DEFAULT_HARD_TIMEOUT']
-                        )
-
+                    for task, hard_timeout in zip(tasks, hard_timeouts):
                         g['current_tasks'] = [task]
                         runner.run_single_task(task, hard_timeout)
 
@@ -594,6 +600,14 @@ class Worker(object):
                     else:
                         raise
 
+            hard_timeouts = self._get_hard_timeouts(task_func, tasks)
+            time_started = time.time()
+            timeout_at = (
+                time_started
+                + sum(hard_timeouts)
+                + self.config["ACTIVE_TASK_UPDATE_TIMEOUT"]
+            )
+
             # Wait for the child to exit and perform a periodic heartbeat.
             # We check for the child twice in this loop so that we avoid
             # unnecessary waiting if the child exited just before entering
@@ -645,6 +659,29 @@ class Worker(object):
 
                 return_code = check_child_exit()
                 if return_code is not None:
+                    break
+
+                now = time.time()
+                if now > timeout_at:
+                    log.error('hard timeout elapsed in parent process')
+                    os.kill(child_pid, signal.SIGKILL)
+                    pid, return_code = os.waitpid(child_pid, 0)
+                    log.error('child killed', return_code=return_code)
+                    execution = {
+                        "time_started": time_started,
+                        "time_failed": now,
+                        "exception_name": serialize_func_name(
+                            JobTimeoutException
+                        ),
+                        "success": False,
+                        "host": socket.gethostname(),
+                    }
+                    serialized_execution = json.dumps(execution)
+                    for task in tasks:
+                        self.connection.rpush(
+                            self._key('task', task.id, 'executions'),
+                            serialized_execution,
+                        )
                     break
 
                 try:

@@ -1265,6 +1265,52 @@ class TestReliability(BaseTestCase):
             assert len(errors) == 1
             assert "not found" in errors[0]
 
+    def test_child_hanging_forever(self):
+        """
+        Ensure the parent kills the child if it hangs forever.
+        """
+        import psutil
+
+        task = Task(self.tiger, sleep_task, hard_timeout=1)
+        task.delay()
+        self._ensure_queues(queued={'default': 1})
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(
+            target=external_worker,
+            kwargs={"patch_config": {"ACTIVE_TASK_UPDATE_TIMER": 1}},
+        )
+        worker.start()
+        time.sleep(DELAY)
+
+        # Get the PID of the worker subprocess actually executing the task
+        current_process = psutil.Process(pid=worker.pid)
+        current_children = current_process.children()
+        assert len(current_children) == 1
+
+        # Pause the child while it's still processing the task.
+        current_children[0].suspend()
+
+        # The parent will eventually kill the child.
+        worker.join()
+        assert worker.exitcode == 0
+        assert not current_children[0].is_running()
+
+        # Ensure we have an errored task and execution.
+        queues = self._ensure_queues(error={'default': 1})
+        task = queues['error']['default'][0]
+        assert task['func'] == 'tests.tasks:sleep_task'
+
+        executions = self.conn.lrange(
+            't:task:%s:executions' % task['id'], 0, -1
+        )
+        assert len(executions) == 1
+        execution = json.loads(executions[0])
+        assert execution['exception_name'] == serialize_func_name(
+            JobTimeoutException
+        )
+        assert not execution['success']
+
 
 class TestRunnerClass(BaseTestCase):
     def test_custom_runner_class_single_task(self):
