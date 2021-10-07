@@ -602,6 +602,12 @@ class Worker(object):
 
             hard_timeouts = self._get_hard_timeouts(task_func, tasks)
             time_started = time.time()
+
+            # Upper bound for when we expect the child processes to finish.
+            # Since the hard timeout doesn't cover any processing overhead,
+            # we're adding an extra buffer of ACTIVE_TASK_UPDATE_TIMEOUT
+            # (which is the same time we use to determine if a task has
+            # expired).
             timeout_at = (
                 time_started
                 + sum(hard_timeouts)
