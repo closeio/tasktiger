@@ -16,7 +16,7 @@ logger = structlog.getLogger("tasktiger")
 
 def logging_task():
     log = logger.info("simple task")
-    # Confirm tasktiger_processor injected task id
+    # Confirm tasktiger_processor injected task id and queue name
     assert log[1]["task_id"] == tiger.current_task.id
     assert log[1]["queue"] == tiger.current_task.queue
 
