@@ -5,7 +5,7 @@ def tasktiger_processor(logger, method_name, event_dict):
     """
     TaskTiger structlog processor.
 
-    Inject the current task id for non-batch tasks.
+    Inject the current task ID and queue for non-batch tasks.
     """
 
     if g['current_tasks'] is not None and not g['current_task_is_batch']:
