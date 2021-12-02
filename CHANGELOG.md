@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 0.16
+
+### Other changes
+
+* Handle hard timeout in parent process ([f3b3e24](https://github.com/closeio/tasktiger/commit/f3b3e24485497a2b87281a1b809966bcb525c5fc))
+* Add queue name to logs ([a090d00](https://github.com/closeio/tasktiger/commit/a090d00bca496082f149f2187b026ff96a0d4fac))
+
 ## Version 0.15
 
 ### Other changes
