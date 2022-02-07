@@ -959,7 +959,9 @@ class Worker(object):
         the task gets properly removed from the ACTIVE queue and, in case of an
         error, retried or marked as failed.
         """
-        log = self.log.bind(queue=queue, task_id=task.id)
+        log = self.log.bind(
+            queue=queue, func=task.serialized_func, task_id=task.id
+        )
 
         now = time.time()
         processing_duration = now - start_time
