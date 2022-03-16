@@ -8,10 +8,10 @@ ZADD_NOUPDATE_TEMPLATE = """
     end
 """
 ZADD_NOUPDATE = ZADD_NOUPDATE_TEMPLATE.format(
-    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition='not'
+    key="KEYS[1]", score="ARGV[1]", member="ARGV[2]", condition="not"
 )
 ZADD_UPDATE_EXISTING = ZADD_NOUPDATE_TEMPLATE.format(
-    key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', condition=''
+    key="KEYS[1]", score="ARGV[1]", member="ARGV[2]", condition=""
 )
 ZADD_UPDATE_TEMPLATE = """
     local score = redis.call('zscore', {key}, {member})
@@ -24,10 +24,10 @@ ZADD_UPDATE_TEMPLATE = """
     {ret} redis.call('zadd', {key}, new_score, {member})
 """
 ZADD_UPDATE_MIN = ZADD_UPDATE_TEMPLATE.format(
-    f='min', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+    f="min", key="KEYS[1]", score="ARGV[1]", member="ARGV[2]", ret="return"
 )
 ZADD_UPDATE_MAX = ZADD_UPDATE_TEMPLATE.format(
-    f='max', key='KEYS[1]', score='ARGV[1]', member='ARGV[2]', ret='return'
+    f="max", key="KEYS[1]", score="ARGV[1]", member="ARGV[2]", ret="return"
 )
 
 _ZPOPPUSH_EXISTS_TEMPLATE = """
@@ -118,27 +118,27 @@ _ON_SUCCESS_UPDATE_SETS_TEMPLATE = """
 # ARGV = { score, count, new_score, set_value, if_exists_score }
 ZPOPPUSH_EXISTS_MIN_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
     if_exists_template=ZADD_UPDATE_TEMPLATE.format(
-        f='min',
-        key='if_exists_key',
-        score='if_exists_score',
-        member='member',
-        ret='',
+        f="min",
+        key="if_exists_key",
+        score="if_exists_score",
+        member="member",
+        ret="",
     ),
     on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='set_value',
-        add_to_set='add_to_set',
-        remove_from_set='remove_from_set',
+        set_value="set_value",
+        add_to_set="add_to_set",
+        remove_from_set="remove_from_set",
     ),
 )
 
 # KEYS = { source, destination, remove_from_set, add_to_set }
 # ARGV = { score, count, new_score, set_value }
 ZPOPPUSH_EXISTS_IGNORE_UPDATE_SETS = _ZPOPPUSH_EXISTS_TEMPLATE.format(
-    if_exists_template='',
+    if_exists_template="",
     on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='set_value',
-        add_to_set='add_to_set',
-        remove_from_set='remove_from_set',
+        set_value="set_value",
+        add_to_set="add_to_set",
+        remove_from_set="remove_from_set",
     ),
 )
 
@@ -177,13 +177,13 @@ _ZPOPPUSH_TEMPLATE = """
     return members
 """
 
-ZPOPPUSH = _ZPOPPUSH_TEMPLATE.format(on_success='')
+ZPOPPUSH = _ZPOPPUSH_TEMPLATE.format(on_success="")
 
 # KEYS = { source, destination, remove_from_set, add_to_set }
 # ARGV = { score, count, new_score, set_value }
 ZPOPPUSH_UPDATE_SETS = _ZPOPPUSH_TEMPLATE.format(
     on_success=_ON_SUCCESS_UPDATE_SETS_TEMPLATE.format(
-        set_value='ARGV[4]', add_to_set='KEYS[4]', remove_from_set='KEYS[3]'
+        set_value="ARGV[4]", add_to_set="KEYS[4]", remove_from_set="KEYS[3]"
     )
 )
 
@@ -310,7 +310,7 @@ class RedisScripts(object):
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
 
         self._execute_pipeline = self.register_script_from_file(
-            'lua/execute_pipeline.lua'
+            "lua/execute_pipeline.lua"
         )
 
     @property
@@ -318,9 +318,9 @@ class RedisScripts(object):
         """
         Whether Redis supports single command replication.
         """
-        if not hasattr(self, '_can_replicate_commands'):
-            info = self.redis.info('server')
-            version_info = info['redis_version'].split('.')
+        if not hasattr(self, "_can_replicate_commands"):
+            info = self.redis.info("server")
+            version_info = info["redis_version"].split(".")
             major, minor = int(version_info[0]), int(version_info[1])
             result = major > 3 or major == 3 and minor >= 2
             self._can_replicate_commands = result
@@ -341,13 +341,13 @@ class RedisScripts(object):
         - "min": Use the smaller of the given and existing score
         - "max": Use the larger of the given and existing score
         """
-        if mode == 'nx':
+        if mode == "nx":
             f = self._zadd_noupdate
-        elif mode == 'xx':
+        elif mode == "xx":
             f = self._zadd_update_existing
-        elif mode == 'min':
+        elif mode == "min":
             f = self._zadd_update_min
-        elif mode == 'max':
+        elif mode == "max":
             f = self._zadd_update_max
         else:
             raise NotImplementedError('mode "%s" unsupported' % mode)
@@ -398,7 +398,7 @@ class RedisScripts(object):
         (their score will not be updated).
         """
         if score is None:
-            score = '+inf'  # Include all elements.
+            score = "+inf"  # Include all elements.
         if withscores:
             if on_success:
                 raise NotImplementedError()
@@ -408,12 +408,12 @@ class RedisScripts(object):
                 client=client,
             )
         else:
-            if if_exists and if_exists[0] == 'add':
+            if if_exists and if_exists[0] == "add":
                 _, if_exists_key, if_exists_score, if_exists_mode = if_exists
-                if if_exists_mode != 'min':
+                if if_exists_mode != "min":
                     raise NotImplementedError()
 
-                if not on_success or on_success[0] != 'update_sets':
+                if not on_success or on_success[0] != "update_sets":
                     raise NotImplementedError()
                 (
                     set_value,
@@ -433,8 +433,8 @@ class RedisScripts(object):
                     ],
                     args=[score, count, new_score, set_value, if_exists_score],
                 )
-            elif if_exists and if_exists[0] == 'noupdate':
-                if not on_success or on_success[0] != 'update_sets':
+            elif if_exists and if_exists[0] == "noupdate":
+                if not on_success or on_success[0] != "update_sets":
                     raise NotImplementedError()
                 set_value, remove_from_set, add_to_set = on_success[1:]
 
@@ -444,7 +444,7 @@ class RedisScripts(object):
                 )
 
             if on_success:
-                if on_success[0] != 'update_sets':
+                if on_success[0] != "update_sets":
                     raise NotImplementedError()
                 else:
                     set_value, remove_from_set, add_to_set = on_success[1:]

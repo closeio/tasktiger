@@ -12,7 +12,7 @@ from .config import DELAY, TEST_DB, REDIS_HOST
 from .utils import get_tiger
 
 
-LONG_TASK_SIGNAL_KEY = 'long_task_ok'
+LONG_TASK_SIGNAL_KEY = "long_task_ok"
 
 tiger = get_tiger()
 
@@ -33,17 +33,17 @@ def decorated_task_simple_func(*args, **kwargs):
 
 
 def exception_task():
-    raise Exception('this failed')
+    raise Exception("this failed")
 
 
-@tiger.task(queue='other')
+@tiger.task(queue="other")
 def task_on_other_queue():
     pass
 
 
 def file_args_task(filename, *args, **kwargs):
-    with open(filename, 'w') as f:
-        f.write(json.dumps({'args': args, 'kwargs': kwargs}))
+    with open(filename, "w") as f:
+        f.write(json.dumps({"args": args, "kwargs": kwargs}))
 
 
 @tiger.task(hard_timeout=DELAY)
@@ -57,7 +57,7 @@ def long_task_ok():
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
-        conn.lpush(LONG_TASK_SIGNAL_KEY, '1')
+        conn.lpush(LONG_TASK_SIGNAL_KEY, "1")
     time.sleep(DELAY)
 
 
@@ -67,7 +67,7 @@ def wait_for_long_task():
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
         result = conn.blpop(LONG_TASK_SIGNAL_KEY, int(ceil(DELAY * 3)))
-    assert result[1] == '1'
+    assert result[1] == "1"
 
 
 @tiger.task(unique=True)
@@ -75,15 +75,15 @@ def unique_task(value=None):
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
-        conn.lpush('unique_task', value)
+        conn.lpush("unique_task", value)
 
 
 @tiger.task(unique=True)
 def unique_exception_task(value=None):
-    raise Exception('this failed')
+    raise Exception("this failed")
 
 
-@tiger.task(unique_key=('a',))
+@tiger.task(unique_key=("a",))
 def unique_key_task(a, b):
     pass
 
@@ -95,33 +95,33 @@ def locked_task(key, other=None):
     ) as conn:
         data = conn.getset(key, 1)
         if data is not None:
-            raise Exception('task failed, key already set')
+            raise Exception("task failed, key already set")
         time.sleep(DELAY)
         conn.delete(key)
 
 
-@tiger.task(queue='batch', batch=True)
+@tiger.task(queue="batch", batch=True)
 def batch_task(params):
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
         try:
-            conn.rpush('batch_task', json.dumps(params))
+            conn.rpush("batch_task", json.dumps(params))
         except Exception:
             pass
-    if any(p['args'][0] == 10 for p in params if p['args']):
-        raise Exception('exception')
+    if any(p["args"][0] == 10 for p in params if p["args"]):
+        raise Exception("exception")
 
 
-@tiger.task(queue='batch')
+@tiger.task(queue="batch")
 def non_batch_task(arg):
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
     ) as conn:
-        conn.rpush('batch_task', arg)
+        conn.rpush("batch_task", arg)
 
     if arg == 10:
-        raise Exception('exception')
+        raise Exception("exception")
 
 
 def retry_task():
@@ -141,10 +141,10 @@ def verify_current_task():
         except RuntimeError:
             # This is expected (we need to use current_task)
             task = tiger.current_task
-            conn.set('task_id', task.id)
+            conn.set("task_id", task.id)
 
 
-@tiger.task(batch=True, queue='batch')
+@tiger.task(batch=True, queue="batch")
 def verify_current_tasks(tasks):
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
@@ -155,7 +155,7 @@ def verify_current_tasks(tasks):
             # This is expected (we need to use current_tasks)
 
             tasks = tiger.current_tasks
-            conn.rpush('task_ids', *[t.id for t in tasks])
+            conn.rpush("task_ids", *[t.id for t in tasks])
 
 
 @tiger.task()
@@ -196,7 +196,7 @@ class MyRunnerClass(BaseRunner):
         with redis.Redis(
             host=REDIS_HOST, db=TEST_DB, decode_responses=True
         ) as conn:
-            conn.set('task_id', task.id)
+            conn.set("task_id", task.id)
 
     def run_batch_tasks(self, tasks, hard_timeout):
         assert self.tiger.config == tiger.config
@@ -206,7 +206,7 @@ class MyRunnerClass(BaseRunner):
         with redis.Redis(
             host=REDIS_HOST, db=TEST_DB, decode_responses=True
         ) as conn:
-            conn.set('task_args', ",".join(str(t.args[0]) for t in tasks))
+            conn.set("task_args", ",".join(str(t.args[0]) for t in tasks))
 
     def run_eager_task(self, task):
         return 123
@@ -219,4 +219,4 @@ class MyErrorRunnerClass(DefaultRunner):
         with redis.Redis(
             host=REDIS_HOST, db=TEST_DB, decode_responses=True
         ) as conn:
-            conn.set('task_id', task.id)
+            conn.set("task_id", task.id)

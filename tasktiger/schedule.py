@@ -1,6 +1,6 @@
 import datetime
 
-__all__ = ['periodic']
+__all__ = ["periodic"]
 
 
 def _periodic(dt, period, start_date, end_date):

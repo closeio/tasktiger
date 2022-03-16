@@ -3,7 +3,7 @@
 import os
 import time
 
-SYSTEM_LOCK_ID = 'SYSTEM_LOCK'
+SYSTEM_LOCK_ID = "SYSTEM_LOCK"
 
 
 class Semaphore(object):
@@ -33,7 +33,7 @@ class Semaphore(object):
         with open(
             os.path.join(
                 os.path.dirname(os.path.realpath(__file__)),
-                'lua/semaphore.lua',
+                "lua/semaphore.lua",
             )
         ) as f:
             self._semaphore = self.redis.register_script(f.read())

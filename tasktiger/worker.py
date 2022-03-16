@@ -22,9 +22,9 @@ from .stats import StatsThread
 from .task import Task
 from .timeouts import JobTimeoutException
 
-LOCK_REDIS_KEY = 'qslock'
+LOCK_REDIS_KEY = "qslock"
 
-__all__ = ['Worker']
+__all__ = ["Worker"]
 
 
 def sigchld_handler(*args):
@@ -68,23 +68,23 @@ class Worker(object):
 
         if queues:
             self.only_queues = set(queues)
-        elif self.config['ONLY_QUEUES']:
-            self.only_queues = set(self.config['ONLY_QUEUES'])
+        elif self.config["ONLY_QUEUES"]:
+            self.only_queues = set(self.config["ONLY_QUEUES"])
         else:
             self.only_queues = set()
 
         if exclude_queues:
             self.exclude_queues = set(exclude_queues)
-        elif self.config['EXCLUDE_QUEUES']:
-            self.exclude_queues = set(self.config['EXCLUDE_QUEUES'])
+        elif self.config["EXCLUDE_QUEUES"]:
+            self.exclude_queues = set(self.config["EXCLUDE_QUEUES"])
         else:
             self.exclude_queues = set()
 
         if single_worker_queues:
             self.single_worker_queues = set(single_worker_queues)
-        elif self.config['SINGLE_WORKER_QUEUES']:
+        elif self.config["SINGLE_WORKER_QUEUES"]:
             self.single_worker_queues = set(
-                self.config['SINGLE_WORKER_QUEUES']
+                self.config["SINGLE_WORKER_QUEUES"]
             )
         else:
             self.single_worker_queues = set()
@@ -100,7 +100,7 @@ class Worker(object):
 
         if store_tracebacks is None:
             self.store_tracebacks = bool(
-                self.config.get('STORE_TRACEBACKS', True)
+                self.config.get("STORE_TRACEBACKS", True)
             )
         else:
             self.store_tracebacks = bool(store_tracebacks)
@@ -113,7 +113,7 @@ class Worker(object):
         self.worker_group_name = hashlib.sha256(
             json.dumps(
                 [sorted(self.only_queues), sorted(self.exclude_queues)]
-            ).encode('utf8')
+            ).encode("utf8")
         ).hexdigest()
 
     def _install_signal_handlers(self):
@@ -123,7 +123,7 @@ class Worker(object):
 
         def request_stop(signum, frame):
             self._stop_requested = True
-            self.log.info('stop requested, waiting for task to finish')
+            self.log.info("stop requested, waiting for task to finish")
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
@@ -158,10 +158,10 @@ class Worker(object):
         them in the QUEUED queue for execution. This should be called
         periodically.
         """
-        timeout = self.config['QUEUE_SCHEDULED_TASKS_TIME']
+        timeout = self.config["QUEUE_SCHEDULED_TASKS_TIME"]
         if timeout > 0:
             lock_name = self._key(
-                'lockv2', 'queue_scheduled_tasks', self.worker_group_name
+                "lockv2", "queue_scheduled_tasks", self.worker_group_name
             )
             lock = self.connection.lock(lock_name, timeout=timeout)
 
@@ -183,23 +183,23 @@ class Worker(object):
             result = self.scripts.zpoppush(
                 self._key(SCHEDULED, queue),
                 self._key(QUEUED, queue),
-                self.config['SCHEDULED_TASK_BATCH_SIZE'],
+                self.config["SCHEDULED_TASK_BATCH_SIZE"],
                 now,
                 now,
-                if_exists=('noupdate',),
+                if_exists=("noupdate",),
                 on_success=(
-                    'update_sets',
+                    "update_sets",
                     queue,
                     self._key(SCHEDULED),
                     self._key(QUEUED),
                 ),
             )
-            self.log.debug('scheduled tasks', queue=queue, qty=len(result))
+            self.log.debug("scheduled tasks", queue=queue, qty=len(result))
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
                 if self.config["PUBLISH_QUEUED_TASKS"]:
-                    self.connection.publish(self._key('activity'), queue)
+                    self.connection.publish(self._key("activity"), queue)
                 self._did_work = True
 
     def _poll_for_queues(self):
@@ -245,9 +245,9 @@ class Worker(object):
 
             # Pull remaining messages off of channel
             while message:
-                if message['type'] == 'message':
+                if message["type"] == "message":
                     new_queue_found, batch_exit = self._process_queue_message(
-                        message['data'],
+                        message["data"],
                         new_queue_found,
                         batch_exit,
                         start_time,
@@ -283,8 +283,8 @@ class Worker(object):
         # this task (i.e. we don't release the lock unless we've exhausted our
         # batch size, which will hopefully never happen)
         lock = self.connection.lock(
-            self._key('lockv2', 'queue_expired_tasks'),
-            timeout=self.config['REQUEUE_EXPIRED_TASKS_INTERVAL'],
+            self._key("lockv2", "queue_expired_tasks"),
+            timeout=self.config["REQUEUE_EXPIRED_TASKS_INTERVAL"],
         )
         if not lock.acquire(blocking=False):
             return
@@ -293,30 +293,30 @@ class Worker(object):
 
         # Get a batch of expired tasks.
         task_data = self.scripts.get_expired_tasks(
-            self.config['REDIS_PREFIX'],
-            now - self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
-            self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE'],
+            self.config["REDIS_PREFIX"],
+            now - self.config["ACTIVE_TASK_UPDATE_TIMEOUT"],
+            self.config["REQUEUE_EXPIRED_TASKS_BATCH_SIZE"],
         )
 
         for (queue, task_id) in task_data:
-            self.log.debug('expiring task', queue=queue, task_id=task_id)
+            self.log.debug("expiring task", queue=queue, task_id=task_id)
             self._did_work = True
             try:
                 task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
                 if task.should_retry_on(JobTimeoutException, logger=self.log):
                     self.log.info(
-                        'queueing expired task', queue=queue, task_id=task_id
+                        "queueing expired task", queue=queue, task_id=task_id
                     )
 
                     # Task is idempotent and can be requeued. If the task
                     # already exists in the QUEUED queue, don't change its
                     # time.
                     task._move(
-                        from_state=ACTIVE, to_state=QUEUED, when=now, mode='nx'
+                        from_state=ACTIVE, to_state=QUEUED, when=now, mode="nx"
                     )
                 else:
                     self.log.error(
-                        'failing expired task', queue=queue, task_id=task_id
+                        "failing expired task", queue=queue, task_id=task_id
                     )
 
                     # Assume the task can't be retried and move it to the error
@@ -327,12 +327,12 @@ class Worker(object):
                 # have a task without a task object.
 
                 # XXX: Ideally, the following block should be atomic.
-                if not self.connection.get(self._key('task', task_id)):
-                    self.log.error('not found', queue=queue, task_id=task_id)
+                if not self.connection.get(self._key("task", task_id)):
+                    self.log.error("not found", queue=queue, task_id=task_id)
                     task = Task(
                         self.tiger,
                         queue=queue,
-                        _data={'id': task_id},
+                        _data={"id": task_id},
                         _state=ACTIVE,
                     )
                     task._move()
@@ -340,18 +340,18 @@ class Worker(object):
         # Release the lock immediately if we processed a full batch. This way,
         # another process will be able to pick up another batch immediately
         # without waiting for the lock to time out.
-        if len(task_data) == self.config['REQUEUE_EXPIRED_TASKS_BATCH_SIZE']:
+        if len(task_data) == self.config["REQUEUE_EXPIRED_TASKS_BATCH_SIZE"]:
             try:
                 lock.release()
             except LockError:
                 # Not really a problem if releasing lock fails. It will expire
                 # soon anyway.
                 self.log.warning(
-                    'failed to release lock queue_expired_tasks on full batch'
+                    "failed to release lock queue_expired_tasks on full batch"
                 )
 
     def _get_hard_timeouts(self, func, tasks):
-        is_batch_func = getattr(func, '_task_batch', False)
+        is_batch_func = getattr(func, "_task_batch", False)
         if is_batch_func:
             task_timeouts = [
                 task.hard_timeout
@@ -360,15 +360,15 @@ class Worker(object):
             ]
             hard_timeout = (
                 (max(task_timeouts) if task_timeouts else None)
-                or getattr(func, '_task_hard_timeout', None)
-                or self.config['DEFAULT_HARD_TIMEOUT']
+                or getattr(func, "_task_hard_timeout", None)
+                or self.config["DEFAULT_HARD_TIMEOUT"]
             )
             return [hard_timeout]
         else:
             return [
                 task.hard_timeout
-                or getattr(func, '_task_hard_timeout', None)
-                or self.config['DEFAULT_HARD_TIMEOUT']
+                or getattr(func, "_task_hard_timeout", None)
+                or self.config["DEFAULT_HARD_TIMEOUT"]
                 for task in tasks
             ]
 
@@ -386,7 +386,7 @@ class Worker(object):
         task_func = tasks[0].serialized_func
         assert all([task_func == task.serialized_func for task in tasks[1:]])
 
-        execution['time_started'] = time.time()
+        execution["time_started"] = time.time()
 
         exc = None
         exc_info = None
@@ -397,51 +397,51 @@ class Worker(object):
             runner_class = get_runner_class(log, tasks)
             runner = runner_class(self.tiger)
 
-            is_batch_func = getattr(func, '_task_batch', False)
-            g['tiger'] = self.tiger
-            g['current_task_is_batch'] = is_batch_func
+            is_batch_func = getattr(func, "_task_batch", False)
+            g["tiger"] = self.tiger
+            g["current_task_is_batch"] = is_batch_func
 
             hard_timeouts = self._get_hard_timeouts(func, tasks)
 
             with WorkerContextManagerStack(
-                self.config['CHILD_CONTEXT_MANAGERS']
+                self.config["CHILD_CONTEXT_MANAGERS"]
             ):
                 if is_batch_func:
                     # Batch process if the task supports it.
-                    g['current_tasks'] = tasks
+                    g["current_tasks"] = tasks
                     runner.run_batch_tasks(tasks, hard_timeouts[0])
                 else:
                     # Process sequentially.
                     for task, hard_timeout in zip(tasks, hard_timeouts):
-                        g['current_tasks'] = [task]
+                        g["current_tasks"] = [task]
                         runner.run_single_task(task, hard_timeout)
 
         except RetryException as exc:
-            execution['retry'] = True
+            execution["retry"] = True
             if exc.method:
-                execution['retry_method'] = serialize_retry_method(exc.method)
-            execution['log_error'] = exc.log_error
-            execution['exception_name'] = serialize_func_name(exc.__class__)
+                execution["retry_method"] = serialize_retry_method(exc.method)
+            execution["log_error"] = exc.log_error
+            execution["exception_name"] = serialize_func_name(exc.__class__)
             exc_info = exc.exc_info or sys.exc_info()
         except (JobTimeoutException, Exception) as exc:
-            execution['exception_name'] = serialize_func_name(exc.__class__)
+            execution["exception_name"] = serialize_func_name(exc.__class__)
             exc_info = sys.exc_info()
         else:
             success = True
 
         if not success:
-            execution['time_failed'] = time.time()
+            execution["time_failed"] = time.time()
             if self.store_tracebacks:
                 # Currently we only log failed task executions to Redis.
-                execution['traceback'] = ''.join(
+                execution["traceback"] = "".join(
                     traceback.format_exception(*exc_info)
                 )
-            execution['success'] = success
-            execution['host'] = socket.gethostname()
+            execution["success"] = success
+            execution["host"] = socket.gethostname()
             serialized_execution = json.dumps(execution)
             for task in tasks:
                 self.connection.rpush(
-                    self._key('task', task.id, 'executions'),
+                    self._key("task", task.id, "executions"),
                     serialized_execution,
                 )
 
@@ -452,7 +452,7 @@ class Worker(object):
 
         # Fetch one item unless this is a batch queue.
         # XXX: It would be more efficient to loop in reverse order and break.
-        batch_queues = self.config['BATCH_QUEUES']
+        batch_queues = self.config["BATCH_QUEUES"]
         batch_size = 1
         for part in dotted_parts(queue):
             if part in batch_queues:
@@ -471,7 +471,7 @@ class Worker(object):
         # Check if this is single worker queue
         for part in dotted_parts(queue):
             if part in self.single_worker_queues:
-                log.debug('single worker queue')
+                log.debug("single worker queue")
                 max_workers = 1
                 break
 
@@ -483,12 +483,12 @@ class Worker(object):
                 self._key(LOCK_REDIS_KEY, queue),
                 self.id,
                 max_locks=max_workers,
-                timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
+                timeout=self.config["ACTIVE_TASK_UPDATE_TIMEOUT"],
             )
             acquired, locks = queue_lock.acquire()
             if not acquired:
                 return None, True
-            log.debug('acquired queue lock', locks=locks)
+            log.debug("acquired queue lock", locks=locks)
         else:
             queue_lock = None
 
@@ -550,10 +550,10 @@ class Worker(object):
             log = log.bind(child_pid=child_pid)
             for task in tasks:
                 log.info(
-                    'processing',
+                    "processing",
                     func=task_func,
                     task_id=task.id,
-                    params={'args': task.args, 'kwargs': task.kwargs},
+                    params={"args": task.args, "kwargs": task.kwargs},
                 )
 
             # Attach a signal handler to SIGCHLD (sent when the child process
@@ -642,7 +642,7 @@ class Worker(object):
                         [pipe_r],
                         [],
                         [],
-                        self.config['ACTIVE_TASK_UPDATE_TIMER'],
+                        self.config["ACTIVE_TASK_UPDATE_TIMER"],
                     )
 
                     if results[0]:
@@ -669,10 +669,10 @@ class Worker(object):
 
                 now = time.time()
                 if now > timeout_at:
-                    log.error('hard timeout elapsed in parent process')
+                    log.error("hard timeout elapsed in parent process")
                     os.kill(child_pid, signal.SIGKILL)
                     pid, return_code = os.waitpid(child_pid, 0)
-                    log.error('child killed', return_code=return_code)
+                    log.error("child killed", return_code=return_code)
                     execution = {
                         "time_started": time_started,
                         "time_failed": now,
@@ -685,7 +685,7 @@ class Worker(object):
                     serialized_execution = json.dumps(execution)
                     for task in tasks:
                         self.connection.rpush(
-                            self._key('task', task.id, 'executions'),
+                            self._key("task", task.id, "executions"),
                             serialized_execution,
                         )
                     break
@@ -697,12 +697,12 @@ class Worker(object):
                             lock.reacquire()
                         except LockError:
                             log.warning(
-                                'could not reacquire lock', lock=lock.name
+                                "could not reacquire lock", lock=lock.name
                             )
                     if queue_lock:
                         acquired, current_locks = queue_lock.renew()
                         if not acquired:
-                            log.debug('queue lock renew failure')
+                            log.debug("queue lock renew failure")
                 except OSError as e:
                     # EINTR happens if the task completed. Since we're just
                     # renewing locks/heartbeat it's okay if we get interrupted.
@@ -738,7 +738,7 @@ class Worker(object):
                     if batch_exit > start_time + timeout:
                         batch_exit = start_time + timeout
                 self._queue_set.add(queue)
-                self.log.debug('new queue', queue=queue)
+                self.log.debug("new queue", queue=queue)
 
         return new_queue_found, batch_exit
 
@@ -749,7 +749,7 @@ class Worker(object):
 
         # Get all tasks
         serialized_tasks = self.connection.mget(
-            [self._key('task', task_id) for task_id in task_ids]
+            [self._key("task", task_id) for task_id in task_ids]
         )
 
         # Parse tasks
@@ -763,7 +763,7 @@ class Worker(object):
                 # we log an error and remove the task below. We need to
                 # at least initialize the Task object with an ID so we can
                 # remove it.
-                task_data = {'id': task_id}
+                task_data = {"id": task_id}
 
             task = Task(
                 self.tiger,
@@ -775,10 +775,10 @@ class Worker(object):
 
             if not serialized_task:
                 # Remove task as per comment above
-                log.error('not found', task_id=task_id)
+                log.error("not found", task_id=task_id)
                 task._move()
             elif task.id != task_id:
-                log.error('task ID mismatch', task_id=task_id)
+                log.error("task ID mismatch", task_id=task_id)
                 # Remove task
                 task._move()
             else:
@@ -803,7 +803,7 @@ class Worker(object):
             )
             processed_count = processed_count + len(processed_tasks)
             log.debug(
-                'processed', attempted=len(tasks), processed=processed_count
+                "processed", attempted=len(tasks), processed=processed_count
             )
             for task in processed_tasks:
                 self._finish_task_processing(queue, task, success, now)
@@ -842,7 +842,7 @@ class Worker(object):
         # time if it's already scheduled). We want to make sure that the last
         # queued instance of the task always gets executed no earlier than it
         # was queued.
-        later = time.time() + self.config['LOCK_RETRY']
+        later = time.time() + self.config["LOCK_RETRY"]
 
         task_ids = self.scripts.zpoppush(
             self._key(QUEUED, queue),
@@ -850,9 +850,9 @@ class Worker(object):
             batch_size,
             None,
             now,
-            if_exists=('add', self._key(SCHEDULED, queue), later, 'min'),
+            if_exists=("add", self._key(SCHEDULED, queue), later, "min"),
             on_success=(
-                'update_sets',
+                "update_sets",
                 queue,
                 self._key(QUEUED),
                 self._key(ACTIVE),
@@ -860,7 +860,7 @@ class Worker(object):
             ),
         )
         log.debug(
-            'moved tasks',
+            "moved tasks",
             src_queue=QUEUED,
             dest_queue=ACTIVE,
             qty=len(task_ids),
@@ -874,7 +874,7 @@ class Worker(object):
 
         if queue_lock:
             queue_lock.release()
-            log.debug('released swq lock')
+            log.debug("released swq lock")
 
         return task_ids, processed_count
 
@@ -908,21 +908,21 @@ class Worker(object):
 
                 if lock_id not in lock_ids:
                     lock = self.connection.lock(
-                        self._key('lockv2', lock_id),
-                        timeout=self.config['ACTIVE_TASK_UPDATE_TIMEOUT'],
+                        self._key("lockv2", lock_id),
+                        timeout=self.config["ACTIVE_TASK_UPDATE_TIMEOUT"],
                     )
                     if not lock.acquire(blocking=False):
-                        log.info('could not acquire lock', task_id=task.id)
+                        log.info("could not acquire lock", task_id=task.id)
 
                         # Reschedule the task (but if the task is already
                         # scheduled in case of a unique task, don't prolong
                         # the schedule date).
-                        when = time.time() + self.config['LOCK_RETRY']
+                        when = time.time() + self.config["LOCK_RETRY"]
                         task._move(
                             from_state=ACTIVE,
                             to_state=SCHEDULED,
                             when=when,
-                            mode='min',
+                            mode="min",
                         )
                         # Make sure to remove it from this list so we don't
                         # re-add to the ACTIVE queue by updating the heartbeat.
@@ -949,7 +949,7 @@ class Worker(object):
             try:
                 lock.release()
             except LockError:
-                log.warning('could not release lock', lock=lock.name)
+                log.warning("could not release lock", lock=lock.name)
 
         return success, ready_tasks
 
@@ -969,7 +969,7 @@ class Worker(object):
         def _mark_done():
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
-            log.info('done', processing_duration=processing_duration)
+            log.info("done", processing_duration=processing_duration)
 
         if success:
             _mark_done()
@@ -978,33 +978,33 @@ class Worker(object):
             should_log_error = True
             # Get execution info (for logging and retry purposes)
             execution = self.connection.lindex(
-                self._key('task', task.id, 'executions'), -1
+                self._key("task", task.id, "executions"), -1
             )
 
             if execution:
                 execution = json.loads(execution)
 
-            if execution and execution.get('retry'):
-                if 'retry_method' in execution:
-                    retry_func, retry_args = execution['retry_method']
+            if execution and execution.get("retry"):
+                if "retry_method" in execution:
+                    retry_func, retry_args = execution["retry_method"]
                 else:
                     # We expect the serialized method here.
                     retry_func, retry_args = serialize_retry_method(
-                        self.config['DEFAULT_RETRY_METHOD']
+                        self.config["DEFAULT_RETRY_METHOD"]
                     )
-                should_log_error = execution['log_error']
+                should_log_error = execution["log_error"]
                 should_retry = True
 
             if task.retry_method and not should_retry:
                 retry_func, retry_args = task.retry_method
                 if task.retry_on:
                     if execution:
-                        exception_name = execution.get('exception_name')
+                        exception_name = execution.get("exception_name")
                         try:
                             exception_class = import_attribute(exception_name)
                         except TaskImportError:
                             log.error(
-                                'could not import exception',
+                                "could not import exception",
                                 exception_name=exception_name,
                             )
                         else:
@@ -1020,25 +1020,25 @@ class Worker(object):
             when = now
 
             log_context = {
-                'func': task.serialized_func,
-                'processing_duration': processing_duration,
+                "func": task.serialized_func,
+                "processing_duration": processing_duration,
             }
 
             if should_retry:
                 retry_num = task.n_executions()
-                log_context['retry_func'] = retry_func
-                log_context['retry_num'] = retry_num
+                log_context["retry_func"] = retry_func
+                log_context["retry_num"] = retry_num
 
                 try:
                     func = import_attribute(retry_func)
                 except TaskImportError:
                     log.error(
-                        'could not import retry function', func=retry_func
+                        "could not import retry function", func=retry_func
                     )
                 else:
                     try:
                         retry_delay = func(retry_num, *retry_args)
-                        log_context['retry_delay'] = retry_delay
+                        log_context["retry_delay"] = retry_delay
                         when += retry_delay
                     except StopRetry:
                         pass
@@ -1053,15 +1053,15 @@ class Worker(object):
 
                 log_context.update(
                     {
-                        'time_failed': execution.get('time_failed'),
-                        'traceback': execution.get('traceback'),
-                        'exception_name': execution.get('exception_name'),
+                        "time_failed": execution.get("time_failed"),
+                        "traceback": execution.get("traceback"),
+                        "exception_name": execution.get("exception_name"),
                     }
                 )
 
-                log_func('task error', **log_context)
+                log_func("task error", **log_context)
             else:
-                log.error('execution not found', **log_context)
+                log.error("execution not found", **log_context)
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
@@ -1099,7 +1099,7 @@ class Worker(object):
                 self._did_work = True
 
         if (
-            time.time() - self._last_task_check > self.config['SELECT_TIMEOUT']
+            time.time() - self._last_task_check > self.config["SELECT_TIMEOUT"]
             and not self._stop_requested
         ):
             self._worker_queue_scheduled_tasks()
@@ -1134,7 +1134,7 @@ class Worker(object):
             # Task is already queued, scheduled, or running.
             if any(results):
                 self.log.info(
-                    'periodic task already in queue',
+                    "periodic task already in queue",
                     func=task.serialized_func,
                     result=results,
                 )
@@ -1144,7 +1144,7 @@ class Worker(object):
             # unique.
             when = task._queue_for_next_period()
             self.log.info(
-                'queued periodic task', func=task.serialized_func, when=when
+                "queued periodic task", func=task.serialized_func, when=when
             )
 
     def _refresh_queue_set(self):
@@ -1162,7 +1162,7 @@ class Worker(object):
         """
 
         self.log.info(
-            'ready',
+            "ready",
             id=self.id,
             queues=sorted(self.only_queues),
             exclude_queues=sorted(self.exclude_queues),
@@ -1173,9 +1173,9 @@ class Worker(object):
         if not self.scripts.can_replicate_commands:
             # Older Redis versions may create additional overhead when
             # executing pipelines.
-            self.log.warn('using old Redis version')
+            self.log.warn("using old Redis version")
 
-        if self.config['STATS_INTERVAL']:
+        if self.config["STATS_INTERVAL"]:
             self.stats_thread = StatsThread(self)
             self.stats_thread.start()
 
@@ -1190,7 +1190,7 @@ class Worker(object):
             self._pubsub = None
         else:
             self._pubsub = self.connection.pubsub()
-            self._pubsub.subscribe(self._key('activity'))
+            self._pubsub.subscribe(self._key("activity"))
 
         self._refresh_queue_set()
 
@@ -1200,8 +1200,8 @@ class Worker(object):
                 # on processing a specific queue.
                 if self._pubsub:
                     self._pubsub_for_queues(
-                        timeout=self.config['SELECT_TIMEOUT'],
-                        batch_timeout=self.config['SELECT_BATCH_TIMEOUT'],
+                        timeout=self.config["SELECT_TIMEOUT"],
+                        batch_timeout=self.config["SELECT_BATCH_TIMEOUT"],
                     )
                 else:
                     self._poll_for_queues()
@@ -1218,7 +1218,7 @@ class Worker(object):
             pass
 
         except Exception as e:
-            self.log.exception(event='exception')
+            self.log.exception(event="exception")
             raise
 
         finally:
@@ -1229,4 +1229,4 @@ class Worker(object):
             # Free up Redis connection
             if self._pubsub:
                 self._pubsub.reset()
-            self.log.info('done')
+            self.log.info("done")

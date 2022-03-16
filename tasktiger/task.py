@@ -8,7 +8,7 @@ from ._internal import *
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import get_runner_class
 
-__all__ = ['Task']
+__all__ = ["Task"]
 
 
 class Task(object):
@@ -59,31 +59,31 @@ class Task(object):
         serialized_name = serialize_func_name(func)
 
         if unique is None:
-            unique = getattr(func, '_task_unique', False)
+            unique = getattr(func, "_task_unique", False)
 
         if unique_key is None:
-            unique_key = getattr(func, '_task_unique_key', None)
+            unique_key = getattr(func, "_task_unique_key", None)
 
         if lock is None:
-            lock = getattr(func, '_task_lock', False)
+            lock = getattr(func, "_task_lock", False)
 
         if lock_key is None:
-            lock_key = getattr(func, '_task_lock_key', None)
+            lock_key = getattr(func, "_task_lock_key", None)
 
         if retry is None:
-            retry = getattr(func, '_task_retry', False)
+            retry = getattr(func, "_task_retry", False)
 
         if retry_on is None:
-            retry_on = getattr(func, '_task_retry_on', None)
+            retry_on = getattr(func, "_task_retry_on", None)
 
         if retry_method is None:
-            retry_method = getattr(func, '_task_retry_method', None)
+            retry_method = getattr(func, "_task_retry_method", None)
 
         if max_queue_size is None:
-            max_queue_size = getattr(func, '_task_max_queue_size', None)
+            max_queue_size = getattr(func, "_task_max_queue_size", None)
 
         if runner_class is None:
-            runner_class = getattr(func, '_task_runner_class', None)
+            runner_class = getattr(func, "_task_runner_class", None)
 
         # normalize falsy args/kwargs to empty structures
         args = args or []
@@ -100,43 +100,43 @@ class Task(object):
         else:
             task_id = gen_id()
 
-        task = {'id': task_id, 'func': serialized_name}
+        task = {"id": task_id, "func": serialized_name}
         if unique or unique_key:
-            task['unique'] = True
+            task["unique"] = True
             if unique_key:
-                task['unique_key'] = unique_key
+                task["unique_key"] = unique_key
         if lock or lock_key:
-            task['lock'] = True
+            task["lock"] = True
             if lock_key:
-                task['lock_key'] = lock_key
+                task["lock_key"] = lock_key
         if args:
-            task['args'] = args
+            task["args"] = args
         if kwargs:
-            task['kwargs'] = kwargs
+            task["kwargs"] = kwargs
         if hard_timeout:
-            task['hard_timeout'] = hard_timeout
+            task["hard_timeout"] = hard_timeout
         if retry or retry_on or retry_method:
             if not retry_method:
-                retry_method = tiger.config['DEFAULT_RETRY_METHOD']
+                retry_method = tiger.config["DEFAULT_RETRY_METHOD"]
 
             retry_method = serialize_retry_method(retry_method)
 
-            task['retry_method'] = retry_method
+            task["retry_method"] = retry_method
             if retry_on:
-                task['retry_on'] = [
+                task["retry_on"] = [
                     serialize_func_name(cls) for cls in retry_on
                 ]
         if max_queue_size:
-            task['max_queue_size'] = max_queue_size
+            task["max_queue_size"] = max_queue_size
         if runner_class:
             serialized_runner_class = serialize_func_name(runner_class)
-            task['runner_class'] = serialized_runner_class
+            task["runner_class"] = serialized_runner_class
 
         self._data = task
 
     @property
     def id(self):
-        return self._data['id']
+        return self._data["id"]
 
     @property
     def data(self):
@@ -160,47 +160,47 @@ class Task(object):
 
     @property
     def serialized_func(self):
-        return self._data['func']
+        return self._data["func"]
 
     @property
     def lock(self):
-        return self._data.get('lock', False)
+        return self._data.get("lock", False)
 
     @property
     def lock_key(self):
-        return self._data.get('lock_key')
+        return self._data.get("lock_key")
 
     @property
     def args(self):
-        return self._data.get('args', [])
+        return self._data.get("args", [])
 
     @property
     def kwargs(self):
-        return self._data.get('kwargs', {})
+        return self._data.get("kwargs", {})
 
     @property
     def hard_timeout(self):
-        return self._data.get('hard_timeout', None)
+        return self._data.get("hard_timeout", None)
 
     @property
     def unique(self):
-        return self._data.get('unique', False)
+        return self._data.get("unique", False)
 
     @property
     def unique_key(self):
-        return self._data.get('unique_key')
+        return self._data.get("unique_key")
 
     @property
     def retry_method(self):
-        if 'retry_method' in self._data:
-            retry_func, retry_args = self._data['retry_method']
+        if "retry_method" in self._data:
+            retry_func, retry_args = self._data["retry_method"]
             return retry_func, retry_args
         else:
             return None
 
     @property
     def retry_on(self):
-        return self._data.get('retry_on')
+        return self._data.get("retry_on")
 
     def should_retry_on(self, exception_class, logger=None):
         """
@@ -213,7 +213,7 @@ class Task(object):
             except TaskImportError:
                 if logger:
                     logger.error(
-                        'should_retry_on could not import class',
+                        "should_retry_on could not import class",
                         exception_name=n,
                     )
         return False
@@ -226,7 +226,7 @@ class Task(object):
 
     @property
     def serialized_runner_class(self):
-        return self._data.get('runner_class')
+        return self._data.get("runner_class")
 
     @property
     def ts(self):
@@ -290,7 +290,7 @@ class Task(object):
                 else:
                     check_states = {ERROR}
                 scripts.delete_if_not_in_zsets(
-                    _key('task', self.id, 'executions'),
+                    _key("task", self.id, "executions"),
                     self.id,
                     [_key(state, queue) for state in check_states],
                     client=pipeline,
@@ -300,27 +300,27 @@ class Task(object):
                 check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED}
                 check_states.remove(from_state)
                 scripts.delete_if_not_in_zsets(
-                    _key('task', self.id),
+                    _key("task", self.id),
                     self.id,
                     [_key(state, queue) for state in check_states],
                     client=pipeline,
                 )
             else:
                 # Safe to remove
-                pipeline.delete(_key('task', self.id, 'executions'))
-                pipeline.delete(_key('task', self.id))
+                pipeline.delete(_key("task", self.id, "executions"))
+                pipeline.delete(_key("task", self.id))
 
         scripts.srem_if_not_exists(
             _key(from_state), queue, _key(from_state, queue), client=pipeline
         )
 
         if to_state == QUEUED and self.tiger.config["PUBLISH_QUEUED_TASKS"]:
-            pipeline.publish(_key('activity'), queue)
+            pipeline.publish(_key("activity"), queue)
 
         try:
             scripts.execute_pipeline(pipeline)
         except redis.ResponseError as e:
-            if '<FAIL_IF_NOT_IN_ZSET>' in e.args[0]:
+            if "<FAIL_IF_NOT_IN_ZSET>" in e.args[0]:
                 raise TaskNotFound(
                     'Task {} not found in queue "{}" in state "{}".'.format(
                         self.id, queue, from_state
@@ -332,20 +332,20 @@ class Task(object):
 
     def execute(self):
         func = self.func
-        is_batch_func = getattr(func, '_task_batch', False)
+        is_batch_func = getattr(func, "_task_batch", False)
 
-        g['current_task_is_batch'] = is_batch_func
-        g['current_tasks'] = [self]
-        g['tiger'] = self.tiger
+        g["current_task_is_batch"] = is_batch_func
+        g["current_tasks"] = [self]
+        g["tiger"] = self.tiger
 
         try:
             runner_class = get_runner_class(self.tiger.log, [self])
             runner = runner_class(self.tiger)
             return runner.run_eager_task(self)
         finally:
-            g['current_task_is_batch'] = None
-            g['current_tasks'] = None
-            g['tiger'] = None
+            g["current_task_is_batch"] = None
+            g["current_tasks"] = None
+            g["tiger"] = None
 
     def delay(self, when=None, max_queue_size=None):
         tiger = self.tiger
@@ -353,10 +353,10 @@ class Task(object):
         ts = get_timestamp(when)
 
         now = time.time()
-        self._data['time_last_queued'] = now
+        self._data["time_last_queued"] = now
 
         if max_queue_size is None:
-            max_queue_size = self._data.get('max_queue_size')
+            max_queue_size = self._data.get("max_queue_size")
 
         if not ts or ts <= now:
             # Immediately queue if the timestamp is in the past.
@@ -374,24 +374,24 @@ class Task(object):
             # the queue size is at the max
             queue_size = tiger.get_total_queue_size(self.queue)
             if queue_size >= max_queue_size:
-                raise QueueFullException('Queue size: {}'.format(queue_size))
+                raise QueueFullException("Queue size: {}".format(queue_size))
 
-        if tiger.config['ALWAYS_EAGER'] and state == QUEUED:
+        if tiger.config["ALWAYS_EAGER"] and state == QUEUED:
             return self.execute()
 
         pipeline = tiger.connection.pipeline()
         pipeline.sadd(tiger._key(state), self.queue)
-        pipeline.set(tiger._key('task', self.id), serialized_task)
+        pipeline.set(tiger._key("task", self.id), serialized_task)
         # In case of unique tasks, don't update the score.
         tiger.scripts.zadd(
             tiger._key(state, self.queue),
             ts,
             self.id,
-            mode='nx',
+            mode="nx",
             client=pipeline,
         )
         if state == QUEUED and tiger.config["PUBLISH_QUEUED_TASKS"]:
-            pipeline.publish(tiger._key('activity'), self.queue)
+            pipeline.publish(tiger._key("activity"), self.queue)
         pipeline.execute()
 
         self._state = state
@@ -409,7 +409,7 @@ class Task(object):
 
         pipeline = tiger.connection.pipeline()
         key = tiger._key(SCHEDULED, self.queue)
-        tiger.scripts.zadd(key, ts, self.id, mode='xx', client=pipeline)
+        tiger.scripts.zadd(key, ts, self.id, mode="xx", client=pipeline)
         pipeline.zscore(key, self.id)
         _, score = pipeline.execute()
         if not score:
@@ -422,7 +422,7 @@ class Task(object):
         self._ts = ts
 
     def __repr__(self):
-        return u'<Task %s>' % self.func
+        return u"<Task %s>" % self.func
 
     @classmethod
     def from_id(self, tiger, queue, state, task_id, load_executions=0):
@@ -433,11 +433,11 @@ class Task(object):
         latest). If the task doesn't exist, None is returned.
         """
         pipeline = tiger.connection.pipeline()
-        pipeline.get(tiger._key('task', task_id))
+        pipeline.get(tiger._key("task", task_id))
         pipeline.zscore(tiger._key(state, queue), task_id)
         if load_executions:
             pipeline.lrange(
-                tiger._key('task', task_id, 'executions'), -load_executions, -1
+                tiger._key("task", task_id, "executions"), -load_executions, -1
             )
             (
                 serialized_data,
@@ -460,7 +460,7 @@ class Task(object):
                 _ts=datetime.datetime.utcfromtimestamp(score),
             )
         else:
-            raise TaskNotFound('Task {} not found.'.format(task_id))
+            raise TaskNotFound("Task {} not found.".format(task_id))
 
     @classmethod
     def tasks_from_queue(
@@ -489,10 +489,10 @@ class Task(object):
             ]
             if load_executions:
                 pipeline = tiger.connection.pipeline()
-                pipeline.mget([tiger._key('task', item[0]) for item in items])
+                pipeline.mget([tiger._key("task", item[0]) for item in items])
                 for item in items:
                     pipeline.lrange(
-                        tiger._key('task', item[0], 'executions'),
+                        tiger._key("task", item[0], "executions"),
                         -load_executions,
                         -1,
                     )
@@ -518,7 +518,7 @@ class Task(object):
                     tasks.append(task)
             else:
                 data = tiger.connection.mget(
-                    [tiger._key('task', item[0]) for item in items]
+                    [tiger._key("task", item[0]) for item in items]
                 )
                 for serialized_data, ts in zip(data, tss):
                     data = json.loads(serialized_data)
@@ -532,18 +532,18 @@ class Task(object):
     @classmethod
     def queue_from_function(cls, func, tiger):
         """Get queue from function."""
-        return getattr(func, '_task_queue', tiger.config['DEFAULT_QUEUE'])
+        return getattr(func, "_task_queue", tiger.config["DEFAULT_QUEUE"])
 
     def n_executions(self):
         """
         Queries and returns the number of past task executions.
         """
         pipeline = self.tiger.connection.pipeline()
-        pipeline.exists(self.tiger._key('task', self.id))
-        pipeline.llen(self.tiger._key('task', self.id, 'executions'))
+        pipeline.exists(self.tiger._key("task", self.id))
+        pipeline.llen(self.tiger._key("task", self.id, "executions"))
         exists, n_executions = pipeline.execute()
         if not exists:
-            raise TaskNotFound('Task {} not found.'.format(self.id))
+            raise TaskNotFound("Task {} not found.".format(self.id))
         return n_executions
 
     def retry(self):
@@ -598,7 +598,7 @@ class Task(object):
             # recalculate the unique id so that malformed ids don't persist
             # between executions
             task = self.clone()
-            task._data['id'] = gen_unique_id(
+            task._data["id"] = gen_unique_id(
                 task.serialized_func, task.args, task.kwargs
             )
             task.delay(when=when)

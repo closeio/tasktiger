@@ -52,7 +52,7 @@ class StatsThread(threading.Thread):
             utilization = 100.0 / time_total * time_busy
             with g_fork_lock:
                 self.tiger.log.info(
-                    'stats',
+                    "stats",
                     time_total=time_total,
                     time_busy=time_busy,
                     utilization=utilization,
@@ -60,7 +60,7 @@ class StatsThread(threading.Thread):
 
     def run(self):
         while True:
-            self._stop_event.wait(self.tiger.config['STATS_INTERVAL'])
+            self._stop_event.wait(self.tiger.config["STATS_INTERVAL"])
             if self._stop_event.isSet():
                 break
             self.compute_stats()
