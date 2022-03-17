@@ -1,0 +1,15 @@
+# Docs: https://help.github.com/en/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  # Enable version updates for python
+  - package-ecosystem: "pip"
+    directory: "/"
+    open-pull-requests-limit: 5
+    schedule:
+      interval: "weekly"
+    pull-request-branch-name:
+      # so it's compatible with docker tags
+      separator: "-"
+    assignees:
+      - AlecRosenbaum
