@@ -2,7 +2,7 @@ from .task import Task
 from .worker import Worker
 
 
-__all__ = ['TaskTigerTestMixin']
+__all__ = ["TaskTigerTestMixin"]
 
 
 class TaskTigerTestMixin(object):
@@ -18,17 +18,17 @@ class TaskTigerTestMixin(object):
         Worker(tiger, **kwargs).run(once=True)
 
         # Print any TaskTiger failures for debugging purposes.
-        prefix = tiger.config['REDIS_PREFIX']
-        state = 'error'
+        prefix = tiger.config["REDIS_PREFIX"]
+        state = "error"
         has_errors = False
-        for queue in tiger.connection.smembers('{}:{}'.format(prefix, state)):
+        for queue in tiger.connection.smembers("{}:{}".format(prefix, state)):
             n_tasks, tasks = Task.tasks_from_queue(
                 tiger, queue, state, load_executions=1
             )
             for task in tasks:
-                print('')
-                print(task, 'failed:')
-                print(task.executions[0]['traceback'])
+                print("")
+                print(task, "failed:")
+                print(task.executions[0]["traceback"])
                 has_errors = True
         if has_errors and raise_on_errors:
-            raise Exception('One or more tasks have failed.')
+            raise Exception("One or more tasks have failed.")

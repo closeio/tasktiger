@@ -32,10 +32,10 @@ class TestSemaphore:
         """Test semaphore."""
 
         semaphore1 = Semaphore(
-            self.conn, 'test_key', 'id_1', max_locks=1, timeout=10
+            self.conn, "test_key", "id_1", max_locks=1, timeout=10
         )
         semaphore2 = Semaphore(
-            self.conn, 'test_key', 'id_2', max_locks=1, timeout=10
+            self.conn, "test_key", "id_2", max_locks=1, timeout=10
         )
 
         # Get lock and then release
@@ -65,13 +65,13 @@ class TestSemaphore:
 
     def test_multiple_locks(self):
         semaphore1 = Semaphore(
-            self.conn, 'test_key', 'id_1', max_locks=2, timeout=10
+            self.conn, "test_key", "id_1", max_locks=2, timeout=10
         )
         semaphore2 = Semaphore(
-            self.conn, 'test_key', 'id_2', max_locks=2, timeout=10
+            self.conn, "test_key", "id_2", max_locks=2, timeout=10
         )
         semaphore3 = Semaphore(
-            self.conn, 'test_key', 'id_3', max_locks=2, timeout=10
+            self.conn, "test_key", "id_3", max_locks=2, timeout=10
         )
 
         # First two locks should be acquired
@@ -100,10 +100,10 @@ class TestSemaphore:
 
     def test_semaphores_renew(self):
         semaphore1 = Semaphore(
-            self.conn, 'test_key', 'id_1', max_locks=1, timeout=10
+            self.conn, "test_key", "id_1", max_locks=1, timeout=10
         )
         semaphore2 = Semaphore(
-            self.conn, 'test_key', 'id_2', max_locks=1, timeout=10
+            self.conn, "test_key", "id_2", max_locks=1, timeout=10
         )
 
         with FreezeTime(datetime.datetime(2014, 1, 1)):
@@ -136,15 +136,15 @@ class TestSemaphore:
         assert locks == 1
 
     # Test system lock shorter and longer than regular lock timeout
-    @pytest.mark.parametrize('timeout', [8, 30])
+    @pytest.mark.parametrize("timeout", [8, 30])
     def test_system_lock(self, timeout):
         semaphore1 = Semaphore(
-            self.conn, 'test_key', 'id_1', max_locks=10, timeout=10
+            self.conn, "test_key", "id_1", max_locks=10, timeout=10
         )
 
         with FreezeTime(datetime.datetime(2014, 1, 1)):
-            Semaphore.set_system_lock(self.conn, 'test_key', timeout)
-            ttl = Semaphore.get_system_lock(self.conn, 'test_key')
+            Semaphore.set_system_lock(self.conn, "test_key", timeout)
+            ttl = Semaphore.get_system_lock(self.conn, "test_key")
             assert ttl == time.time() + timeout
 
             # Should be blocked by system lock

@@ -10,15 +10,15 @@ from .config import DELAY, TEST_DB, REDIS_HOST
 TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when
     # doing a single worker run.
-    'ACTIVE_TASK_UPDATE_TIMEOUT': 2 * DELAY,
-    'BATCH_QUEUES': {'batch': 3},
-    'DEFAULT_RETRY_METHOD': fixed(DELAY, 2),
-    'EXCLUDE_QUEUES': ['periodic_ignore'],
-    'LOCK_RETRY': DELAY * 2.0,
-    'QUEUE_SCHEDULED_TASKS_TIME': DELAY,
-    'REQUEUE_EXPIRED_TASKS_INTERVAL': DELAY,
-    'SELECT_TIMEOUT': 0,
-    'SINGLE_WORKER_QUEUES': ['swq'],
+    "ACTIVE_TASK_UPDATE_TIMEOUT": 2 * DELAY,
+    "BATCH_QUEUES": {"batch": 3},
+    "DEFAULT_RETRY_METHOD": fixed(DELAY, 2),
+    "EXCLUDE_QUEUES": ["periodic_ignore"],
+    "LOCK_RETRY": DELAY * 2.0,
+    "QUEUE_SCHEDULED_TASKS_TIME": DELAY,
+    "REQUEUE_EXPIRED_TASKS_INTERVAL": DELAY,
+    "SELECT_TIMEOUT": 0,
+    "SINGLE_WORKER_QUEUES": ["swq"],
 }
 
 
@@ -50,7 +50,7 @@ def setup_structlog():
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
     )
-    logging.basicConfig(format='%(message)s')
+    logging.basicConfig(format="%(message)s")
 
 
 def get_redis():

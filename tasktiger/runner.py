@@ -56,17 +56,17 @@ class DefaultRunner(BaseRunner):
             task.func(*task.args, **task.kwargs)
 
     def run_batch_tasks(self, tasks, hard_timeout):
-        params = [{'args': task.args, 'kwargs': task.kwargs} for task in tasks]
+        params = [{"args": task.args, "kwargs": task.kwargs} for task in tasks]
         func = tasks[0].func
         with UnixSignalDeathPenalty(hard_timeout):
             func(params)
 
     def run_eager_task(self, task):
         func = task.func
-        is_batch_func = getattr(func, '_task_batch', False)
+        is_batch_func = getattr(func, "_task_batch", False)
 
         if is_batch_func:
-            return func([{'args': task.args, 'kwargs': task.kwargs}])
+            return func([{"args": task.args, "kwargs": task.kwargs}])
         else:
             return func(*task.args, **task.kwargs)
 
@@ -85,6 +85,6 @@ def get_runner_class(log, tasks):
         try:
             return import_attribute(runner_class_path)
         except TaskImportError:
-            log.error('could not import runner class', func=retry_func)
+            log.error("could not import runner class", func=retry_func)
             raise
     return DefaultRunner

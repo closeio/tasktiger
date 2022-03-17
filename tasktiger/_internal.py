@@ -12,10 +12,10 @@ from .exceptions import TaskImportError
 
 # Task states (represented by different queues)
 # Note some client code may rely on the string values (e.g. get_queue_stats).
-QUEUED = 'queued'
-ACTIVE = 'active'
-SCHEDULED = 'scheduled'
-ERROR = 'error'
+QUEUED = "queued"
+ACTIVE = "active"
+SCHEDULED = "scheduled"
+ERROR = "error"
 
 # This lock is acquired in the main process when forking, and must be acquired
 # in any thread of the main process when performing an operation that triggers a
@@ -31,13 +31,13 @@ g_fork_lock = threading.Lock()
 # Global task context. We store this globally (and not on the TaskTiger
 # instance) for consistent results just in case the user has multiple TaskTiger
 # instances.
-g = {'tiger': None, 'current_task_is_batch': None, 'current_tasks': None}
+g = {"tiger": None, "current_task_is_batch": None, "current_tasks": None}
 
 # from rq
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
     try:
-        sep = ':' if ':' in name else '.'  # For backwards compatibility
+        sep = ":" if ":" in name else "."  # For backwards compatibility
         module_name, attribute = name.rsplit(sep, 1)
         module = importlib.import_module(module_name)
         return operator.attrgetter(attribute)(module)
@@ -49,7 +49,7 @@ def gen_id():
     """
     Generates and returns a random hex-encoded 256-bit unique ID.
     """
-    return binascii.b2a_hex(os.urandom(32)).decode('utf8')
+    return binascii.b2a_hex(os.urandom(32)).decode("utf8")
 
 
 def gen_unique_id(serialized_name, args, kwargs):
@@ -59,9 +59,9 @@ def gen_unique_id(serialized_name, args, kwargs):
     """
     return hashlib.sha256(
         json.dumps(
-            {'func': serialized_name, 'args': args, 'kwargs': kwargs},
+            {"func": serialized_name, "args": args, "kwargs": kwargs},
             sort_keys=True,
-        ).encode('utf8')
+        ).encode("utf8")
     ).hexdigest()
 
 
@@ -69,17 +69,17 @@ def serialize_func_name(func):
     """
     Returns the dotted serialized path to the passed function.
     """
-    if func.__module__ == '__main__':
+    if func.__module__ == "__main__":
         raise ValueError(
-            'Functions from the __main__ module cannot be processed by '
-            'workers.'
+            "Functions from the __main__ module cannot be processed by "
+            "workers."
         )
     try:
         # This will only work on Python 3.3 or above, but it will allow us to use static/classmethods
         func_name = func.__qualname__
     except AttributeError:
         func_name = func.__name__
-    return ':'.join([func.__module__, func_name])
+    return ":".join([func.__module__, func_name])
 
 
 def dotted_parts(s):
@@ -88,7 +88,7 @@ def dotted_parts(s):
     """
     idx = -1
     while s:
-        idx = s.find('.', idx + 1)
+        idx = s.find(".", idx + 1)
         if idx == -1:
             yield s
             break
@@ -103,7 +103,7 @@ def reversed_dotted_parts(s):
     if s:
         yield s
     while s:
-        idx = s.rfind('.', 0, idx)
+        idx = s.rfind(".", 0, idx)
         if idx == -1:
             break
         yield s[:idx]
@@ -143,14 +143,14 @@ def queue_matches(queue, only_queues=None, exclude_queues=None):
     # Check arguments to prevent a common footgun of passing 'my_queue' instead
     # of ``['my_queue']``
     error_template = (
-        '{kwarg} should be an iterable of strings, not a string directly. '
-        'Did you mean `{kwarg}=[\'{val}\']`?'
+        "{kwarg} should be an iterable of strings, not a string directly. "
+        "Did you mean `{kwarg}=['{val}']`?"
     )
     assert not isinstance(only_queues, str), error_template.format(
-        kwarg='queues', val=only_queues
+        kwarg="queues", val=only_queues
     )
     assert not isinstance(exclude_queues, str), error_template.format(
-        kwarg='exclude_queues', val=exclude_queues
+        kwarg="exclude_queues", val=exclude_queues
     )
 
     only_queues = only_queues or []

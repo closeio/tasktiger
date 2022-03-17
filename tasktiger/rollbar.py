@@ -17,17 +17,17 @@ class StructlogRollbarHandler(RollbarHandler):
 
     def format_title(self, data):
         # Keys used to construct the title and for grouping purposes.
-        KEYS = ['event', 'func', 'exception_name', 'queue']
+        KEYS = ["event", "func", "exception_name", "queue"]
 
         def format_field(field, value):
-            if field == 'queue':
-                return '%s=%s' % (field, value.split('.')[0])
+            if field == "queue":
+                return "%s=%s" % (field, value.split(".")[0])
             else:
-                return '%s=%s' % (field, value)
+                return "%s=%s" % (field, value)
 
-        return '%s: %s' % (
+        return "%s: %s" % (
             self.prefix,
-            ' '.join(
+            " ".join(
                 format_field(key, data[key]) for key in KEYS if key in data
             ),
         )
@@ -46,10 +46,10 @@ class StructlogRollbarHandler(RollbarHandler):
             return super(StructlogRollbarHandler, self).emit(record)
 
         # Title and grouping
-        data['title'] = data['fingerprint'] = self.format_title(data)
+        data["title"] = data["fingerprint"] = self.format_title(data)
 
         uuid = rollbar.report_message(
-            message=data.pop('traceback', data['title']),
+            message=data.pop("traceback", data["title"]),
             level=level,
             request=rollbar.get_request(),
             extra_data={},
