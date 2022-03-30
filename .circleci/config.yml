@@ -19,7 +19,7 @@ defaults: &defaults
   - checkout
   - run:
       name: Install dependencies
-      command: sudo pip install -r requirements.txt -r requirements-test.txt
+      command: pip install -r requirements.txt -r requirements-test.txt
   - run:
       name: Test
       command: pytest
@@ -28,32 +28,32 @@ jobs:
   test-3.7:
     <<: *defaults
     docker:
-    - image: circleci/python:3.7
-    - image: redis:4.0.6
+    - image: cimg/python:3.7
+    - image: redis:5
   test-3.8:
     <<: *defaults
     docker:
-    - image: circleci/python:3.8
-    - image: redis:4.0.6
+    - image: cimg/python:3.8
+    - image: redis:5
   test-3.9:
     <<: *defaults
     docker:
-      - image: circleci/python:3.9
-      - image: redis:4.0.6
+      - image: cimg/python:3.9
+      - image: redis:5
   test-3.10:
     <<: *defaults
     docker:
-      - image: circleci/python:3.10
-      - image: redis:4.0.6
+      - image: cimg/python:3.10
+      - image: redis:5
   black:
     working_directory: ~/code
     docker:
-    - image: circleci/python:3.8
+    - image: cimg/python:3.8
     steps:
       - checkout
       - run:
           name: Install dependencies
-          command: sudo pip install black==19.10b0 regex==2019.11.1
+          command: pip install black==19.10b0 regex==2019.11.1
       - run:
           name: Check formatting
           command: black --check .
