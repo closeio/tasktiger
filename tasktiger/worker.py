@@ -1053,6 +1053,8 @@ class Worker(object):
 
                 log_context.update(
                     {
+                        "task_args": task.args,
+                        "task_kwargs": task.kwargs,
                         "time_failed": execution.get("time_failed"),
                         "traceback": execution.get("traceback"),
                         "exception_name": execution.get("exception_name"),
