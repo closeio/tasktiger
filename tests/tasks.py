@@ -176,6 +176,11 @@ def sleep_task(delay=10):
     time.sleep(delay)
 
 
+@tiger.task(hard_timeout=1)
+def decorated_task_sleep_timeout(delay=10):
+    time.sleep(delay)
+
+
 @tiger.task(max_queue_size=1)
 def decorated_task_max_queue_size(*args, **kwargs):
     pass

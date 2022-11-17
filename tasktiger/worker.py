@@ -511,11 +511,17 @@ class Worker(object):
 
         # The tasks must use the same function.
         assert len(tasks)
-        task_func = tasks[0].serialized_func
-        assert all([task_func == task.serialized_func for task in tasks[1:]])
+        serialized_task_func = tasks[0].serialized_func
+        task_func = tasks[0].func
+        assert all(
+            [
+                serialized_task_func == task.serialized_func
+                for task in tasks[1:]
+            ]
+        )
 
         # Before executing periodic tasks, queue them for the next period.
-        if task_func in self.tiger.periodic_task_funcs:
+        if serialized_task_func in self.tiger.periodic_task_funcs:
             tasks[0]._queue_for_next_period()
 
         with g_fork_lock:
@@ -551,7 +557,7 @@ class Worker(object):
             for task in tasks:
                 log.info(
                     "processing",
-                    func=task_func,
+                    func=serialized_task_func,
                     task_id=task.id,
                     params={"args": task.args, "kwargs": task.kwargs},
                 )

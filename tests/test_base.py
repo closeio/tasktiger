@@ -27,6 +27,7 @@ from .tasks import (
     batch_task,
     decorated_task,
     decorated_task_simple_func,
+    decorated_task_sleep_timeout,
     exception_task,
     file_args_task,
     locked_task,
@@ -1310,6 +1311,68 @@ class TestReliability(BaseTestCase):
             JobTimeoutException
         )
         assert not execution["success"]
+
+    def test_decorated_child_hard_timeout_precedence(self):
+        """
+        Ensure the children's `hard_timeout` will take precendece
+        over the `DEFAULT_HARD_TIMEOUT` + `ACTIVE_TASK_UPDATE_TIMEOUT`,
+        even when it's the parent who enforces it.
+        """
+        import psutil
+
+        decorated_task_sleep_timeout.delay()
+        self._ensure_queues(queued={"default": 1})
+
+        # Set DEFAULT_HARD_TIMEOUT so it's higher than hard_timeout
+        # and the task's duration.
+        # Set ACTIVE_TASK_UPDATE_TIMEOUT to 0 so there's no "padding"
+        DEFAULT_HARD_TIMEOUT = 15
+        # Start a worker and wait until it starts processing.
+        worker = Process(
+            target=external_worker,
+            kwargs={
+                "patch_config": {
+                    "DEFAULT_HARD_TIMEOUT": DEFAULT_HARD_TIMEOUT,
+                    "ACTIVE_TASK_UPDATE_TIMER": 1,
+                    "ACTIVE_TASK_UPDATE_TIMEOUT": 0,
+                }
+            },
+        )
+        worker.start()
+        time.sleep(DELAY)
+
+        # Get the PID of the worker subprocess actually executing the task
+        current_process = psutil.Process(pid=worker.pid)
+        current_children = current_process.children()
+        assert len(current_children) == 1
+
+        # Pause the child while it's still processing the task.
+        current_children[0].suspend()
+
+        # The parent will eventually kill the child.
+        worker.join()
+        assert worker.exitcode == 0
+        assert not current_children[0].is_running()
+
+        # Ensure we have an errored task and execution.
+        queues = self._ensure_queues(error={"default": 1})
+        task = queues["error"]["default"][0]
+        assert task["func"] == "tests.tasks:decorated_task_sleep_timeout"
+
+        executions = self.conn.lrange(
+            "t:task:%s:executions" % task["id"], 0, -1
+        )
+        assert len(executions) == 1
+        execution = json.loads(executions[0])
+        assert execution["exception_name"] == serialize_func_name(
+            JobTimeoutException
+        )
+        assert not execution["success"]
+        # Ensure that task duration is lower than DEFAULT_HARD_TIMEOUT
+        assert (
+            execution["time_failed"] - execution["time_started"]
+            < DEFAULT_HARD_TIMEOUT
+        )
 
 
 class TestRunnerClass(BaseTestCase):
