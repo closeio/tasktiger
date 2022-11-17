@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 0.16.1
+
+### Other changes
+
+* Add function name to tasktiger done log messages ([203](https://github.com/closeio/tasktiger/pull/203))
+* Add task args / kwargs to the task_error log statement ([215](https://github.com/closeio/tasktiger/pull/215))
+* Fix `hard_timeout` in parent process when stored on task function ([235](https://github.com/closeio/tasktiger/pull/235))
+
 ## Version 0.16
 
 ### Other changes
