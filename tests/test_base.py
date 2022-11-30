@@ -739,19 +739,33 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"batch": 0})
 
-    def test_only_queues(self):
+    @pytest.mark.parametrize(
+        "only_queues,expected_unprocessed",
+        [
+            (["a"], {"b": 1, "b.a": 1, "c": 2}),
+            (["a", "b"], {"c": 2}),
+            (["a", "c"], {"b": 1, "b.a": 1}),
+            (["a", "b", "c"], {}),  # all queues selected, all queues processed
+            ([], {}),  # no queue restriction, all queues processed
+        ],
+    )
+    def test_only_queues(self, only_queues, expected_unprocessed):
         self.tiger.delay(simple_task, queue="a")
         self.tiger.delay(simple_task, queue="a.a")
         self.tiger.delay(simple_task, queue="b")
         self.tiger.delay(simple_task, queue="b.a")
+        self.tiger.delay(simple_task, queue="c")
+        self.tiger.delay(simple_task, queue="c")
 
-        self._ensure_queues(queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1})
+        self._ensure_queues(
+            queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1, "c": 2}
+        )
 
-        self.tiger.config["ONLY_QUEUES"] = ["a"]
+        self.tiger.config["ONLY_QUEUES"] = only_queues
 
         Worker(self.tiger).run(once=True)
 
-        self._ensure_queues(queued={"b": 1, "b.a": 1})
+        self._ensure_queues(queued=expected_unprocessed)
 
     def test_exclude_queues(self):
         """

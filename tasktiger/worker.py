@@ -3,6 +3,7 @@ from contextlib import ExitStack
 import errno
 import fcntl
 import random
+import re
 import select
 import signal
 import socket
@@ -1156,9 +1157,27 @@ class Worker(object):
             )
 
     def _refresh_queue_set(self):
-        self._queue_set = set(
-            self._filter_queues(self.connection.smembers(self._key(QUEUED)))
-        )
+        self._queue_set = set(self._filter_queues(self._retrieve_queues()))
+
+    def _retrieve_queues(self):
+        key = self._key(QUEUED)
+
+        if len(self.only_queues) != 1:
+            return self.connection.smembers(key)
+
+        # Escape special characters in the queue
+        match = re.sub(r"([?*\[\]])", r"\\\1", list(self.only_queues)[0]) + "*"
+
+        result = set()
+        cursor = None
+
+        while cursor != 0:
+            cursor, items = self.connection.sscan(
+                key, cursor=cursor or 0, match=match, count=100000
+            )
+            result.update(items)
+
+        return result
 
     def run(self, once=False, force_once=False):
         """
