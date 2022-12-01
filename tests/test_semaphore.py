@@ -2,11 +2,11 @@
 import datetime
 import time
 
+import pytest
 from freezefrog import FreezeTime
 
-import pytest
-
 from tasktiger.redis_semaphore import Semaphore
+
 from .utils import get_tiger
 
 

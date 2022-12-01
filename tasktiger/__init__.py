@@ -1,5 +1,13 @@
 from __future__ import absolute_import
 
+from ._internal import *
+from .exceptions import *
+from .retry import *
+from .schedule import *
+from .task import Task
+from .tasktiger import TaskTiger, run_worker
+from .worker import Worker
+
 __all__ = [
     "TaskTiger",
     "Worker",
@@ -17,14 +25,6 @@ __all__ = [
     # Schedules
     "periodic",
 ]
-
-from ._internal import *
-from .exceptions import *
-from .retry import *
-from .schedule import *
-from .task import Task
-from .tasktiger import TaskTiger, run_worker
-from .worker import Worker
 
 
 if __name__ == "__main__":

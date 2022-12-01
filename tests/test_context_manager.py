@@ -3,9 +3,9 @@ import redis
 
 from tasktiger import Worker
 
+from .config import REDIS_HOST, TEST_DB
 from .tasks import exception_task, simple_task
 from .test_base import BaseTestCase
-from .config import TEST_DB, REDIS_HOST
 
 
 class ContextManagerTester(object):

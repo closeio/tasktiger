@@ -4,7 +4,7 @@ import redis
 
 from tasktiger.schedule import periodic
 
-from .config import TEST_DB, REDIS_HOST
+from .config import REDIS_HOST, TEST_DB
 from .utils import get_tiger
 
 tiger = get_tiger()

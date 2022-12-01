@@ -1,6 +1,6 @@
 import json
-from math import ceil
 import time
+from math import ceil
 
 import redis
 
@@ -8,9 +8,8 @@ from tasktiger import RetryException, TaskTiger
 from tasktiger.retry import fixed
 from tasktiger.runner import BaseRunner, DefaultRunner
 
-from .config import DELAY, TEST_DB, REDIS_HOST
+from .config import DELAY, REDIS_HOST, TEST_DB
 from .utils import get_tiger
-
 
 LONG_TASK_SIGNAL_KEY = "long_task_ok"
 
