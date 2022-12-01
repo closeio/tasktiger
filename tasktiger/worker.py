@@ -24,6 +24,7 @@ from .task import Task
 from .timeouts import JobTimeoutException
 
 LOCK_REDIS_KEY = "qslock"
+REDIS_GLOB_CHARACTER_PATTERN = re.compile(r"([?*\[\]])")
 
 __all__ = ["Worker"]
 
@@ -1165,19 +1166,15 @@ class Worker(object):
         if len(self.only_queues) != 1:
             return self.connection.smembers(key)
 
-        # Escape special characters in the queue
-        match = re.sub(r"([?*\[\]])", r"\\\1", list(self.only_queues)[0]) + "*"
-
-        result = set()
-        cursor = None
-
-        while cursor != 0:
-            cursor, items = self.connection.sscan(
-                key, cursor=cursor or 0, match=match, count=100000
+        # Escape special Redis glob characters in the queue name
+        match = (
+            REDIS_GLOB_CHARACTER_PATTERN.sub(
+                r"\\\1", list(self.only_queues)[0]
             )
-            result.update(items)
+            + "*"
+        )
 
-        return result
+        return set(self.connection.sscan_iter(key, match=match, count=100000))
 
     def run(self, once=False, force_once=False):
         """

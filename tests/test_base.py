@@ -742,11 +742,16 @@ class TestCase(BaseTestCase):
     @pytest.mark.parametrize(
         "only_queues,expected_unprocessed",
         [
-            (["a"], {"b": 1, "b.a": 1, "c": 2}),
-            (["a", "b"], {"c": 2}),
-            (["a", "c"], {"b": 1, "b.a": 1}),
-            (["a", "b", "c"], {}),  # all queues selected, all queues processed
-            ([], {}),  # no queue restriction, all queues processed
+            (["a"], {"b": 1, "b.a": 1, "[ab]*?": 2}),
+            (["a", "b"], {"[ab]*?": 2}),
+            (["a", "[ab]*?"], {"b": 1, "b.a": 1}),
+            # tests that queue prefiltering works correctly with queues
+            # containing special characters used in Redis glob patterns
+            (["[ab]*?"], {"a": 1, "a.a": 1, "b": 1, "b.a": 1}),
+            # all queues selected, all queues processed
+            (["a", "b", "[ab]*?"], {}),
+            # no queue restriction, all queues processed
+            ([], {}),
         ],
     )
     def test_only_queues(self, only_queues, expected_unprocessed):
@@ -754,11 +759,11 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task, queue="a.a")
         self.tiger.delay(simple_task, queue="b")
         self.tiger.delay(simple_task, queue="b.a")
-        self.tiger.delay(simple_task, queue="c")
-        self.tiger.delay(simple_task, queue="c")
+        self.tiger.delay(simple_task, queue="[ab]*?")
+        self.tiger.delay(simple_task, queue="[ab]*?")
 
         self._ensure_queues(
-            queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1, "c": 2}
+            queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1, "[ab]*?": 2}
         )
 
         self.tiger.config["ONLY_QUEUES"] = only_queues
