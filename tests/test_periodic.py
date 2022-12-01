@@ -3,16 +3,17 @@
 import datetime
 import time
 
-from tasktiger import Worker, periodic
 from tasktiger import (
-    Task,
-    gen_unique_id,
-    serialize_func_name,
     QUEUED,
     SCHEDULED,
+    Task,
+    Worker,
+    gen_unique_id,
+    periodic,
+    serialize_func_name,
 )
 
-from .tasks_periodic import tiger, periodic_task
+from .tasks_periodic import periodic_task, tiger
 from .test_base import BaseTestCase
 from .utils import sleep_until_next_second
 

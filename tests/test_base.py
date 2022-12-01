@@ -1,13 +1,13 @@
 import datetime
 import json
 import os
-import pytest
 import signal
 import sys
 import tempfile
 import time
 from multiprocessing import Pool, Process
 
+import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import (
@@ -24,6 +24,9 @@ from tasktiger._internal import serialize_func_name
 
 from .config import DELAY
 from .tasks import (
+    MyErrorRunnerClass,
+    MyRunnerClass,
+    StaticTask,
     batch_task,
     decorated_task,
     decorated_task_simple_func,
@@ -33,18 +36,15 @@ from .tasks import (
     locked_task,
     long_task_killed,
     long_task_ok,
-    MyErrorRunnerClass,
-    MyRunnerClass,
     non_batch_task,
     retry_task,
     retry_task_2,
     simple_task,
     sleep_task,
-    StaticTask,
     task_on_other_queue,
-    unique_task,
     unique_exception_task,
     unique_key_task,
+    unique_task,
     verify_current_task,
     verify_current_tasks,
     verify_tasktiger_instance,

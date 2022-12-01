@@ -5,3 +5,15 @@ exclude = '''
     \.git
 )/
 '''
+
+[tool.isort]
+skip = ['.git', 'venv']
+known_tests = ['tests']
+sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', 'FIRSTPARTY', 'TESTS', 'LOCALFOLDER']
+default_section = 'THIRDPARTY'
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+multi_line_output = 3
+line_length = 78
+float_to_top = true

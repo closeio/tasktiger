@@ -1,8 +1,9 @@
 import copy
 import datetime
 import json
-import redis
 import time
+
+import redis
 
 from ._internal import *
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound

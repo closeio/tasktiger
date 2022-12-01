@@ -4,7 +4,8 @@ import logging
 import tempfile
 
 from tasktiger import TaskTiger, Worker
-from tests.utils import setup_structlog, get_redis, TEST_TIGER_CONFIG
+
+from tests.utils import TEST_TIGER_CONFIG, get_redis, setup_structlog
 
 tiger = TaskTiger(lazy_init=True)
 

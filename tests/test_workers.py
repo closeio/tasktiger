@@ -1,8 +1,8 @@
 """Test workers."""
 
 import datetime
-from multiprocessing import Process
 import time
+from multiprocessing import Process
 
 from freezefrog import FreezeTime
 

@@ -1,11 +1,13 @@
 import datetime
 import logging
+import time
+
 import redis
 import structlog
-import time
+
 from tasktiger import TaskTiger, Worker, fixed
 
-from .config import DELAY, TEST_DB, REDIS_HOST
+from .config import DELAY, REDIS_HOST, TEST_DB
 
 TEST_TIGER_CONFIG = {
     # We need this 0 here so we don't pick up scheduled tasks when

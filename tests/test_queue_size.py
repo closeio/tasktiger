@@ -1,10 +1,10 @@
 """Test max queue size limits."""
 
-from multiprocessing import Process
 import datetime
 import os
 import signal
 import time
+from multiprocessing import Process
 
 import pytest
 

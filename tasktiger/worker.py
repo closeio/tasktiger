@@ -1,5 +1,3 @@
-from collections import OrderedDict
-from contextlib import ExitStack
 import errno
 import fcntl
 import random
@@ -10,6 +8,8 @@ import sys
 import time
 import traceback
 import uuid
+from collections import OrderedDict
+from contextlib import ExitStack
 
 from redis.exceptions import LockError
 

@@ -6,8 +6,7 @@ from tasktiger import TaskTiger, Worker
 from tasktiger.logging import tasktiger_processor
 
 from .test_base import BaseTestCase
-from .utils import get_tiger, get_redis
-
+from .utils import get_redis, get_tiger
 
 tiger = get_tiger()
 
