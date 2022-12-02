@@ -24,7 +24,7 @@ from .task import Task
 from .timeouts import JobTimeoutException
 
 LOCK_REDIS_KEY = "qslock"
-REDIS_GLOB_CHARACTER_PATTERN = re.compile(r"([?*\[\]])")
+REDIS_GLOB_CHARACTER_PATTERN = re.compile(r"([\\?*\[\]])")
 
 __all__ = ["Worker"]
 
