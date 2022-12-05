@@ -1,6 +1,7 @@
 import errno
 import fcntl
 import random
+import re
 import select
 import signal
 import socket
@@ -23,6 +24,7 @@ from .task import Task
 from .timeouts import JobTimeoutException
 
 LOCK_REDIS_KEY = "qslock"
+REDIS_GLOB_CHARACTER_PATTERN = re.compile(r"([\\?*\[\]])")
 
 __all__ = ["Worker"]
 
@@ -1156,9 +1158,23 @@ class Worker(object):
             )
 
     def _refresh_queue_set(self):
-        self._queue_set = set(
-            self._filter_queues(self.connection.smembers(self._key(QUEUED)))
+        self._queue_set = set(self._filter_queues(self._retrieve_queues()))
+
+    def _retrieve_queues(self):
+        key = self._key(QUEUED)
+
+        if len(self.only_queues) != 1:
+            return self.connection.smembers(key)
+
+        # Escape special Redis glob characters in the queue name
+        match = (
+            REDIS_GLOB_CHARACTER_PATTERN.sub(
+                r"\\\1", list(self.only_queues)[0]
+            )
+            + "*"
         )
+
+        return set(self.connection.sscan_iter(key, match=match, count=100000))
 
     def run(self, once=False, force_once=False):
         """
