@@ -172,7 +172,7 @@ class Worker(object):
                 return
 
         queues = set(
-            self._filter_queues(self.connection.smembers(self._key(SCHEDULED)))
+            self._filter_queues(self._retrieve_queues(self._key(SCHEDULED)))
         )
 
         now = time.time()
@@ -1158,11 +1158,11 @@ class Worker(object):
             )
 
     def _refresh_queue_set(self):
-        self._queue_set = set(self._filter_queues(self._retrieve_queues()))
+        self._queue_set = set(
+            self._filter_queues(self._retrieve_queues(self._key(QUEUED)))
+        )
 
-    def _retrieve_queues(self):
-        key = self._key(QUEUED)
-
+    def _retrieve_queues(self, key):
         if len(self.only_queues) != 1:
             return self.connection.smembers(key)
 
