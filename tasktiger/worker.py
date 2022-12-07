@@ -440,12 +440,8 @@ class Worker(object):
                 )
             execution["success"] = success
             execution["host"] = socket.gethostname()
-            serialized_execution = json.dumps(execution)
-            for task in tasks:
-                self.connection.rpush(
-                    self._key("task", task.id, "executions"),
-                    serialized_execution,
-                )
+
+            self._store_task_execution(tasks, execution)
 
         return success
 
@@ -690,12 +686,7 @@ class Worker(object):
                         "success": False,
                         "host": socket.gethostname(),
                     }
-                    serialized_execution = json.dumps(execution)
-                    for task in tasks:
-                        self.connection.rpush(
-                            self._key("task", task.id, "executions"),
-                            serialized_execution,
-                        )
+                    self._store_task_execution(tasks, execution)
                     break
 
                 try:
@@ -1175,6 +1166,17 @@ class Worker(object):
         )
 
         return set(self.connection.sscan_iter(key, match=match, count=100000))
+
+    def _store_task_execution(self, tasks, execution):
+        serialized_execution = json.dumps(execution)
+
+        for task in tasks:
+            pipeline = self.connection.pipeline()
+            pipeline.incr(self._key("task", task.id, "executions_count"))
+            pipeline.rpush(
+                self._key("task", task.id, "executions"), serialized_execution
+            )
+            pipeline.execute()
 
     def run(self, once=False, force_once=False):
         """

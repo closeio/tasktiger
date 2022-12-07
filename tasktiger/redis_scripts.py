@@ -219,18 +219,18 @@ SREM_IF_NOT_EXISTS = """
     return result
 """
 
-# KEYS = { key, zset1 [, ..., zsetN] }
-# ARGV = { member }
+# KEYS = { del1, [, ..., delN], zset1 [, ..., zsetN] }
+# ARGV = { to_delete_count, value }
 DELETE_IF_NOT_IN_ZSETS = """
     local found = 0
-    for i=2,#KEYS do
-        if redis.call('zscore', KEYS[i], ARGV[1]) then
+    for i=ARGV[1] + 1,#KEYS do
+        if redis.call('zscore', KEYS[i], ARGV[2]) then
             found = 1
             break
         end
     end
     if found == 0 then
-        return redis.call('del', KEYS[1])
+        return redis.call('del', unpack(KEYS, 1, ARGV[1]))
     end
     return 0
 """
@@ -473,13 +473,15 @@ class RedisScripts(object):
             keys=[key, other_key], args=[member], client=client
         )
 
-    def delete_if_not_in_zsets(self, key, member, set_list, client=None):
+    def delete_if_not_in_zsets(self, to_delete, value, zsets, client=None):
         """
-        Removes ``key`` only if ``member`` is not member of any sets in the
-        ``set_list``. Returns the number of removed elements (0 or 1).
+        Removes keys in ``to_delete`` only if ``value`` is not a member of any
+        sorted sets in ``zsets``. Returns the number of removed elements.
         """
         return self._delete_if_not_in_zsets(
-            keys=[key] + set_list, args=[member], client=client
+            keys=to_delete + zsets,
+            args=[len(to_delete), value],
+            client=client,
         )
 
     def fail_if_not_in_zset(self, key, member, client=None):
