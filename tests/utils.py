@@ -90,4 +90,4 @@ def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
 
 def sleep_until_next_second():
     now = datetime.datetime.utcnow()
-    time.sleep(1 - now.microsecond / 10.0 ** 6)
+    time.sleep(1 - now.microsecond / 10.0**6)
