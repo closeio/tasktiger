@@ -6,7 +6,7 @@ import time
 SYSTEM_LOCK_ID = "SYSTEM_LOCK"
 
 
-class Semaphore(object):
+class Semaphore:
     """Semaphore lock using Redis ZSET."""
 
     def __init__(self, redis, name, lock_id, timeout, max_locks=1):

@@ -35,12 +35,12 @@ jobs:
 
       - name: Lint code
         run: |
-          pip install black==22.8.0 "click<8.1"
-          black . --check
+          pip install -c requirements.txt -r requirements-lint.txt
+          lintlizard --ci
 
       - name: Install dependencies
         run: |
-          pip install --requirement requirements.txt --requirement requirements-test.txt
+          pip install -r requirements.txt -r requirements-test.txt
 
       - name: Run tests
         run: pytest

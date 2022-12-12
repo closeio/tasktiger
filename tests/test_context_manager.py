@@ -8,7 +8,7 @@ from .tasks import exception_task, simple_task
 from .test_base import BaseTestCase
 
 
-class ContextManagerTester(object):
+class ContextManagerTester:
     """
     Dummy context manager class.
 

@@ -85,6 +85,9 @@ def get_runner_class(log, tasks):
         try:
             return import_attribute(runner_class_path)
         except TaskImportError:
-            log.error("could not import runner class", func=retry_func)
+            log.error(
+                "could not import runner class",
+                runner_class_path=runner_class_path,
+            )
             raise
     return DefaultRunner

@@ -275,7 +275,7 @@ GET_EXPIRED_TASKS = """
 """
 
 
-class RedisScripts(object):
+class RedisScripts:
     def __init__(self, redis):
         self.redis = redis
 

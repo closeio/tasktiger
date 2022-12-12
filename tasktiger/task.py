@@ -12,7 +12,7 @@ from .runner import get_runner_class
 __all__ = ["Task"]
 
 
-class Task(object):
+class Task:
     def __init__(
         self,
         tiger,

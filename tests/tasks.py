@@ -185,7 +185,7 @@ def decorated_task_max_queue_size(*args, **kwargs):
     pass
 
 
-class StaticTask(object):
+class StaticTask:
     @staticmethod
     def task():
         pass

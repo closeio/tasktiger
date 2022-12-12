@@ -11,7 +11,7 @@ import signal
 from .exceptions import JobTimeoutException
 
 
-class BaseDeathPenalty(object):
+class BaseDeathPenalty:
     """Base class to setup job timeouts."""
 
     def __init__(self, timeout):
