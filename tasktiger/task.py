@@ -423,7 +423,7 @@ class Task(object):
         self._ts = ts
 
     def __repr__(self):
-        return u"<Task %s>" % self.func
+        return "<Task %s>" % self.func
 
     @classmethod
     def from_id(self, tiger, queue, state, task_id, load_executions=0):
