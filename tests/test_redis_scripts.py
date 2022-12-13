@@ -285,22 +285,43 @@ class TestRedisScripts:
         assert self.conn.smembers("set") == {"member"}
 
     def test_delete_if_not_in_zsets_1(self):
-        self.conn.set("key", 0)
+        self.conn.set("foo", 0)
+        self.conn.set("bar", 0)
+        self.conn.set("baz", 0)
+
         self.conn.zadd("z2", {"other": 0})
         result = self.scripts.delete_if_not_in_zsets(
-            "key", "member", ["z1", "z2"]
+            to_delete=["foo", "bar"], value="member", zsets=["z1", "z2"]
         )
-        assert result == 1
-        assert self.conn.exists("key") == 0
+        assert result == 2
+        assert self.conn.exists("foo") == 0
+        assert self.conn.exists("bar") == 0
+        assert self.conn.exists("baz") == 1
+        assert self.conn.exists("z2") == 1
 
     def test_delete_if_not_in_zsets_2(self):
-        self.conn.set("key", 0)
+        self.conn.set("foo", 0)
+        self.conn.set("bar", 0)
+
         self.conn.zadd("z2", {"member": 0})
         result = self.scripts.delete_if_not_in_zsets(
-            "key", "member", ["z1", "z2"]
+            to_delete=["foo", "bar"], value="member", zsets=["z1", "z2"]
         )
         assert result == 0
-        assert self.conn.exists("key") == 1
+        assert self.conn.exists("foo") == 1
+        assert self.conn.exists("bar") == 1
+        assert self.conn.exists("z2") == 1
+
+    def test_delete_if_not_in_zsets_3(self):
+        self.conn.set("foo", 0)
+        self.conn.set("bar", 0)
+
+        result = self.scripts.delete_if_not_in_zsets(
+            to_delete=["foo", "bar"], value="member", zsets=[]
+        )
+        assert result == 2
+        assert self.conn.exists("foo") == 0
+        assert self.conn.exists("bar") == 0
 
     def test_get_expired_tasks(self):
         self.conn.sadd("t:active", "q1", "q2", "q3", "q4")

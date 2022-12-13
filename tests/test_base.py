@@ -624,6 +624,21 @@ class TestCase(BaseTestCase):
 
         pytest.raises(TaskNotFound, task.n_executions)
 
+    @pytest.mark.parametrize("count", [1, 3, 7])
+    def test_retry_executions_count(self, count):
+        task = self.tiger.delay(exception_task, retry_method=fixed(DELAY, 20))
+
+        for __ in range(count):
+            Worker(self.tiger).run(once=True)
+            time.sleep(DELAY)
+
+            Worker(self.tiger).run(once=True)
+
+        assert (
+            int(self.conn.get(f"t:task:{task.id}:executions_count")) == count
+        )
+        assert self.conn.llen(f"t:task:{task.id}:executions") == count
+
     def test_batch_1(self):
         self.tiger.delay(batch_task, args=[1])
         self.tiger.delay(batch_task, args=[2])
