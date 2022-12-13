@@ -40,8 +40,12 @@ SET <prefix>:scheduled
 Serialized task for the given task ID.
 STRING <prefix>:task:<task_id>
 
-List of (failed) task executions
+List of (failed) task executions. The oldest entries
+could be truncated depending on the task parameters.
 LIST <prefix>:task:<task_id>:executions
+
+The total number of times a task was executed.
+STRING <prefix>:task:<task_id>:executions_count
 
 Task IDs waiting in the given queue to be processed, scored by the time the
 task was queued.

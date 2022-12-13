@@ -1,3 +1,6 @@
+from .utils import redis_glob_escape
+
+
 def migrate_executions_count(tiger):
     """
     Backfills ``t:task:<uuid>:executions_count`` by counting
@@ -13,8 +16,9 @@ def migrate_executions_count(tiger):
         """
     )
 
-    for key in tiger.connection.scan_iter(
-        count=100, match="*:task:*:executions"
-    ):
-        if key.startswith(tiger.config["REDIS_PREFIX"] + ":task:"):
-            migrate_task(keys=[key, key + "_count"])
+    match = (
+        redis_glob_escape(tiger.config["REDIS_PREFIX"]) + ":task:*:executions"
+    )
+
+    for key in tiger.connection.scan_iter(count=100, match=match):
+        migrate_task(keys=[key, key + "_count"])

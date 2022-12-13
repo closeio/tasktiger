@@ -22,9 +22,9 @@ from .runner import get_runner_class
 from .stats import StatsThread
 from .task import Task
 from .timeouts import JobTimeoutException
+from .utils import redis_glob_escape
 
 LOCK_REDIS_KEY = "qslock"
-REDIS_GLOB_CHARACTER_PATTERN = re.compile(r"([\\?*\[\]])")
 
 __all__ = ["Worker"]
 
@@ -1158,12 +1158,7 @@ class Worker(object):
             return self.connection.smembers(key)
 
         # Escape special Redis glob characters in the queue name
-        match = (
-            REDIS_GLOB_CHARACTER_PATTERN.sub(
-                r"\\\1", list(self.only_queues)[0]
-            )
-            + "*"
-        )
+        match = redis_glob_escape(list(self.only_queues)[0]) + "*"
 
         return set(self.connection.sscan_iter(key, match=match, count=100000))
 
