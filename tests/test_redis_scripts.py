@@ -323,6 +323,77 @@ class TestRedisScripts:
         assert self.conn.exists("foo") == 0
         assert self.conn.exists("bar") == 0
 
+    @pytest.mark.parametrize(
+        "initial",
+        [
+            [],
+            ["aaa"],
+            ["a", "b"],
+            ["a", "b", "c"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "ee", "z"] * 30,
+        ],
+    )
+    def test_truncated_rpush_without_limit(self, initial):
+        if initial:
+            self.conn.rpush("foo", *initial)
+
+        assert self.conn.lrange("foo", 0, -1) == initial
+
+        assert (
+            self.scripts.truncated_rpush(
+                key="foo",
+                element="ooo",
+                max_length=None,
+            )
+            == 0
+        )
+
+        assert (
+            self.scripts.truncated_rpush(
+                key="foo",
+                element="ppp",
+                max_length=None,
+            )
+            == 0
+        )
+
+        assert self.conn.lrange("foo", 0, -1) == initial + ["ooo", "ppp"]
+
+    @pytest.mark.parametrize(
+        "initial",
+        [
+            [],
+            ["aaa"],
+            ["a", "b"],
+            ["a", "b", "c"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "ee", "z"] * 30,
+        ],
+    )
+    @pytest.mark.parametrize("max_length", [1, 2, 3, 4, 10, 80])
+    def test_truncated_rpush_with_limit(self, initial, max_length):
+        if initial:
+            self.conn.rpush("foo", *initial)
+
+        assert self.conn.lrange("foo", 0, -1) == initial
+
+        assert self.scripts.truncated_rpush(
+            key="foo",
+            element="ooo",
+            max_length=max_length,
+        ) == max(0, len(initial) + 1 - max_length)
+        assert self.scripts.truncated_rpush(
+            key="foo",
+            element="ppp",
+            max_length=max_length,
+        ) == int(bool(max(0, len(initial) + 2 - max_length)))
+
+        final = self.conn.lrange("foo", 0, -1)
+
+        assert len(final) == min(len(initial) + 2, max_length)
+        assert final == (initial + ["ooo", "ppp"])[-max_length:]
+
     def test_get_expired_tasks(self):
         self.conn.sadd("t:active", "q1", "q2", "q3", "q4")
         self.conn.zadd("t:active:q1", {"t1": 500})

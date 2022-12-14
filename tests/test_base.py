@@ -269,6 +269,28 @@ class TestCase(BaseTestCase):
         else:
             assert "traceback" not in execution
 
+    @pytest.mark.parametrize("max_stored_executions", [2, 3, 6, 11, None])
+    def test_max_stored_executions(self, max_stored_executions):
+        def _get_stored_executions():
+            return self.conn.llen(f"t:task:{task.id}:executions")
+
+        task = self.tiger.delay(
+            exception_task,
+            max_stored_executions=max_stored_executions,
+            retry_method=fixed(DELAY, 20),
+        )
+
+        assert _get_stored_executions() == 0
+
+        for __ in range(6):
+            Worker(self.tiger).run(once=True)
+            time.sleep(DELAY)
+
+            Worker(self.tiger).run(once=True)
+
+        assert task.n_executions() == 6
+        assert _get_stored_executions() == max_stored_executions or 6
+
     def test_long_task_ok(self):
         self.tiger.delay(long_task_ok)
         Worker(self.tiger).run(once=True)
@@ -433,9 +455,14 @@ class TestCase(BaseTestCase):
             error={"default": 0},
         )
 
-    def test_retry(self):
+    @pytest.mark.parametrize("max_stored_executions", [0, 1, 2, 3, 4, None])
+    def test_retry(self, max_stored_executions):
         # Use the default retry method we configured.
-        task = self.tiger.delay(exception_task, retry=True)
+        task = self.tiger.delay(
+            exception_task,
+            max_stored_executions=max_stored_executions,
+            retry=True,
+        )
         self._ensure_queues(
             queued={"default": 1},
             scheduled={"default": 0},

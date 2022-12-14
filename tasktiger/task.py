@@ -29,6 +29,7 @@ class Task(object):
         retry_on=None,
         retry_method=None,
         max_queue_size=None,
+        max_stored_executions=None,
         runner_class=None,
         # internal variables
         _data=None,
@@ -83,6 +84,11 @@ class Task(object):
         if max_queue_size is None:
             max_queue_size = getattr(func, "_task_max_queue_size", None)
 
+        if max_stored_executions is None:
+            max_stored_executions = getattr(
+                func, "_task_max_stored_executions", None
+            )
+
         if runner_class is None:
             runner_class = getattr(func, "_task_runner_class", None)
 
@@ -129,6 +135,8 @@ class Task(object):
                 ]
         if max_queue_size:
             task["max_queue_size"] = max_queue_size
+        if max_stored_executions is not None:
+            task["max_stored_executions"] = max_stored_executions
         if runner_class:
             serialized_runner_class = serialize_func_name(runner_class)
             task["runner_class"] = serialized_runner_class
@@ -224,6 +232,10 @@ class Task(object):
         if not self._func:
             self._func = import_attribute(self.serialized_func)
         return self._func
+
+    @property
+    def max_stored_executions(self):
+        return self._data.get("max_stored_executions")
 
     @property
     def serialized_runner_class(self):
@@ -546,11 +558,13 @@ class Task(object):
         """
         pipeline = self.tiger.connection.pipeline()
         pipeline.exists(self.tiger._key("task", self.id))
-        pipeline.llen(self.tiger._key("task", self.id, "executions"))
-        exists, n_executions = pipeline.execute()
+        pipeline.get(self.tiger._key("task", self.id, "executions_count"))
+
+        exists, executions_count = pipeline.execute()
         if not exists:
             raise TaskNotFound("Task {} not found.".format(self.id))
-        return n_executions
+
+        return int(executions_count or 0)
 
     def retry(self):
         """

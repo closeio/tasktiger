@@ -1168,10 +1168,13 @@ class Worker(object):
         for task in tasks:
             pipeline = self.connection.pipeline()
             pipeline.incr(self._key("task", task.id, "executions_count"))
-            pipeline.rpush(
-                self._key("task", task.id, "executions"), serialized_execution
+            self.scripts.truncated_rpush(
+                key=self._key("task", task.id, "executions"),
+                element=serialized_execution,
+                max_length=task.max_stored_executions,
+                client=pipeline,
             )
-            pipeline.execute()
+            self.scripts.execute_pipeline(pipeline)
 
     def run(self, once=False, force_once=False):
         """

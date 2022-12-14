@@ -274,6 +274,20 @@ GET_EXPIRED_TASKS = """
     return result
 """
 
+# KEYS = { key }
+# ARGV = { element, max_length }
+TRUNCATED_RPUSH = """
+local length = redis.call('rpush', KEYS[1], ARGV[1])
+local pop_count = length - ARGV[2]
+
+if pop_count > 0 then
+    redis.call('ltrim', KEYS[1], pop_count, -1)
+    return pop_count
+end
+
+return 0
+"""
+
 
 class RedisScripts(object):
     def __init__(self, redis):
@@ -307,6 +321,8 @@ class RedisScripts(object):
         self._fail_if_not_in_zset = redis.register_script(FAIL_IF_NOT_IN_ZSET)
 
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
+
+        self._truncated_rpush = redis.register_script(TRUNCATED_RPUSH)
 
         self._execute_pipeline = self.register_script_from_file(
             "lua/execute_pipeline.lua"
@@ -505,6 +521,22 @@ class RedisScripts(object):
 
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
+
+    def truncated_rpush(self, key, element, max_length, client=None):
+        """
+        Works like Redis RPUSH, except it ensures that the list does not exceed
+        ``max_length`` by removing elements from the left side of it as needed.
+        Returns the number of removed elements.
+        """
+        client = client or self.redis
+
+        if not max_length or max_length < 0:
+            client.rpush(key, element)
+            return 0
+
+        return self._truncated_rpush(
+            keys=[key], args=[element, max_length], client=client
+        )
 
     def execute_pipeline(self, pipeline, client=None):
         """
