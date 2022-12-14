@@ -1,0 +1,2 @@
+lintlizard==0.26.0
+types-redis

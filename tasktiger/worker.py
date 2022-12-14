@@ -1,7 +1,6 @@
 import errno
 import fcntl
 import random
-import re
 import select
 import signal
 import socket
@@ -11,6 +10,7 @@ import traceback
 import uuid
 from collections import OrderedDict
 from contextlib import ExitStack
+from typing import List, Set
 
 from redis.exceptions import LockError
 
@@ -29,21 +29,21 @@ LOCK_REDIS_KEY = "qslock"
 __all__ = ["Worker"]
 
 
-def sigchld_handler(*args):
+def sigchld_handler(*args) -> None:
     # Nothing to do here. This is just a dummy handler that we set up to catch
     # the child process exiting.
     pass
 
 
 class WorkerContextManagerStack(ExitStack):
-    def __init__(self, context_managers):
+    def __init__(self, context_managers) -> None:
         super(WorkerContextManagerStack, self).__init__()
 
         for mgr in context_managers:
             self.enter_context(mgr)
 
 
-class Worker(object):
+class Worker:
     def __init__(
         self,
         tiger,
@@ -52,7 +52,7 @@ class Worker(object):
         single_worker_queues=None,
         max_workers_per_queue=None,
         store_tracebacks=None,
-    ):
+    ) -> None:
         """
         Internal method to initialize a worker.
         """
@@ -64,7 +64,7 @@ class Worker(object):
         self.config = tiger.config
         self._key = tiger._key
         self._did_work = True
-        self._last_task_check = 0
+        self._last_task_check = 0.0
         self.stats_thread = None
         self.id = str(uuid.uuid4())
 
@@ -118,26 +118,26 @@ class Worker(object):
             ).encode("utf8")
         ).hexdigest()
 
-    def _install_signal_handlers(self):
+    def _install_signal_handlers(self) -> None:
         """
         Sets up signal handlers for safely stopping the worker.
         """
 
-        def request_stop(signum, frame):
+        def request_stop(signum, frame) -> None:
             self._stop_requested = True
             self.log.info("stop requested, waiting for task to finish")
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
 
-    def _uninstall_signal_handlers(self):
+    def _uninstall_signal_handlers(self) -> None:
         """
         Restores default signal handlers.
         """
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def _filter_queues(self, queues):
+    def _filter_queues(self, queues) -> List[str]:
         """
         Applies the queue filter to the given list of queues and returns the
         queues that match. Note that a queue name matches any subqueues
@@ -154,7 +154,7 @@ class Worker(object):
             )
         ]
 
-    def _worker_queue_scheduled_tasks(self):
+    def _worker_queue_scheduled_tasks(self) -> None:
         """
         Helper method that takes due tasks from the SCHEDULED queue and puts
         them in the QUEUED queue for execution. This should be called
@@ -204,7 +204,7 @@ class Worker(object):
                     self.connection.publish(self._key("activity"), queue)
                 self._did_work = True
 
-    def _poll_for_queues(self):
+    def _poll_for_queues(self) -> None:
         """
         Refresh list of queues.
 
@@ -216,7 +216,7 @@ class Worker(object):
             time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
         self._refresh_queue_set()
 
-    def _pubsub_for_queues(self, timeout=0, batch_timeout=0):
+    def _pubsub_for_queues(self, timeout=0, batch_timeout=0) -> None:
         """
         Check activity channel for new queues and wait as necessary.
 
@@ -271,7 +271,7 @@ class Worker(object):
                 # Always exit after our maximum wait time
                 break
 
-    def _worker_queue_expired_tasks(self):
+    def _worker_queue_expired_tasks(self) -> None:
         """
         Helper method that takes expired tasks (where we didn't get a
         heartbeat until we reached a timeout) and puts them back into the
@@ -445,7 +445,7 @@ class Worker(object):
 
         return success
 
-    def _get_queue_batch_size(self, queue):
+    def _get_queue_batch_size(self, queue) -> int:
         """Get queue batch size."""
 
         # Fetch one item unless this is a batch queue.
@@ -492,7 +492,7 @@ class Worker(object):
 
         return queue_lock, False
 
-    def _heartbeat(self, queue, task_ids):
+    def _heartbeat(self, queue, task_ids) -> None:
         """
         Updates the heartbeat for the given task IDs to prevent them from
         timing out and being requeued.
@@ -952,7 +952,9 @@ class Worker(object):
 
         return success, ready_tasks
 
-    def _finish_task_processing(self, queue, task, success, start_time):
+    def _finish_task_processing(
+        self, queue, task, success, start_time
+    ) -> None:
         """
         After a task is executed, this method is called and ensures that
         the task gets properly removed from the ACTIVE queue and, in case of an
@@ -965,7 +967,7 @@ class Worker(object):
         now = time.time()
         processing_duration = now - start_time
 
-        def _mark_done():
+        def _mark_done() -> None:
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
             log.info("done", processing_duration=processing_duration)
@@ -1075,7 +1077,7 @@ class Worker(object):
                     runner = runner_class(self.tiger)
                     runner.on_permanent_error(task, execution)
 
-    def _worker_run(self):
+    def _worker_run(self) -> None:
         """
         Performs one worker run:
         * Processes a set of messages from each queue and removes any empty
@@ -1107,7 +1109,7 @@ class Worker(object):
             self._worker_queue_expired_tasks()
             self._last_task_check = time.time()
 
-    def _queue_periodic_tasks(self):
+    def _queue_periodic_tasks(self) -> None:
         funcs = self.tiger.periodic_task_funcs.values()
 
         # Only queue periodic tasks for queues this worker is responsible
@@ -1148,12 +1150,12 @@ class Worker(object):
                 "queued periodic task", func=task.serialized_func, when=when
             )
 
-    def _refresh_queue_set(self):
+    def _refresh_queue_set(self) -> None:
         self._queue_set = set(
             self._filter_queues(self._retrieve_queues(self._key(QUEUED)))
         )
 
-    def _retrieve_queues(self, key):
+    def _retrieve_queues(self, key) -> Set[str]:
         if len(self.only_queues) != 1:
             return self.connection.smembers(key)
 
@@ -1162,7 +1164,7 @@ class Worker(object):
 
         return set(self.connection.sscan_iter(key, match=match, count=100000))
 
-    def _store_task_execution(self, tasks, execution):
+    def _store_task_execution(self, tasks, execution) -> None:
         serialized_execution = json.dumps(execution)
 
         for task in tasks:

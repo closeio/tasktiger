@@ -77,7 +77,7 @@ STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 """
 
 
-class TaskTiger(object):
+class TaskTiger:
     def __init__(
         self,
         connection=None,

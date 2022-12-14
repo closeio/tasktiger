@@ -24,7 +24,7 @@ TEST_TIGER_CONFIG = {
 }
 
 
-class Patch(object):
+class Patch:
     """
     Simple context manager to patch a function, e.g.:
 

@@ -4,7 +4,7 @@ from .worker import Worker
 __all__ = ["TaskTigerTestMixin"]
 
 
-class TaskTigerTestMixin(object):
+class TaskTigerTestMixin:
     """
     Unit test mixin for tests that use TaskTiger.
     """
