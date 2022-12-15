@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 0.16.2
+
+### Other changes
+
+* Prefilter polled queues ([242](https://github.com/closeio/tasktiger/pull/242))
+* Use SSCAN to prefilter queues in scheduled state ([248](https://github.com/closeio/tasktiger/pull/248))
+* Add task execution counter ([252](https://github.com/closeio/tasktiger/pull/252))
+
 ## Version 0.16.1
 
 ### Other changes
