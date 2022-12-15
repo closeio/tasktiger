@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import datetime
 import importlib
 import logging
+import secrets
 from collections import defaultdict
 
 import click
@@ -255,6 +256,18 @@ class TaskTiger:
     """
     current_task = property(_get_current_task)
     current_tasks = property(_get_current_tasks)
+
+    def _notify_queue(self, queue, client=None):
+        client = client or self.connection
+
+        if self.config["PUBLISH_QUEUED_TASKS"]:
+            client.publish(self._key("activity"), queue)
+
+        client.set(
+            self._key("queue_token", queue.split(".", 1)[0]),
+            secrets.token_hex(),
+            ex=7200,  # XXX Just for tests so we don't clutter Redis
+        )
 
     @classproperty
     def current_instance(self):
