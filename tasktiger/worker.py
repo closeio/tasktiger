@@ -1,10 +1,14 @@
 import errno
 import fcntl
+import hashlib
+import json
+import os
 import random
 import select
 import signal
 import socket
 import sys
+import threading
 import time
 import traceback
 import uuid
@@ -14,10 +18,27 @@ from typing import List, Set
 
 from redis.exceptions import LockError
 
-from ._internal import *
-from .exceptions import RetryException, TaskNotFound
+from ._internal import (
+    ACTIVE,
+    ERROR,
+    QUEUED,
+    SCHEDULED,
+    dotted_parts,
+    g,
+    g_fork_lock,
+    gen_unique_id,
+    import_attribute,
+    queue_matches,
+    serialize_func_name,
+    serialize_retry_method,
+)
+from .exceptions import (
+    RetryException,
+    StopRetry,
+    TaskImportError,
+    TaskNotFound,
+)
 from .redis_semaphore import Semaphore
-from .retry import *
 from .runner import get_runner_class
 from .stats import StatsThread
 from .task import Task
@@ -389,9 +410,6 @@ class Worker:
         assert all([task_func == task.serialized_func for task in tasks[1:]])
 
         execution["time_started"] = time.time()
-
-        exc = None
-        exc_info = None
 
         try:
             func = tasks[0].func
@@ -1240,7 +1258,7 @@ class Worker:
         except KeyboardInterrupt:
             pass
 
-        except Exception as e:
+        except Exception:
             self.log.exception(event="exception")
             raise
 

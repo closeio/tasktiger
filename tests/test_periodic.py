@@ -3,13 +3,11 @@
 import datetime
 import time
 
-from tasktiger import (
+from tasktiger import Task, Worker, periodic
+from tasktiger._internal import (
     QUEUED,
     SCHEDULED,
-    Task,
-    Worker,
     gen_unique_id,
-    periodic,
     serialize_func_name,
 )
 
@@ -61,10 +59,10 @@ class TestPeriodicTasks(BaseTestCase):
         ) == datetime.datetime(2010, 1, 1, 0, 0)
 
         f = periodic(minutes=1, end_date=dt)
-        assert f[0](datetime.datetime(2010, 1, 1, 0, 0), *f[1]) == None
+        assert f[0](datetime.datetime(2010, 1, 1, 0, 0), *f[1]) is None
 
         f = periodic(minutes=1, end_date=dt)
-        assert f[0](datetime.datetime(2010, 1, 1, 0, 1), *f[1]) == None
+        assert f[0](datetime.datetime(2010, 1, 1, 0, 1), *f[1]) is None
 
     def test_periodic_execution(self):
         """
