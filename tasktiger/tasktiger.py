@@ -266,7 +266,7 @@ class TaskTiger:
         client.set(
             self._key("queue_token", queue.split(".", 1)[0]),
             secrets.token_hex(),
-            ex=7200,  # XXX Just for tests so we don't clutter Redis
+            ex=3600 * 24 * 30,  # To avoid leftover keys as queues change
         )
 
     @classproperty

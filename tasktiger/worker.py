@@ -86,6 +86,7 @@ class Worker:
         self._key = tiger._key
         self._did_work = True
         self._last_task_check = 0.0
+        self._next_forced_queue_poll = 0.0
         self._queue_set_token = ""
         self.stats_thread = None
         self.id = str(uuid.uuid4())
@@ -236,30 +237,32 @@ class Worker:
         if not self._did_work:
             time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
 
-        if self._is_queue_set_out_of_date():
+        if self._should_poll_for_queues():
             self._refresh_queue_set()
-            self.log.info(f"Poll: Done ({len(self._queue_set)})")
+            self._next_forced_queue_poll = time.monotonic() + 3600
 
-    def _is_queue_set_out_of_date(self) -> bool:
+    def _should_poll_for_queues(self) -> bool:
         if not self.only_queues:
             return True
 
-        queue_set_token = ":".join(
-            token or ""
-            for token in self.connection.mget(
-                sorted(
-                    self._key("queue_token", queue)
-                    for queue in self.only_queues
-                )
-            )
-        )
+        queue_set_token = self._get_queue_set_token()
 
         if queue_set_token != self._queue_set_token:
-            self.log.info("Poll: Token changed")
             self._queue_set_token = queue_set_token
             return True
 
+        if time.monotonic() > self._next_forced_queue_poll:
+            self.log.info("Forcing a queue poll due to inactivity.")
+            return True
+
         return False
+
+    def _get_queue_set_token(self) -> str:
+        keys = sorted(
+            self._key("queue_token", queue) for queue in self.only_queues
+        )
+
+        return ":".join(map(str, self.connection.mget(keys)))
 
     def _pubsub_for_queues(self, timeout=0, batch_timeout=0) -> None:
         """
