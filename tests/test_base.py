@@ -975,9 +975,8 @@ class TestTasks(BaseTestCase):
         pytest.raises(TaskNotFound, task.cancel)
 
         # We can look up a task by its ID.
-        fetch_task = lambda: Task.from_id(
-            self.tiger, "a", "scheduled", task_id
-        )
+        def fetch_task():
+            return Task.from_id(self.tiger, "a", "scheduled", task_id)
 
         task = fetch_task()
         task.cancel()
