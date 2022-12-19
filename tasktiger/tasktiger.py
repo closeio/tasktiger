@@ -288,6 +288,7 @@ class TaskTiger:
         schedule=None,
         batch=False,
         max_queue_size=None,
+        max_stored_executions=None,
         runner_class=None,
     ):
         """
@@ -333,6 +334,8 @@ class TaskTiger:
                 func._task_schedule = schedule
             if max_queue_size is not None:
                 func._task_max_queue_size = max_queue_size
+            if max_stored_executions is not None:
+                func._task_max_stored_executions = max_stored_executions
             if runner_class is not None:
                 func._task_runner_class = runner_class
 
@@ -407,6 +410,7 @@ class TaskTiger:
         retry_on=None,
         retry_method=None,
         max_queue_size=None,
+        max_stored_executions=None,
         runner_class=None,
     ):
         """
@@ -427,6 +431,7 @@ class TaskTiger:
             retry=retry,
             retry_on=retry_on,
             retry_method=retry_method,
+            max_stored_executions=max_stored_executions,
             runner_class=runner_class,
         )
 

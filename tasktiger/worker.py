@@ -1186,11 +1186,18 @@ class Worker:
         serialized_execution = json.dumps(execution)
 
         for task in tasks:
-            pipeline = self.connection.pipeline()
-            pipeline.incr(self._key("task", task.id, "executions_count"))
-            pipeline.rpush(
-                self._key("task", task.id, "executions"), serialized_execution
+            executions_key = self._key("task", task.id, "executions")
+            executions_count_key = self._key(
+                "task", task.id, "executions_count"
             )
+
+            pipeline = self.connection.pipeline()
+            pipeline.incr(executions_count_key)
+            pipeline.rpush(executions_key, serialized_execution)
+
+            if task.max_stored_executions:
+                pipeline.ltrim(executions_key, -task.max_stored_executions, -1)
+
             pipeline.execute()
 
     def run(self, once=False, force_once=False):
