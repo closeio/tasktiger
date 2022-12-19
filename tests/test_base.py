@@ -289,7 +289,7 @@ class TestCase(BaseTestCase):
             Worker(self.tiger).run(once=True)
 
         assert task.n_executions() == 6
-        assert _get_stored_executions() == max_stored_executions or 6
+        assert _get_stored_executions() == min(max_stored_executions or 6, 6)
 
     def test_long_task_ok(self):
         self.tiger.delay(long_task_ok)
