@@ -14,7 +14,7 @@ import traceback
 import uuid
 from collections import OrderedDict
 from contextlib import ExitStack
-from typing import List, Set
+from typing import List, Optional, Set, Tuple
 
 from redis.exceptions import LockError
 
@@ -87,7 +87,7 @@ class Worker:
         self._did_work = True
         self._last_task_check = 0.0
         self._next_forced_queue_poll = 0.0
-        self._queue_set_token = ""
+        self._queue_cache_tokens: Optional[Tuple[Optional[str], ...]] = None
         self.stats_thread = None
         self.id = str(uuid.uuid4())
 
@@ -239,30 +239,35 @@ class Worker:
 
         if self._should_poll_for_queues():
             self._refresh_queue_set()
-            self._next_forced_queue_poll = time.monotonic() + 3600
 
     def _should_poll_for_queues(self) -> bool:
-        if not self.only_queues:
+        cache_token_expiry = self.tiger.config["POLL_CACHE_TOKEN_KEY_EXPIRY"]
+        if cache_token_expiry <= 0:
             return True
 
-        queue_set_token = self._get_queue_set_token()
+        next_forced_queue_poll = self._next_forced_queue_poll
+        self._next_forced_queue_poll = time.monotonic() + cache_token_expiry
 
-        if queue_set_token != self._queue_set_token:
-            self._queue_set_token = queue_set_token
+        queue_cache_tokens = self._get_queue_cache_tokens()
+        if queue_cache_tokens != self._queue_cache_tokens:
+            self._queue_cache_tokens = queue_cache_tokens
             return True
 
-        if time.monotonic() > self._next_forced_queue_poll:
+        # Ensure that we poll queues when we haven't retrieved the cache
+        # tokens for at least as long as their expiry time.
+        if time.monotonic() >= next_forced_queue_poll:
             self.log.info("Forcing a queue poll due to inactivity.")
             return True
 
         return False
 
-    def _get_queue_set_token(self) -> str:
+    def _get_queue_cache_tokens(self) -> Tuple[Optional[str], ...]:
         keys = sorted(
-            self._key("queue_token", queue) for queue in self.only_queues
+            self._key("queue_cache_token", queue)
+            for queue in self.only_queues or [""]
         )
 
-        return ":".join(map(str, self.connection.mget(keys)))
+        return tuple(self.connection.mget(keys))
 
     def _pubsub_for_queues(self, timeout=0, batch_timeout=0) -> None:
         """

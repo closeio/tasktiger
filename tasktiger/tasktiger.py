@@ -16,6 +16,7 @@ from ._internal import (
     QUEUED,
     SCHEDULED,
     classproperty,
+    dotted_parts,
     g,
     queue_matches,
     serialize_func_name,
@@ -76,6 +77,8 @@ Queue locks scored by timeout
 ZSET <prefix>:qslock:<queue>
 STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 """
+
+# TODO - mention newly added keys
 
 
 class TaskTiger:
@@ -204,6 +207,11 @@ class TaskTiger:
             # subscribe to the activity channel. Use for more efficient task
             # processing with a large amount of workers.
             "POLL_TASK_QUEUES_INTERVAL": 0,
+            # Set to > 0 to reduce the frequency of queue polling by using
+            # cache token keys whose values are updated whenever a task is queued.
+            # TODO - reword to make it sound better
+            # TODO - caution about increased memory usage
+            "POLL_CACHE_TOKEN_KEY_EXPIRY": 0,
             # Whether to publish new tasks to the activity channel. Only set to
             # False if all the workers are polling queues.
             "PUBLISH_QUEUED_TASKS": True,
@@ -258,16 +266,22 @@ class TaskTiger:
     current_tasks = property(_get_current_tasks)
 
     def _notify_queue(self, queue, client=None):
-        client = client or self.connection
+        _client = client or self.connection.pipeline(transaction=False)
 
         if self.config["PUBLISH_QUEUED_TASKS"]:
-            client.publish(self._key("activity"), queue)
+            _client.publish(self._key("activity"), queue)
 
-        client.set(
-            self._key("queue_token", queue.split(".", 1)[0]),
-            secrets.token_hex(),
-            ex=3600 * 24 * 30,  # To avoid leftover keys as queues change
-        )
+        cache_token_expiry = self.config["POLL_CACHE_TOKEN_KEY_EXPIRY"]
+        if cache_token_expiry > 0:
+            for queue_part in list(dotted_parts(queue)) + [""]:
+                _client.set(
+                    self._key("queue_cache_token", queue_part),
+                    secrets.token_hex(),
+                    ex=cache_token_expiry,
+                )
+
+        if _client is not client:
+            _client.execute()
 
     @classproperty
     def current_instance(self):
