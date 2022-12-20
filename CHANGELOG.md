@@ -11,15 +11,14 @@
 This version of TaskTiger switches to using the `t:task:<id>:executions_count` Redis key to determine the total number of task executions. In previous versions this was accomplished by obtaining the length of `t:task:<id>:executions`. This change was required for the introduction of a parameter to enable the truncation of task execution entries. This is useful for tasks with many retries, where execution entries consume a lot of memory.
 
 This behavior is incompatible with the previous mechanism and requires a migration to populate the task execution counters.
-Without the migration the execution counters will behave as though they were reset, which may result in existing tasks retrying more times than they should.
+Without the migration, the execution counters will behave as though they were reset, which may result in existing tasks retrying more times than they should.
 
 ##### Migration
 
 The migration can be executed fully live without concern for data integrity.
 
-- Upgrade TaskTiger to `0.16.2` if running a version lower than that.
-- Execute the following:
-
+1. Upgrade TaskTiger to `0.16.2` if running a version lower than that.
+2. Execute the following:
 ```py
 from tasktiger import TaskTiger
 from tasktiger.migrations import migrate_executions_count
@@ -31,6 +30,7 @@ tiger = TaskTiger(...)
 # number of failed/retrying tasks you have
 migrate_executions_count(tiger)
 ```
+3. Upgrade TaskTiger to `0.17.0`. Done!
 
 #### Import cleanup ([258](https://github.com/closeio/tasktiger/pull/258))
 
