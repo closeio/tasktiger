@@ -18,7 +18,7 @@ Without the migration, the execution counters will behave as though they were re
 The migration can be executed fully live without concern for data integrity.
 
 1. Upgrade TaskTiger to `0.16.2` if running a version lower than that.
-2. Execute the following:
+2. Call `tasktiger.migrations.migrate_executions_count` with your `TaskTiger` instance, e.g.:
 ```py
 from tasktiger import TaskTiger
 from tasktiger.migrations import migrate_executions_count
