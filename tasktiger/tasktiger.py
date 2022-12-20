@@ -265,7 +265,7 @@ class TaskTiger:
     current_task = property(_get_current_task)
     current_tasks = property(_get_current_tasks)
 
-    def _notify_queue(self, queue, client=None):
+    def _notify_task_queued(self, queue, client=None):
         _client = client or self.connection.pipeline(transaction=False)
 
         if self.config["PUBLISH_QUEUED_TASKS"]:
@@ -275,7 +275,7 @@ class TaskTiger:
         if cache_token_expiry > 0:
             for queue_part in list(dotted_parts(queue)) + [""]:
                 _client.set(
-                    self._key("queue_cache_token", queue_part),
+                    self._key("queued_cache_token", queue_part),
                     secrets.token_hex(),
                     ex=cache_token_expiry,
                 )

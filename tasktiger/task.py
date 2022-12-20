@@ -345,7 +345,7 @@ class Task:
         )
 
         if to_state == QUEUED:
-            self.tiger._notify_queue(queue, client=pipeline)
+            self.tiger._notify_task_queued(queue, client=pipeline)
 
         try:
             scripts.execute_pipeline(pipeline)
@@ -422,7 +422,7 @@ class Task:
         )
 
         if state == QUEUED:
-            tiger._notify_queue(self.queue, client=pipeline)
+            tiger._notify_task_queued(self.queue, client=pipeline)
 
         pipeline.execute()
 

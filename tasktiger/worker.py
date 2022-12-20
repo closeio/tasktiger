@@ -87,7 +87,7 @@ class Worker:
         self._did_work = True
         self._last_task_check = 0.0
         self._next_forced_queue_poll = 0.0
-        self._queue_cache_tokens: Optional[Tuple[Optional[str], ...]] = None
+        self._queued_cache_tokens: Optional[Tuple[Optional[str], ...]] = None
         self.stats_thread = None
         self.id = str(uuid.uuid4())
 
@@ -223,7 +223,7 @@ class Worker:
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
-                self.tiger._notify_queue(queue)
+                self.tiger._notify_task_queued(queue)
                 self._did_work = True
 
     def _poll_for_queues(self) -> None:
@@ -248,9 +248,9 @@ class Worker:
         next_forced_queue_poll = self._next_forced_queue_poll
         self._next_forced_queue_poll = time.monotonic() + cache_token_expiry
 
-        queue_cache_tokens = self._get_queue_cache_tokens()
-        if queue_cache_tokens != self._queue_cache_tokens:
-            self._queue_cache_tokens = queue_cache_tokens
+        queued_cache_tokens = self._get_queued_cache_tokens()
+        if queued_cache_tokens != self._queued_cache_tokens:
+            self._queued_cache_tokens = queued_cache_tokens
             return True
 
         # Ensure that we poll queues when we haven't retrieved the cache
@@ -261,9 +261,9 @@ class Worker:
 
         return False
 
-    def _get_queue_cache_tokens(self) -> Tuple[Optional[str], ...]:
+    def _get_queued_cache_tokens(self) -> Tuple[Optional[str], ...]:
         keys = sorted(
-            self._key("queue_cache_token", queue)
+            self._key("queued_cache_token", queue)
             for queue in self.only_queues or [""]
         )
 
