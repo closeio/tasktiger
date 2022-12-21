@@ -6,6 +6,11 @@ from flask_script import Command
 
 
 class TaskTigerCommand(Command):
+    """
+    This class is deprecated and may be removed in future versions.
+    That is because Flask-Script is no longer supported (since 2017).
+    """
+
     capture_all_args = True
     help = "Run a TaskTiger worker"
 
