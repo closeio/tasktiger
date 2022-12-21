@@ -1,5 +1,41 @@
 # Changelog
 
+## Version 0.17.0
+
+### ⚠️ Breaking changes
+
+#### Allow truncating task executions ([251](https://github.com/closeio/tasktiger/pull/251))
+
+##### Overview
+
+This version of TaskTiger switches to using the `t:task:<id>:executions_count` Redis key to determine the total number of task executions. In previous versions this was accomplished by obtaining the length of `t:task:<id>:executions`. This change was required for the introduction of a parameter to enable the truncation of task execution entries. This is useful for tasks with many retries, where execution entries consume a lot of memory.
+
+This behavior is incompatible with the previous mechanism and requires a migration to populate the task execution counters.
+Without the migration, the execution counters will behave as though they were reset, which may result in existing tasks retrying more times than they should.
+
+##### Migration
+
+The migration can be executed fully live without concern for data integrity.
+
+1. Upgrade TaskTiger to `0.16.2` if running a version lower than that.
+2. Call `tasktiger.migrations.migrate_executions_count` with your `TaskTiger` instance, e.g.:
+```py
+from tasktiger import TaskTiger
+from tasktiger.migrations import migrate_executions_count
+
+# Instantiate directly or import from your application module
+tiger = TaskTiger(...)
+
+# This could take a while depending on the
+# number of failed/retrying tasks you have
+migrate_executions_count(tiger)
+```
+3. Upgrade TaskTiger to `0.17.0`. Done!
+
+#### Import cleanup ([258](https://github.com/closeio/tasktiger/pull/258))
+
+Due to a cleanup of imports, some internal TaskTiger objects can no longer be imported from the public modules. This shouldn't cause problems for most users, but it's a good idea to double check that all imports from the TaskTiger package continue to function correctly in your application.
+
 ## Version 0.16.2
 
 ### Other changes
@@ -38,7 +74,7 @@
 
 ## Version 0.13
 
-### Breaking changes
+### ⚠️ Breaking changes
 
 #### Changing the locking mechanism
 
@@ -84,7 +120,7 @@ Plus, there is:
 
 ## Version 0.12
 
-### Breaking changes
+### ⚠️ Breaking changes
 
 * Drop support for redis-py 2 ([#183](https://github.com/closeio/tasktiger/pull/183))
 
