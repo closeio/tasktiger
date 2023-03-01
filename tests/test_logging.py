@@ -28,6 +28,7 @@ def logging_task():
 
     # Confirm tasktiger_processor injected task id and queue name
     assert log[1]["task_id"] == tiger.current_task.id
+    assert log[1]["task_func"] == "tests.test_logging:logging_task"
     assert log[1]["queue"] == "foo_qux"
 
 
