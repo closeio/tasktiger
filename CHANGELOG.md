@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 0.17.1
+
+### Other changes
+
+* Add 'task_func' to logging processor ([265](https://github.com/closeio/tasktiger/pull/265))
+* Deprecate Flask-Script integration ([260](https://github.com/closeio/tasktiger/pull/260))
+
 ## Version 0.17.0
 
 ### ⚠️ Breaking changes
