@@ -11,7 +11,7 @@ class StatsThread(threading.Thread):
         self._stop_event = threading.Event()
 
         self._task_running = False
-        self._time_start = time.time()
+        self._time_start = time.monotonic()
         self._time_busy = 0
         self._task_start_time = None
         self.daemon = True  # Exit process if main thread exits unexpectedly
@@ -22,20 +22,20 @@ class StatsThread(threading.Thread):
         self._computation_lock = threading.Lock()
 
     def report_task_start(self):
-        now = time.time()
+        now = time.monotonic()
         with self._computation_lock:
             self._task_start_time = now
             self._task_running = True
 
     def report_task_end(self):
-        now = time.time()
+        now = time.monotonic()
         with self._computation_lock:
             self._time_busy += now - self._task_start_time
             self._task_running = False
             self._task_start_time = None
 
     def compute_stats(self):
-        now = time.time()
+        now = time.monotonic()
 
         with self._computation_lock:
             time_total = now - self._time_start
@@ -59,10 +59,7 @@ class StatsThread(threading.Thread):
                 )
 
     def run(self):
-        while True:
-            self._stop_event.wait(self.tiger.config["STATS_INTERVAL"])
-            if self._stop_event.isSet():
-                break
+        while not self._stop_event.wait(self.tiger.config["STATS_INTERVAL"]):
             self.compute_stats()
 
     def stop(self):
