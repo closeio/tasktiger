@@ -198,6 +198,12 @@ class TaskTiger:
             "BATCH_QUEUES": {},
             # How often to print stats.
             "STATS_INTERVAL": 60,
+            # The function to call with the duration of each completed task.
+            # This can be useful to measure the worker's utilisation %.
+            # For example, the worker's utilisation over the last 30 minutes
+            # can be obtained by dividing the sum of task durations reported
+            # over the last 30 minutes by 30 minutes.
+            "STATS_CALLBACK": None,
             # Single worker queues can reduce redis activity in some use cases
             # by locking at the queue level instead of just at the task or task
             # group level. These queues will only allow a single worker to
