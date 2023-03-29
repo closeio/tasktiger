@@ -14,7 +14,7 @@ import traceback
 import uuid
 from collections import OrderedDict
 from contextlib import ExitStack
-from typing import List, Set
+from typing import List, Optional, Set, Tuple
 
 from redis.exceptions import LockError
 
@@ -86,6 +86,8 @@ class Worker:
         self._key = tiger._key
         self._did_work = True
         self._last_task_check = 0.0
+        self._next_forced_queue_poll = 0.0
+        self._queued_cache_tokens: Optional[Tuple[Optional[str], ...]] = None
         self.stats_thread = None
         self.id = str(uuid.uuid4())
 
@@ -221,8 +223,7 @@ class Worker:
             # XXX: ideally this would be in the same pipeline, but we only want
             # to announce if there was a result.
             if result:
-                if self.config["PUBLISH_QUEUED_TASKS"]:
-                    self.connection.publish(self._key("activity"), queue)
+                self.tiger._notify_task_queued(queue)
                 self._did_work = True
 
     def _poll_for_queues(self) -> None:
@@ -235,7 +236,38 @@ class Worker:
         """
         if not self._did_work:
             time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
-        self._refresh_queue_set()
+
+        if self._should_poll_for_queues():
+            self._refresh_queue_set()
+
+    def _should_poll_for_queues(self) -> bool:
+        cache_token_expiry = self.tiger.config["POLL_CACHE_TOKEN_KEY_EXPIRY"]
+        if cache_token_expiry <= 0:
+            return True
+
+        next_forced_queue_poll = self._next_forced_queue_poll
+        self._next_forced_queue_poll = time.monotonic() + cache_token_expiry
+
+        queued_cache_tokens = self._get_queued_cache_tokens()
+        if queued_cache_tokens != self._queued_cache_tokens:
+            self._queued_cache_tokens = queued_cache_tokens
+            return True
+
+        # Ensure that we poll queues when we haven't retrieved the cache
+        # tokens for at least as long as their expiry time.
+        if time.monotonic() >= next_forced_queue_poll:
+            self.log.info("Forcing a queue poll due to inactivity.")
+            return True
+
+        return False
+
+    def _get_queued_cache_tokens(self) -> Tuple[Optional[str], ...]:
+        keys = sorted(
+            self._key("queued_cache_token", queue)
+            for queue in self.only_queues or [""]
+        )
+
+        return tuple(self.connection.mget(keys))
 
     def _pubsub_for_queues(self, timeout=0, batch_timeout=0) -> None:
         """
