@@ -1,4 +1,9 @@
 import os
+from typing import Any, List, Literal, Optional, Tuple, Union
+
+from redis import Redis
+from redis.client import Pipeline
+from redis.commands.core import Script
 
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
@@ -276,7 +281,7 @@ GET_EXPIRED_TASKS = """
 
 
 class RedisScripts:
-    def __init__(self, redis):
+    def __init__(self, redis: Redis) -> None:
         self.redis = redis
 
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
@@ -313,7 +318,7 @@ class RedisScripts:
         )
 
     @property
-    def can_replicate_commands(self):
+    def can_replicate_commands(self) -> bool:
         """
         Whether Redis supports single command replication.
         """
@@ -325,13 +330,20 @@ class RedisScripts:
             self._can_replicate_commands = result
         return self._can_replicate_commands
 
-    def register_script_from_file(self, filename):
+    def register_script_from_file(self, filename: str) -> Script:
         with open(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
         ) as f:
             return self.redis.register_script(f.read())
 
-    def zadd(self, key, score, member, mode, client=None):
+    def zadd(
+        self,
+        key: str,
+        score: float,
+        member: str,
+        mode: str,
+        client: Optional[Redis] = None,
+    ) -> int:
         """
         Like ZADD, but supports different score update modes, in case the
         member already exists in the ZSET:
@@ -354,16 +366,16 @@ class RedisScripts:
 
     def zpoppush(
         self,
-        source,
-        destination,
-        count,
-        score,
-        new_score,
-        client=None,
-        withscores=False,
-        on_success=None,
-        if_exists=None,
-    ):
+        source: str,
+        destination: str,
+        count: int,
+        score: Optional[Union[float, Literal["+inf"]]],
+        new_score: float,
+        client: Optional[Redis] = None,
+        withscores: bool = False,
+        on_success: Any = None,
+        if_exists: Any = None,
+    ) -> Any:
         """
         Pops the first ``count`` members from the ZSET ``source`` and adds them
         to the ZSET ``destination`` with a score of ``new_score``. If ``score``
@@ -464,7 +476,13 @@ class RedisScripts:
                     client=client,
                 )
 
-    def srem_if_not_exists(self, key, member, other_key, client=None):
+    def srem_if_not_exists(
+        self,
+        key: str,
+        member: str,
+        other_key: str,
+        client: Optional[Redis] = None,
+    ) -> int:
         """
         Removes ``member`` from the set ``key`` if ``other_key`` does not
         exist (i.e. is empty). Returns the number of removed elements (0 or 1).
@@ -473,7 +491,13 @@ class RedisScripts:
             keys=[key, other_key], args=[member], client=client
         )
 
-    def delete_if_not_in_zsets(self, to_delete, value, zsets, client=None):
+    def delete_if_not_in_zsets(
+        self,
+        to_delete: List[str],
+        value: str,
+        zsets: List[str],
+        client: Optional[Redis] = None,
+    ) -> int:
         """
         Removes keys in ``to_delete`` only if ``value`` is not a member of any
         sorted sets in ``zsets``. Returns the number of removed elements.
@@ -484,7 +508,9 @@ class RedisScripts:
             client=client,
         )
 
-    def fail_if_not_in_zset(self, key, member, client=None):
+    def fail_if_not_in_zset(
+        self, key: str, member: str, client: Optional[Redis] = None
+    ) -> None:
         """
         Fails with an error containing the string '<FAIL_IF_NOT_IN_ZSET>' if
         the given ``member`` is not in the ZSET ``key``. This can be used in
@@ -493,7 +519,13 @@ class RedisScripts:
         """
         self._fail_if_not_in_zset(keys=[key], args=[member], client=client)
 
-    def get_expired_tasks(self, key_prefix, time, batch_size, client=None):
+    def get_expired_tasks(
+        self,
+        key_prefix: str,
+        time: float,
+        batch_size: int,
+        client: Optional[Redis] = None,
+    ) -> List[Tuple[str, str]]:
         """
         Returns a list of expired tasks (older than ``time``) by looking at all
         active queues. The list is capped at ``batch_size``. The list contains
@@ -506,7 +538,9 @@ class RedisScripts:
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
 
-    def execute_pipeline(self, pipeline, client=None):
+    def execute_pipeline(
+        self, pipeline: Pipeline, client: Optional[Redis] = None
+    ) -> List[Any]:
         """
         Executes the given Redis pipeline as a Lua script. When an error
         occurs, the transaction stops executing, and an exception is raised.

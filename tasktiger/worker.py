@@ -14,9 +14,24 @@ import traceback
 import uuid
 from collections import OrderedDict
 from contextlib import ExitStack
-from typing import List, Set
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Collection,
+    ContextManager,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
+from redis.client import PubSub
 from redis.exceptions import LockError
+from redis.lock import Lock
+from structlog.stdlib import BoundLogger
 
 from ._internal import (
     ACTIVE,
@@ -45,19 +60,22 @@ from .task import Task
 from .timeouts import JobTimeoutException
 from .utils import redis_glob_escape
 
+if TYPE_CHECKING:
+    from . import TaskTiger
+
 LOCK_REDIS_KEY = "qslock"
 
 __all__ = ["Worker"]
 
 
-def sigchld_handler(*args) -> None:
+def sigchld_handler(*args: Any) -> None:
     # Nothing to do here. This is just a dummy handler that we set up to catch
     # the child process exiting.
     pass
 
 
 class WorkerContextManagerStack(ExitStack):
-    def __init__(self, context_managers) -> None:
+    def __init__(self, context_managers: List[ContextManager]) -> None:
         super(WorkerContextManagerStack, self).__init__()
 
         for mgr in context_managers:
@@ -67,26 +85,29 @@ class WorkerContextManagerStack(ExitStack):
 class Worker:
     def __init__(
         self,
-        tiger,
-        queues=None,
-        exclude_queues=None,
-        single_worker_queues=None,
-        max_workers_per_queue=None,
-        store_tracebacks=None,
+        tiger: "TaskTiger",
+        queues: Optional[List[str]] = None,
+        exclude_queues: Optional[List[str]] = None,
+        single_worker_queues: Optional[List[str]] = None,
+        max_workers_per_queue: Optional[int] = None,
+        store_tracebacks: Optional[bool] = None,
     ) -> None:
         """
         Internal method to initialize a worker.
         """
 
         self.tiger = tiger
-        self.log = tiger.log.bind(pid=os.getpid())
+        bound_logger = tiger.log.bind(pid=os.getpid())
+        assert isinstance(bound_logger, BoundLogger)
+        self.log = bound_logger
+
         self.connection = tiger.connection
         self.scripts = tiger.scripts
         self.config = tiger.config
         self._key = tiger._key
         self._did_work = True
         self._last_task_check = 0.0
-        self.stats_thread = None
+        self.stats_thread: Optional[StatsThread] = None
         self.id = str(uuid.uuid4())
 
         if queues:
@@ -113,7 +134,7 @@ class Worker:
             self.single_worker_queues = set()
 
         if max_workers_per_queue:
-            self.max_workers_per_queue = max_workers_per_queue
+            self.max_workers_per_queue: Optional[int] = max_workers_per_queue
         else:
             self.max_workers_per_queue = None
         assert (
@@ -144,7 +165,7 @@ class Worker:
         Sets up signal handlers for safely stopping the worker.
         """
 
-        def request_stop(signum, frame) -> None:
+        def request_stop(signum: int, frame: Any) -> None:
             self._stop_requested = True
             self.log.info("stop requested, waiting for task to finish")
 
@@ -158,7 +179,7 @@ class Worker:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def _filter_queues(self, queues) -> List[str]:
+    def _filter_queues(self, queues: Collection[str]) -> List[str]:
         """
         Applies the queue filter to the given list of queues and returns the
         queues that match. Note that a queue name matches any subqueues
@@ -237,7 +258,9 @@ class Worker:
             time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
         self._refresh_queue_set()
 
-    def _pubsub_for_queues(self, timeout=0, batch_timeout=0) -> None:
+    def _pubsub_for_queues(
+        self, timeout: float = 0, batch_timeout: float = 0
+    ) -> None:
         """
         Check activity channel for new queues and wait as necessary.
 
@@ -254,6 +277,7 @@ class Worker:
         """
         new_queue_found = False
         start_time = batch_exit = time.time()
+        assert self._pubsub is not None
         while True:
             # Check to see if batch_exit has been updated
             if batch_exit > start_time:
@@ -373,7 +397,7 @@ class Worker:
                     "failed to release lock queue_expired_tasks on full batch"
                 )
 
-    def _get_hard_timeouts(self, func, tasks):
+    def _get_hard_timeouts(self, func: Any, tasks: List[Task]) -> List[float]:
         is_batch_func = getattr(func, "_task_batch", False)
         if is_batch_func:
             task_timeouts = [
@@ -395,7 +419,7 @@ class Worker:
                 for task in tasks
             ]
 
-    def _execute_forked(self, tasks, log):
+    def _execute_forked(self, tasks: List[Task], log: BoundLogger) -> bool:
         """
         Executes the tasks in the forked process. Multiple tasks can be passed
         for batch processing. However, they must all use the same function and
@@ -403,7 +427,7 @@ class Worker:
         """
         success = False
 
-        execution = {}
+        execution: Dict[str, Any] = {}
 
         assert len(tasks)
         task_func = tasks[0].serialized_func
@@ -463,7 +487,7 @@ class Worker:
 
         return success
 
-    def _get_queue_batch_size(self, queue) -> int:
+    def _get_queue_batch_size(self, queue: str) -> int:
         """Get queue batch size."""
 
         # Fetch one item unless this is a batch queue.
@@ -476,7 +500,11 @@ class Worker:
 
         return batch_size
 
-    def _get_queue_lock(self, queue, log):
+    def _get_queue_lock(
+        self, queue: str, log: BoundLogger
+    ) -> Union[
+        Tuple[None, Literal[True]], Tuple[Optional[Semaphore], Literal[False]]
+    ]:
         """Get queue lock for max worker queues.
 
         For max worker queues it returns a Lock if acquired and whether
@@ -510,16 +538,24 @@ class Worker:
 
         return queue_lock, False
 
-    def _heartbeat(self, queue, task_ids) -> None:
+    def _heartbeat(self, queue: str, task_ids: Collection[str]) -> None:
         """
         Updates the heartbeat for the given task IDs to prevent them from
         timing out and being requeued.
         """
         now = time.time()
         mapping = {task_id: now for task_id in task_ids}
-        self.connection.zadd(self._key(ACTIVE, queue), mapping)
+        self.connection.zadd(self._key(ACTIVE, queue), mapping)  # type: ignore[arg-type]
 
-    def _execute(self, queue, tasks, log, locks, queue_lock, all_task_ids):
+    def _execute(
+        self,
+        queue: str,
+        tasks: List[Task],
+        log: BoundLogger,
+        locks: Collection[Lock],
+        queue_lock: Optional[Semaphore],
+        all_task_ids: Set[str],
+    ) -> bool:
         """
         Executes the given tasks. Returns a boolean indicating whether
         the tasks were executed successfully.
@@ -546,6 +582,7 @@ class Worker:
         if child_pid == 0:
             # Child process
             log = log.bind(child_pid=os.getpid())
+            assert isinstance(log, BoundLogger)
 
             # Disconnect the Redis connection inherited from the main process.
             # Note that this doesn't disconnect the socket in the main process.
@@ -564,12 +601,13 @@ class Worker:
             # like sys.exit() would. Note we don't call sys.exit() directly
             # because it would perform additional cleanup (e.g. calling atexit
             # handlers twice). See also: https://bugs.python.org/issue18966
-            threading._shutdown()
+            threading._shutdown()  # type: ignore[attr-defined]
 
             os._exit(int(not success))
         else:
             # Main process
             log = log.bind(child_pid=child_pid)
+            assert isinstance(log, BoundLogger)
             for task in tasks:
                 log.info(
                     "processing",
@@ -603,7 +641,7 @@ class Worker:
             # read from pipe_r).
             old_wakeup_fd = signal.set_wakeup_fd(pipe_w)
 
-            def check_child_exit():
+            def check_child_exit() -> Optional[int]:
                 """
                 Do a non-blocking check to see if the child process exited.
                 Returns None if the process is still running, or the exit code
@@ -621,6 +659,7 @@ class Worker:
                         return check_child_exit()
                     else:
                         raise
+                return None
 
             hard_timeouts = self._get_hard_timeouts(task_func, tasks)
             time_started = time.time()
@@ -737,13 +776,13 @@ class Worker:
 
     def _process_queue_message(
         self,
-        message_queue,
-        new_queue_found,
-        batch_exit,
-        start_time,
-        timeout,
-        batch_timeout,
-    ):
+        message_queue: str,
+        new_queue_found: bool,
+        batch_exit: float,
+        start_time: float,
+        timeout: float,
+        batch_timeout: float,
+    ) -> Tuple[bool, float]:
         """Process a queue message from activity channel."""
 
         for queue in self._filter_queues([message_queue]):
@@ -759,7 +798,14 @@ class Worker:
 
         return new_queue_found, batch_exit
 
-    def _process_queue_tasks(self, queue, queue_lock, task_ids, now, log):
+    def _process_queue_tasks(
+        self,
+        queue: str,
+        queue_lock: Optional[Semaphore],
+        task_ids: Set[str],
+        now: float,
+        log: BoundLogger,
+    ) -> int:
         """Process tasks in queue."""
 
         processed_count = 0
@@ -805,7 +851,7 @@ class Worker:
         valid_task_ids = {task.id for task in tasks}
 
         # Group by task func
-        tasks_by_func = OrderedDict()
+        tasks_by_func: Dict[str, List[Task]] = OrderedDict()
         for task in tasks:
             func = task.serialized_func
             if func in tasks_by_func:
@@ -827,7 +873,7 @@ class Worker:
 
         return processed_count
 
-    def _process_from_queue(self, queue):
+    def _process_from_queue(self, queue: str) -> Tuple[List[str], int]:
         """
         Internal method to process a task batch from the given queue.
 
@@ -843,7 +889,8 @@ class Worker:
         """
         now = time.time()
 
-        log = self.log.bind(queue=queue)
+        log: BoundLogger = self.log.bind(queue=queue)
+        assert isinstance(log, BoundLogger)
 
         batch_size = self._get_queue_batch_size(queue)
 
@@ -895,13 +942,20 @@ class Worker:
 
         return task_ids, processed_count
 
-    def _execute_task_group(self, queue, tasks, all_task_ids, queue_lock):
+    def _execute_task_group(
+        self,
+        queue: str,
+        tasks: List[Task],
+        all_task_ids: Set[str],
+        queue_lock: Optional[Semaphore],
+    ) -> Tuple[bool, List[Task]]:
         """
         Executes the given tasks in the queue. Updates the heartbeat for task
         IDs passed in all_task_ids. This internal method is only meant to be
         called from within _process_from_queue.
         """
-        log = self.log.bind(queue=queue)
+        log: BoundLogger = self.log.bind(queue=queue)
+        assert isinstance(log, BoundLogger)
 
         locks = []
         # Keep track of the acquired locks: If two tasks in the list require
@@ -971,16 +1025,18 @@ class Worker:
         return success, ready_tasks
 
     def _finish_task_processing(
-        self, queue, task, success, start_time
+        self, queue: str, task: Task, success: bool, start_time: float
     ) -> None:
         """
         After a task is executed, this method is called and ensures that
         the task gets properly removed from the ACTIVE queue and, in case of an
         error, retried or marked as failed.
         """
-        log = self.log.bind(
+        log: BoundLogger = self.log.bind(
             queue=queue, func=task.serialized_func, task_id=task.id
         )
+
+        assert isinstance(log, BoundLogger)
 
         now = time.time()
         processing_duration = now - start_time
@@ -1128,13 +1184,11 @@ class Worker:
             self._last_task_check = time.time()
 
     def _queue_periodic_tasks(self) -> None:
-        funcs = self.tiger.periodic_task_funcs.values()
-
         # Only queue periodic tasks for queues this worker is responsible
         # for.
         funcs = [
             f
-            for f in funcs
+            for f in self.tiger.periodic_task_funcs.values()
             if self._filter_queues([Task.queue_from_function(f, self.tiger)])
         ]
 
@@ -1173,7 +1227,7 @@ class Worker:
             self._filter_queues(self._retrieve_queues(self._key(QUEUED)))
         )
 
-    def _retrieve_queues(self, key) -> Set[str]:
+    def _retrieve_queues(self, key: str) -> Set[str]:
         if len(self.only_queues) != 1:
             return self.connection.smembers(key)
 
@@ -1182,7 +1236,9 @@ class Worker:
 
         return set(self.connection.sscan_iter(key, match=match, count=100000))
 
-    def _store_task_execution(self, tasks, execution) -> None:
+    def _store_task_execution(
+        self, tasks: List[Task], execution: Dict
+    ) -> None:
         serialized_execution = json.dumps(execution)
 
         for task in tasks:
@@ -1200,7 +1256,7 @@ class Worker:
 
             pipeline.execute()
 
-    def run(self, once=False, force_once=False):
+    def run(self, once: bool = False, force_once: bool = False) -> None:
         """
         Main loop of the worker.
 
@@ -1224,8 +1280,9 @@ class Worker:
             self.log.warn("using old Redis version")
 
         if self.config["STATS_INTERVAL"]:
-            self.stats_thread = StatsThread(self)
-            self.stats_thread.start()
+            stats_thread = StatsThread(self)
+            self.stats_thread = stats_thread
+            stats_thread.start()
 
         # Queue any periodic tasks that are not queued yet.
         self._queue_periodic_tasks()
@@ -1235,9 +1292,10 @@ class Worker:
         # XXX: This can get inefficient when having lots of queues.
 
         if self.config["POLL_TASK_QUEUES_INTERVAL"]:
-            self._pubsub = None
+            self._pubsub: Optional[PubSub] = None
         else:
             self._pubsub = self.connection.pubsub()
+            assert self._pubsub is not None
             self._pubsub.subscribe(self._key("activity"))
 
         self._refresh_queue_set()

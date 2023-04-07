@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 
 
 class TaskImportError(ImportError):
@@ -40,7 +41,12 @@ class RetryException(BaseException):
     from Redis when it completes.
     """
 
-    def __init__(self, method=None, original_traceback=False, log_error=True):
+    def __init__(
+        self,
+        method: Any = None,
+        original_traceback: Any = False,
+        log_error: bool = True,
+    ):
         self.method = method
         self.exc_info = sys.exc_info() if original_traceback else None
         self.log_error = log_error

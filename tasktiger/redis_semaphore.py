@@ -2,6 +2,9 @@
 
 import os
 import time
+from typing import Optional, Tuple
+
+from redis import Redis
 
 SYSTEM_LOCK_ID = "SYSTEM_LOCK"
 
@@ -9,7 +12,14 @@ SYSTEM_LOCK_ID = "SYSTEM_LOCK"
 class Semaphore:
     """Semaphore lock using Redis ZSET."""
 
-    def __init__(self, redis, name, lock_id, timeout, max_locks=1):
+    def __init__(
+        self,
+        redis: Redis,
+        name: str,
+        lock_id: str,
+        timeout: float,
+        max_locks: int = 1,
+    ) -> None:
         """
         Semaphore lock.
 
@@ -39,7 +49,7 @@ class Semaphore:
             self._semaphore = self.redis.register_script(f.read())
 
     @classmethod
-    def get_system_lock(cls, redis, name):
+    def get_system_lock(cls, redis: Redis, name: str) -> Optional[float]:
         """
         Get system lock timeout for the semaphore.
 
@@ -53,7 +63,7 @@ class Semaphore:
         return redis.zscore(name, SYSTEM_LOCK_ID)
 
     @classmethod
-    def set_system_lock(cls, redis, name, timeout):
+    def set_system_lock(cls, redis: Redis, name: str, timeout: int) -> None:
         """
         Set system lock for the semaphore.
 
@@ -75,12 +85,12 @@ class Semaphore:
         )  # timeout plus buffer for troubleshooting
         pipeline.execute()
 
-    def release(self):
+    def release(self) -> None:
         """Release semaphore."""
 
         self.redis.zrem(self.name, self.lock_id)
 
-    def acquire(self):
+    def acquire(self) -> Tuple[bool, int]:
         """
         Obtain a semaphore lock.
 
@@ -98,7 +108,7 @@ class Semaphore:
 
         return acquired, locks
 
-    def renew(self):
+    def renew(self) -> Tuple[bool, int]:
         """
         Attempt to renew semaphore.
 
