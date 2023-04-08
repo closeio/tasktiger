@@ -1,9 +1,15 @@
 import datetime
+from typing import Callable, Optional, Tuple
 
 __all__ = ["periodic"]
 
 
-def _periodic(dt, period, start_date, end_date):
+def _periodic(
+    dt: datetime.datetime,
+    period: int,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+) -> Optional[datetime.datetime]:
     if end_date and dt >= end_date:
         return None
 
@@ -25,14 +31,14 @@ def _periodic(dt, period, start_date, end_date):
 
 
 def periodic(
-    seconds=0,
-    minutes=0,
-    hours=0,
-    days=0,
-    weeks=0,
-    start_date=None,
-    end_date=None,
-):
+    seconds: int = 0,
+    minutes: int = 0,
+    hours: int = 0,
+    days: int = 0,
+    weeks: int = 0,
+    start_date: Optional[datetime.datetime] = None,
+    end_date: Optional[datetime.datetime] = None,
+) -> Tuple[Callable[..., Optional[datetime.datetime]], Tuple]:
     """
     Periodic task schedule: Use to schedule a task to run periodically,
     starting from start_date (or None to be active immediately) until end_date

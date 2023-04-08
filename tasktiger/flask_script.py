@@ -1,8 +1,12 @@
 from __future__ import absolute_import
 
 import argparse
+from typing import TYPE_CHECKING, Any, List
 
 from flask_script import Command
+
+if TYPE_CHECKING:
+    from tasktiger import TaskTiger
 
 
 class TaskTigerCommand(Command):
@@ -14,28 +18,30 @@ class TaskTigerCommand(Command):
     capture_all_args = True
     help = "Run a TaskTiger worker"
 
-    def __init__(self, tiger):
+    def __init__(self, tiger: TaskTiger) -> None:
         super(TaskTigerCommand, self).__init__()
         self.tiger = tiger
 
-    def create_parser(self, *args, **kwargs):
+    def create_parser(
+        self, *args: Any, **kwargs: Any
+    ) -> argparse.ArgumentParser:
         # Override the default parser so we can pass all arguments to the
         # TaskTiger parser.
         func_stack = kwargs.pop("func_stack", ())
         parent = kwargs.pop("parent", None)
-        parser = argparse.ArgumentParser(*args, add_help=False, **kwargs)
+        parser = argparse.ArgumentParser(*args, add_help=False, **kwargs)  # type: ignore[misc]
         parser.set_defaults(func_stack=func_stack + (self,))
         self.parser = parser
         self.parent = parent
         return parser
 
-    def setup(self):
+    def setup(self) -> None:
         """
         Override this method to implement custom setup (e.g. logging) before
         running the worker.
         """
 
-    def run(self, args):
+    def run(self, args: List[str]) -> None:
         # Allow passing a callable that returns the TaskTiger instance.
         if callable(self.tiger):
             self.tiger = self.tiger()

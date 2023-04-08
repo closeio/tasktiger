@@ -1,3 +1,6 @@
+from typing import Any
+
+from . import TaskTiger
 from .task import Task
 from .worker import Worker
 
@@ -9,7 +12,9 @@ class TaskTigerTestMixin:
     Unit test mixin for tests that use TaskTiger.
     """
 
-    def run_worker(self, tiger, raise_on_errors=True, **kwargs):
+    def run_worker(
+        self, tiger: TaskTiger, raise_on_errors: bool = True, **kwargs: Any
+    ) -> None:
         # A worker run processes queued tasks, and then queues scheduled tasks.
         # We therefore need to run the worker twice to execute due scheduled
         # tasks.

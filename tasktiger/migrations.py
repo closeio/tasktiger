@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING
+
 from .utils import redis_glob_escape
 
+if TYPE_CHECKING:
+    from . import TaskTiger
 
-def migrate_executions_count(tiger):
+
+def migrate_executions_count(tiger: "TaskTiger") -> None:
     """
     Backfills ``t:task:<uuid>:executions_count`` by counting
     elements in ``t:task:<uuid>:executions``.

@@ -1,3 +1,4 @@
+.dmypy.json
 *.pyc
 .DS_Store
 build/

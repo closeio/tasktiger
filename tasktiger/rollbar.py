@@ -2,13 +2,14 @@
 from __future__ import absolute_import
 
 import json
+from typing import Any
 
 import rollbar
 from rollbar.logger import RollbarHandler
 
 
 class StructlogRollbarHandler(RollbarHandler):
-    def __init__(self, prefix, *args, **kwargs):
+    def __init__(self, prefix: str, *args: Any, **kwargs: Any):
         """
         Structured rollbar handler. Rollbar messages are prefixed with the
         given prefix string. Any other arguments are passed to RollbarHandler.
@@ -16,11 +17,11 @@ class StructlogRollbarHandler(RollbarHandler):
         self.prefix = prefix
         super(StructlogRollbarHandler, self).__init__(*args, **kwargs)
 
-    def format_title(self, data):
+    def format_title(self, data: Any) -> str:
         # Keys used to construct the title and for grouping purposes.
         KEYS = ["event", "func", "exception_name", "queue"]
 
-        def format_field(field, value):
+        def format_field(field: str, value: Any) -> str:
             if field == "queue":
                 return "%s=%s" % (field, value.split(".")[0])
             else:
@@ -33,7 +34,7 @@ class StructlogRollbarHandler(RollbarHandler):
             ),
         )
 
-    def emit(self, record):
+    def emit(self, record: Any) -> Any:
         level = record.levelname.lower()
         if level not in self.SUPPORTED_LEVELS:
             return
