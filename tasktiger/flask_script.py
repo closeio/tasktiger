@@ -18,7 +18,7 @@ class TaskTigerCommand(Command):
     capture_all_args = True
     help = "Run a TaskTiger worker"
 
-    def __init__(self, tiger: TaskTiger) -> None:
+    def __init__(self, tiger: "TaskTiger") -> None:
         super(TaskTigerCommand, self).__init__()
         self.tiger = tiger
 
