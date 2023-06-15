@@ -319,10 +319,6 @@ class RedisScripts:
 
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
 
-        self._execute_pipeline = self.register_script_from_file(
-            "lua/execute_pipeline.lua"
-        )
-
         self._move_task = self.register_script_from_file(
             "lua/move_task.lua",
             include_functions={
@@ -569,80 +565,6 @@ class RedisScripts:
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
 
-    def execute_pipeline(
-        self, pipeline: Pipeline, client: Optional[Redis] = None
-    ) -> List[Any]:
-        """
-        Executes the given Redis pipeline as a Lua script. When an error
-        occurs, the transaction stops executing, and an exception is raised.
-        This differs from Redis transactions, where execution continues after an
-        error. On success, a list of results is returned. The pipeline is
-        cleared after execution and can no longer be reused.
-
-        Example:
-
-        p = conn.pipeline()
-        p.lrange('x', 0, -1)
-        p.set('success', 1)
-
-        # If "x" is empty or a list, an array [[...], True] is returned.
-        # Otherwise, ResponseError is raised and "success" is not set.
-        results = redis_scripts.execute_pipeline(p)
-        """
-
-        client = client or self.redis
-
-        executing_pipeline = None
-        try:
-            # Prepare args
-            stack = pipeline.command_stack
-            script_args = [int(self.can_replicate_commands), len(stack)]
-            for args, options in stack:
-                script_args += [len(args) - 1] + list(args)
-
-            # Run the pipeline
-            if self.can_replicate_commands:  # Redis 3.2 or higher
-                # Make sure scripts exist
-                if pipeline.scripts:
-                    pipeline.load_scripts()
-
-                raw_results = self._execute_pipeline(
-                    args=script_args, client=client
-                )
-            else:
-                executing_pipeline = client.pipeline()
-
-                # Always load scripts to avoid issues when Redis loads data
-                # from AOF file / when replicating.
-                for s in pipeline.scripts:
-                    executing_pipeline.script_load(s.script)
-
-                # Run actual pipeline lua script
-                self._execute_pipeline(
-                    args=script_args, client=executing_pipeline
-                )
-
-                # Always load all scripts and run actual pipeline lua script
-                raw_results = executing_pipeline.execute()[-1]
-
-            # Run response callbacks on results.
-            results = []
-            response_callbacks = pipeline.response_callbacks
-            for (args, options), result in zip(stack, raw_results):
-                command_name = args[0]
-                if command_name in response_callbacks:
-                    result = response_callbacks[command_name](
-                        result, **options
-                    )
-                results.append(result)
-
-            return results
-
-        finally:
-            if executing_pipeline:
-                executing_pipeline.reset()
-            pipeline.reset()
-
     def move_task(
         self,
         key_prefix: str,
@@ -654,8 +576,8 @@ class RedisScripts:
         when: float,
         mode: Optional[str],
         publish_queued_tasks: bool,
-        client=None,
-    ):
+        client: Optional[Redis] = None,
+    ) -> Any:
         """
         Refer to task._move internal helper documentation.
         """
@@ -666,7 +588,7 @@ class RedisScripts:
         def _none_to_empty_str(v: Optional[str]) -> str:
             return v or ""
 
-        self._move_task(
+        return self._move_task(
             keys=[],
             args=[
                 key_prefix,
