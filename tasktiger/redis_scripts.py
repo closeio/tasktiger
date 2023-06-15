@@ -2,8 +2,14 @@ import os
 from typing import Any, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
-from redis.client import Pipeline
 from redis.commands.core import Script
+
+LOCAL_FUNC_TEMPLATE = """
+local function {func_name}(KEYS, ARGV)
+    {func_body}
+end
+
+"""
 
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
@@ -317,6 +323,18 @@ class RedisScripts:
             "lua/execute_pipeline.lua"
         )
 
+        self._move_task = self.register_script_from_file(
+            "lua/move_task.lua",
+            include_functions={
+                "zadd_noupdate": ZADD_NOUPDATE,
+                "zadd_update_existing": ZADD_UPDATE_EXISTING,
+                "zadd_update_min": ZADD_UPDATE_MIN,
+                "zadd_update_max": ZADD_UPDATE_MAX,
+                "srem_if_not_exists": SREM_IF_NOT_EXISTS,
+                "delete_if_not_in_zsets": DELETE_IF_NOT_IN_ZSETS,
+            },
+        )
+
     @property
     def can_replicate_commands(self) -> bool:
         """
@@ -330,11 +348,24 @@ class RedisScripts:
             self._can_replicate_commands = result
         return self._can_replicate_commands
 
-    def register_script_from_file(self, filename: str) -> Script:
+    def register_script_from_file(
+        self, filename: str, include_functions: Optional[dict] = None
+    ) -> Script:
         with open(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
         ) as f:
-            return self.redis.register_script(f.read())
+            script = f.read()
+            if include_functions:
+                function_definitions = []
+                for func_name, func_body in include_functions.items():
+                    function_definitions.append(
+                        LOCAL_FUNC_TEMPLATE.format(
+                            func_name=func_name, func_body=func_body
+                        )
+                    )
+                script = "\n".join(function_definitions + [script])
+
+            return self.redis.register_script(script)
 
     def zadd(
         self,
@@ -563,7 +594,6 @@ class RedisScripts:
 
         executing_pipeline = None
         try:
-
             # Prepare args
             stack = pipeline.command_stack
             script_args = [int(self.can_replicate_commands), len(stack)]
@@ -598,7 +628,7 @@ class RedisScripts:
             # Run response callbacks on results.
             results = []
             response_callbacks = pipeline.response_callbacks
-            for ((args, options), result) in zip(stack, raw_results):
+            for (args, options), result in zip(stack, raw_results):
                 command_name = args[0]
                 if command_name in response_callbacks:
                     result = response_callbacks[command_name](
@@ -612,3 +642,42 @@ class RedisScripts:
             if executing_pipeline:
                 executing_pipeline.reset()
             pipeline.reset()
+
+    def move_task(
+        self,
+        key_prefix: str,
+        id: str,
+        queue: str,
+        from_state: str,
+        to_state: Optional[str],
+        unique: bool,
+        when: float,
+        mode: Optional[str],
+        publish_queued_tasks: bool,
+        client=None,
+    ):
+        """
+        Refer to task._move internal helper documentation.
+        """
+
+        def _bool_to_str(v: bool) -> str:
+            return "true" if v else "false"
+
+        def _none_to_empty_str(v: Optional[str]) -> str:
+            return v or ""
+
+        self._move_task(
+            keys=[],
+            args=[
+                key_prefix,
+                id,
+                queue,
+                from_state,
+                _none_to_empty_str(to_state),
+                _bool_to_str(unique),
+                when,
+                _none_to_empty_str(mode),
+                _bool_to_str(publish_queued_tasks),
+            ],
+            client=client,
+        )

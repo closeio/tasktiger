@@ -1,6 +1,3 @@
-import pytest
-import redis
-
 from .utils import get_tiger
 
 
