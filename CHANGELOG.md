@@ -1,5 +1,19 @@
 # Changelog
 
+## Version 0.18.0
+
+* Added support for Redis >= 6.2.7 ([268](https://github.com/closeio/tasktiger/issues/268))
+
+### ⚠️ Breaking changes
+
+* Removed `execute_pipeline` script ([284](https://github.com/closeio/tasktiger/pull/284))
+
+### Other changes
+
+* Added typing to more parts of the codebase
+* Dropped Python 3.7 support, added Python 3.11 support
+* Added CI checks to ensure compatibility on redis-py versions (currently >=3.3.0,<5)
+
 ## Version 0.17.1
 
 ### Other changes
