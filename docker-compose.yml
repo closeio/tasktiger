@@ -1,7 +1,7 @@
 version: "3.7"
 services:
   redis:
-    image: redis:4.0.6
+    image: redis:7.0.9
     expose:
       - 6379
   tasktiger:

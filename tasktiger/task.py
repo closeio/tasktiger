@@ -19,7 +19,6 @@ import redis
 from structlog.stdlib import BoundLogger
 
 from ._internal import (
-    ACTIVE,
     ERROR,
     QUEUED,
     SCHEDULED,
@@ -308,9 +307,7 @@ class Task:
         the expected queue.
         """
 
-        pipeline = self.tiger.connection.pipeline()
         scripts = self.tiger.scripts
-        _key = self.tiger._key
 
         from_state = from_state or self.state
         queue = self.queue
@@ -318,65 +315,18 @@ class Task:
         assert from_state
         assert queue
 
-        scripts.fail_if_not_in_zset(
-            _key(from_state, queue), self.id, client=pipeline
-        )
-        if to_state:
-            if not when:
-                when = time.time()
-            if mode:
-                scripts.zadd(
-                    _key(to_state, queue), when, self.id, mode, client=pipeline
-                )
-            else:
-                pipeline.zadd(_key(to_state, queue), {self.id: when})
-            pipeline.sadd(_key(to_state), queue)
-        pipeline.zrem(_key(from_state, queue), self.id)
-
-        if not to_state:  # Remove the task if necessary
-            if self.unique:
-                # TODO: Do the following two in one call.
-
-                # Delete executions if there were no errors.
-                scripts.delete_if_not_in_zsets(
-                    to_delete=[
-                        _key("task", self.id, "executions"),
-                        _key("task", self.id, "executions_count"),
-                    ],
-                    value=self.id,
-                    zsets=[
-                        _key(state, queue) for state in {ERROR} - {from_state}
-                    ],
-                    client=pipeline,
-                )
-
-                # Only delete task if it's not in any other queue
-                check_states = {ACTIVE, QUEUED, ERROR, SCHEDULED} - {
-                    from_state
-                }
-                scripts.delete_if_not_in_zsets(
-                    to_delete=[_key("task", self.id)],
-                    value=self.id,
-                    zsets=[_key(state, queue) for state in check_states],
-                    client=pipeline,
-                )
-            else:
-                # Safe to remove
-                pipeline.delete(
-                    _key("task", self.id),
-                    _key("task", self.id, "executions"),
-                    _key("task", self.id, "executions_count"),
-                )
-
-        scripts.srem_if_not_exists(
-            _key(from_state), queue, _key(from_state, queue), client=pipeline
-        )
-
-        if to_state == QUEUED and self.tiger.config["PUBLISH_QUEUED_TASKS"]:
-            pipeline.publish(_key("activity"), queue)
-
         try:
-            scripts.execute_pipeline(pipeline)
+            scripts.move_task(
+                id=self.id,
+                queue=self.queue,
+                from_state=from_state,
+                to_state=to_state,
+                unique=self.unique,
+                when=when or time.time(),
+                mode=mode,
+                key_func=self.tiger._key,
+                publish_queued_tasks=self.tiger.config["PUBLISH_QUEUED_TASKS"],
+            )
         except redis.ResponseError as e:
             if "<FAIL_IF_NOT_IN_ZSET>" in e.args[0]:
                 raise TaskNotFound(

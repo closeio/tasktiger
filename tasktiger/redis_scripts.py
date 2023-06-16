@@ -1,9 +1,17 @@
 import os
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
-from redis.client import Pipeline
 from redis.commands.core import Script
+
+from ._internal import ACTIVE, ERROR, QUEUED, SCHEDULED
+
+LOCAL_FUNC_TEMPLATE = """
+local function {func_name}(KEYS, ARGV)
+    {func_body}
+end
+
+"""
 
 # ARGV = { score, member }
 ZADD_NOUPDATE_TEMPLATE = """
@@ -313,8 +321,14 @@ class RedisScripts:
 
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
 
-        self._execute_pipeline = self.register_script_from_file(
-            "lua/execute_pipeline.lua"
+        self._move_task = self.register_script_from_file(
+            "lua/move_task.lua",
+            include_functions={
+                "zadd_noupdate": ZADD_NOUPDATE,
+                "zadd_update_min": ZADD_UPDATE_MIN,
+                "srem_if_not_exists": SREM_IF_NOT_EXISTS,
+                "delete_if_not_in_zsets": DELETE_IF_NOT_IN_ZSETS,
+            },
         )
 
     @property
@@ -330,11 +344,25 @@ class RedisScripts:
             self._can_replicate_commands = result
         return self._can_replicate_commands
 
-    def register_script_from_file(self, filename: str) -> Script:
+    def register_script_from_file(
+        self, filename: str, include_functions: Optional[dict] = None
+    ) -> Script:
         with open(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
         ) as f:
-            return self.redis.register_script(f.read())
+            script = f.read()
+            if include_functions:
+                function_definitions = []
+                for func_name in sorted(include_functions.keys()):
+                    function_definitions.append(
+                        LOCAL_FUNC_TEMPLATE.format(
+                            func_name=func_name,
+                            func_body=include_functions[func_name],
+                        )
+                    )
+                script = "\n".join(function_definitions + [script])
+
+            return self.redis.register_script(script)
 
     def zadd(
         self,
@@ -538,77 +566,62 @@ class RedisScripts:
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
 
-    def execute_pipeline(
-        self, pipeline: Pipeline, client: Optional[Redis] = None
-    ) -> List[Any]:
+    def move_task(
+        self,
+        id: str,
+        queue: str,
+        from_state: str,
+        to_state: Optional[str],
+        unique: bool,
+        when: float,
+        mode: Optional[str],
+        key_func: Callable[..., str],
+        publish_queued_tasks: bool,
+        client: Optional[Redis] = None,
+    ) -> Any:
         """
-        Executes the given Redis pipeline as a Lua script. When an error
-        occurs, the transaction stops executing, and an exception is raised.
-        This differs from Redis transactions, where execution continues after an
-        error. On success, a list of results is returned. The pipeline is
-        cleared after execution and can no longer be reused.
-
-        Example:
-
-        p = conn.pipeline()
-        p.lrange('x', 0, -1)
-        p.set('success', 1)
-
-        # If "x" is empty or a list, an array [[...], True] is returned.
-        # Otherwise, ResponseError is raised and "success" is not set.
-        results = redis_scripts.execute_pipeline(p)
+        Refer to task._move internal helper documentation.
         """
 
-        client = client or self.redis
+        def _bool_to_str(v: bool) -> str:
+            return "true" if v else "false"
 
-        executing_pipeline = None
-        try:
+        def _none_to_empty_str(v: Optional[str]) -> str:
+            return v or ""
 
-            # Prepare args
-            stack = pipeline.command_stack
-            script_args = [int(self.can_replicate_commands), len(stack)]
-            for args, options in stack:
-                script_args += [len(args) - 1] + list(args)
+        key_task_id = key_func("task", id)
+        key_task_id_executions = key_func("task", id, "executions")
+        key_task_id_executions_count = key_func("task", id, "executions_count")
+        key_from_state = key_func(from_state)
+        key_to_state = key_func(to_state) if to_state else ""
+        key_active_queue = key_func(ACTIVE, queue)
+        key_queued_queue = key_func(QUEUED, queue)
+        key_error_queue = key_func(ERROR, queue)
+        key_scheduled_queue = key_func(SCHEDULED, queue)
+        key_activity = key_func("activity")
 
-            # Run the pipeline
-            if self.can_replicate_commands:  # Redis 3.2 or higher
-                # Make sure scripts exist
-                if pipeline.scripts:
-                    pipeline.load_scripts()
-
-                raw_results = self._execute_pipeline(
-                    args=script_args, client=client
-                )
-            else:
-                executing_pipeline = client.pipeline()
-
-                # Always load scripts to avoid issues when Redis loads data
-                # from AOF file / when replicating.
-                for s in pipeline.scripts:
-                    executing_pipeline.script_load(s.script)
-
-                # Run actual pipeline lua script
-                self._execute_pipeline(
-                    args=script_args, client=executing_pipeline
-                )
-
-                # Always load all scripts and run actual pipeline lua script
-                raw_results = executing_pipeline.execute()[-1]
-
-            # Run response callbacks on results.
-            results = []
-            response_callbacks = pipeline.response_callbacks
-            for ((args, options), result) in zip(stack, raw_results):
-                command_name = args[0]
-                if command_name in response_callbacks:
-                    result = response_callbacks[command_name](
-                        result, **options
-                    )
-                results.append(result)
-
-            return results
-
-        finally:
-            if executing_pipeline:
-                executing_pipeline.reset()
-            pipeline.reset()
+        return self._move_task(
+            keys=[
+                key_task_id,
+                key_task_id_executions,
+                key_task_id_executions_count,
+                key_from_state,
+                key_to_state,
+                key_active_queue,
+                key_queued_queue,
+                key_error_queue,
+                key_scheduled_queue,
+                key_activity,
+            ],
+            args=[
+                id,
+                queue,
+                from_state,
+                _none_to_empty_str(to_state),
+                _bool_to_str(unique),
+                when,
+                _none_to_empty_str(mode),
+                _bool_to_str(publish_queued_tasks),
+            ],
+            client=client,
+        )
