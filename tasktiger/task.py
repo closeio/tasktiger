@@ -319,7 +319,7 @@ class Task:
             scripts.move_task(
                 id=self.id,
                 queue=self.queue,
-                from_state=from_state or self.state,
+                from_state=from_state,
                 to_state=to_state,
                 unique=self.unique,
                 when=when or time.time(),

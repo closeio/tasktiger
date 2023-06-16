@@ -3,12 +3,8 @@ local function zadd_w_mode(key, score, member, mode)
         redis.call('zadd', key, score, member)
     elseif mode == "nx" then
         zadd_noupdate({ key }, { score, member })
-    elseif mode == "xx" then
-        zadd_update_existing({ key }, { score, member })
     elseif mode == "min" then
         zadd_update_min({ key }, { score, member })
-    elseif mode == "max" then
-        zadd_update_max({ key }, { score, member })
     else
         error("mode " .. mode .. " unsupported")
     end

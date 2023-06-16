@@ -325,9 +325,7 @@ class RedisScripts:
             "lua/move_task.lua",
             include_functions={
                 "zadd_noupdate": ZADD_NOUPDATE,
-                "zadd_update_existing": ZADD_UPDATE_EXISTING,
                 "zadd_update_min": ZADD_UPDATE_MIN,
-                "zadd_update_max": ZADD_UPDATE_MAX,
                 "srem_if_not_exists": SREM_IF_NOT_EXISTS,
                 "delete_if_not_in_zsets": DELETE_IF_NOT_IN_ZSETS,
             },
@@ -355,10 +353,11 @@ class RedisScripts:
             script = f.read()
             if include_functions:
                 function_definitions = []
-                for func_name, func_body in include_functions.items():
+                for func_name in sorted(include_functions.keys()):
                     function_definitions.append(
                         LOCAL_FUNC_TEMPLATE.format(
-                            func_name=func_name, func_body=func_body
+                            func_name=func_name,
+                            func_body=include_functions[func_name],
                         )
                     )
                 script = "\n".join(function_definitions + [script])
