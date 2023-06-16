@@ -317,7 +317,6 @@ class Task:
 
         try:
             scripts.move_task(
-                key_prefix=self.tiger.config["REDIS_PREFIX"],
                 id=self.id,
                 queue=self.queue,
                 from_state=from_state or self.state,
@@ -325,6 +324,7 @@ class Task:
                 unique=self.unique,
                 when=when or time.time(),
                 mode=mode,
+                key_func=self.tiger._key,
                 publish_queued_tasks=self.tiger.config["PUBLISH_QUEUED_TASKS"],
             )
         except redis.ResponseError as e:

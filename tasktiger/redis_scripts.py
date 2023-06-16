@@ -1,8 +1,10 @@
 import os
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
 from redis.commands.core import Script
+
+from ._internal import ACTIVE, ERROR, QUEUED, SCHEDULED
 
 LOCAL_FUNC_TEMPLATE = """
 local function {func_name}(KEYS, ARGV)
@@ -567,7 +569,6 @@ class RedisScripts:
 
     def move_task(
         self,
-        key_prefix: str,
         id: str,
         queue: str,
         from_state: str,
@@ -575,6 +576,7 @@ class RedisScripts:
         unique: bool,
         when: float,
         mode: Optional[str],
+        key_func: Callable[..., str],
         publish_queued_tasks: bool,
         client: Optional[Redis] = None,
     ) -> Any:
@@ -588,10 +590,31 @@ class RedisScripts:
         def _none_to_empty_str(v: Optional[str]) -> str:
             return v or ""
 
+        key_task_id = key_func("task", id)
+        key_task_id_executions = key_func("task", id, "executions")
+        key_task_id_executions_count = key_func("task", id, "executions_count")
+        key_from_state = key_func(from_state)
+        key_to_state = key_func(to_state) if to_state else ""
+        key_active_queue = key_func(ACTIVE, queue)
+        key_queued_queue = key_func(QUEUED, queue)
+        key_error_queue = key_func(ERROR, queue)
+        key_scheduled_queue = key_func(SCHEDULED, queue)
+        key_activity = key_func("activity")
+
         return self._move_task(
-            keys=[],
+            keys=[
+                key_task_id,
+                key_task_id_executions,
+                key_task_id_executions_count,
+                key_from_state,
+                key_to_state,
+                key_active_queue,
+                key_queued_queue,
+                key_error_queue,
+                key_scheduled_queue,
+                key_activity,
+            ],
             args=[
-                key_prefix,
                 id,
                 queue,
                 from_state,
