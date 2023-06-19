@@ -31,9 +31,10 @@ jobs:
         python-version: ['3.8', '3.9', '3.10', '3.11']
         os: ['ubuntu-20.04']
         redis-version: [4, 5, "6.2.6", "7.0.9"]
+        redis-py-version: [3.3.0, 4]
       # Do not cancel any jobs when a single job fails
       fail-fast: false
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }} with Redis ${{ matrix.redis-version }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }} with Redis ${{ matrix.redis-version }} and redis-py==${{ matrix.redis-py-version }}
     runs-on: ${{ matrix.os }}
     container: python:${{ matrix.python-version }}
     services:
@@ -52,6 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt -r requirements-test.txt
+          pip install redis==${{ matrix.redis-py-version }}
 
       - name: Run tests
         run: pytest

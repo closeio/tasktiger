@@ -2,9 +2,15 @@ import os
 from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
-from redis.commands.core import Script
 
 from ._internal import ACTIVE, ERROR, QUEUED, SCHEDULED
+
+try:
+    from redis.commands.core import Script
+except ImportError:
+    # redis-py < 4.0 : https://github.com/redis/redis-py/pull/1534
+    from redis.client import Script  # type: ignore
+
 
 LOCAL_FUNC_TEMPLATE = """
 local function {func_name}(KEYS, ARGV)
