@@ -1,8 +1,8 @@
 =========
 TaskTiger
 =========
-.. image:: https://circleci.com/gh/closeio/tasktiger/tree/master.svg?style=svg
-    :target: https://circleci.com/gh/closeio/tasktiger/tree/master
+.. image:: https://github.com/closeio/tasktiger/actions/workflows/test.yaml/badge.svg?event=push
+    :target: https://github.com/closeio/tasktiger/actions/workflows/test.yaml
 
 *TaskTiger* is a Python task queue using Redis.
 
