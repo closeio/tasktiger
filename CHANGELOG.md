@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.18.1
+
+* Added `current_serialized_func` property to `TaskTiger` object ([296](https://github.com/closeio/tasktiger/pull/296))
+
 ## Version 0.18.0
 
 * Added support for Redis >= 6.2.7 ([268](https://github.com/closeio/tasktiger/issues/268))
