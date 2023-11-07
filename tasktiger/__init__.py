@@ -9,7 +9,7 @@ from .exceptions import (
     TaskNotFound,
 )
 from .retry import exponential, fixed, linear
-from .schedule import periodic
+from .schedule import cron_expr, periodic
 from .task import Task
 from .tasktiger import TaskTiger, run_worker
 from .worker import Worker
@@ -31,6 +31,7 @@ __all__ = [
     "exponential",
     # Schedules
     "periodic",
+    "cron_expr",
 ]
 
 

@@ -1,7 +1,9 @@
 import datetime
 from typing import Callable, Optional, Tuple
 
-__all__ = ["periodic"]
+__all__ = ["periodic", "cron_expr"]
+
+START_DATE = datetime.datetime(2000, 1, 1)
 
 
 def _periodic(
@@ -54,5 +56,58 @@ def periodic(
     assert period > 0, "Must specify a positive period."
     if not start_date:
         # Saturday at midnight
-        start_date = datetime.datetime(2000, 1, 1)
+        start_date = START_DATE
     return (_periodic, (period, start_date, end_date))
+
+
+def _cron_expr(
+    dt: datetime.datetime,
+    expr: str,
+    start_date: datetime.datetime,
+    end_date: Optional[datetime.datetime] = None,
+) -> Optional[datetime.datetime]:
+    import croniter  # type: ignore
+    import pytz  # type: ignore
+
+    localize = pytz.utc.localize
+
+    if end_date and dt >= end_date:
+        return None
+
+    if dt < start_date:
+        return start_date
+
+    assert croniter.croniter.is_valid(expr), "Cron expression is not valid."
+
+    start_date = localize(start_date)
+    dt = localize(dt)
+
+    next_utc = croniter.croniter(expr, dt).get_next(ret_type=datetime.datetime)
+    next_utc = next_utc.replace(tzinfo=None)
+
+    # Make sure the time is still within bounds.
+    if end_date and next_utc > end_date:
+        return None
+
+    return next_utc
+
+
+def cron_expr(
+    expr: str,
+    start_date: Optional[datetime.datetime] = None,
+    end_date: Optional[datetime.datetime] = None,
+) -> Tuple[Callable[..., Optional[datetime.datetime]], Tuple]:
+    """
+    Periodic task schedule via cron expression: Use to schedule a task to run periodically,
+    starting from start_date (or None to be active immediately) until end_date
+    (or None to repeat forever).
+
+    This function behaves similar to the cron jobs, which run with a minimum of 1 minute
+    granularity. So specifying "* * * * *" expression will the run the task every
+    minute.
+
+    For more details, see README.
+    """
+    if not start_date:
+        start_date = START_DATE
+    return (_cron_expr, (expr, start_date, end_date))

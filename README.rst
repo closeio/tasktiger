@@ -389,7 +389,7 @@ The following options can be only specified in the task decorator:
   the initial task execution date when a worker is initialized, and to determine
   the next execution date when the task is about to get executed.
 
-  For most common scenarios, the ``periodic`` built-in function can be passed:
+  For most common scenarios, the below mentioned built-in functions can be passed:
 
   - ``periodic(seconds=0, minutes=0, hours=0, days=0, weeks=0, start_date=None,
     end_date=None)``
@@ -400,6 +400,17 @@ The following options can be only specified in the task decorator:
     indefinitely, use ``schedule=periodic(minutes=5)``. To run a task every
     every Sunday at 4am UTC, you could use
     ``schedule=periodic(weeks=1, start_date=datetime.datetime(2000, 1, 2, 4))``.
+
+  - ``cron_expr(expr, start_date=None, end_date=None)``
+
+    ``start_date``, to specify the periodic task start date. It defaults to 
+    ``2000-01-01T00:00Z``, a Saturday, if not given.
+    ``end_date``, to specify the periodic task end date. The task repeats 
+    forever if ``end_date`` is not given. 
+    For example, to run a task every hour indefinitely,
+    use ``schedule=cron_expr("0 * * * *")``. To run a task every Sunday at 
+    4am UTC, you could use ``schedule=cron_expr("0 4 * * 0")``.
+
 
 Custom retrying
 ---------------

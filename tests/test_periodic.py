@@ -3,7 +3,7 @@
 import datetime
 import time
 
-from tasktiger import Task, Worker, periodic
+from tasktiger import Task, Worker, cron_expr, periodic
 from tasktiger._internal import (
     QUEUED,
     SCHEDULED,
@@ -62,6 +62,50 @@ class TestPeriodicTasks(BaseTestCase):
         assert f[0](datetime.datetime(2010, 1, 1, 0, 0), *f[1]) is None
 
         f = periodic(minutes=1, end_date=dt)
+        assert f[0](datetime.datetime(2010, 1, 1, 0, 1), *f[1]) is None
+
+    def test_cron_schedule(self):
+        """
+        Test the cron_expr() schedule function.
+        """
+        dt = datetime.datetime(2010, 1, 1)
+
+        f = cron_expr("* * * * *")
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 1, 0, 1)
+
+        f = cron_expr("0 * * * *")
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 1, 1)
+
+        f = cron_expr("0 0 * * *")
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 2)
+
+        f = cron_expr("0 0 * * 6")
+        # 2010-01-02 is a Saturday
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 2)
+
+        f = cron_expr("0 0 * * 0", start_date=datetime.datetime(2000, 1, 2))
+        # 2000-01-02 is a Sunday and 2010-01-02 is a Saturday
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 3)
+
+        f = cron_expr("2 3 * * *", start_date=dt)
+        assert f[0](dt, *f[1]) == datetime.datetime(2010, 1, 1, 3, 2)
+        # Make sure we return the start_date if the current date is earlier.
+        assert f[0](datetime.datetime(1990, 1, 1), *f[1]) == dt
+
+        f = cron_expr("* * * * *", end_date=dt)
+        assert f[0](
+            datetime.datetime(2009, 12, 31, 23, 58), *f[1]
+        ) == datetime.datetime(2009, 12, 31, 23, 59)
+
+        f = cron_expr("* * * * *", end_date=dt)
+        assert f[0](
+            datetime.datetime(2009, 12, 31, 23, 59), *f[1]
+        ) == datetime.datetime(2010, 1, 1, 0, 0)
+
+        f = cron_expr("* * * * *", end_date=dt)
+        assert f[0](datetime.datetime(2010, 1, 1, 0, 0), *f[1]) is None
+
+        f = cron_expr("* * * * *", end_date=dt)
         assert f[0](datetime.datetime(2010, 1, 1, 0, 1), *f[1]) is None
 
     def test_periodic_execution(self):
