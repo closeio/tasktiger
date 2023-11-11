@@ -1,3 +1,5 @@
+from tasktiger.constants import ACTIVE, REDIS_PREFIX
+
 from .utils import get_tiger
 
 
@@ -125,7 +127,7 @@ class TestRedisScripts:
             score=None,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == ["a", "b"]
 
@@ -151,7 +153,7 @@ class TestRedisScripts:
             score=0,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == []
 
@@ -177,7 +179,7 @@ class TestRedisScripts:
             score=None,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == ["a", "b", "c", "d"]
 
@@ -321,13 +323,13 @@ class TestRedisScripts:
         assert self.conn.exists("bar") == 0
 
     def test_get_expired_tasks(self):
-        self.conn.sadd("t:active", "q1", "q2", "q3", "q4")
-        self.conn.zadd("t:active:q1", {"t1": 500})
-        self.conn.zadd("t:active:q1", {"t2": 1000})
-        self.conn.zadd("t:active:q1", {"t3": 1500})
-        self.conn.zadd("t:active:q2", {"t4": 1200})
-        self.conn.zadd("t:active:q3", {"t5": 1800})
-        self.conn.zadd("t:active:q4", {"t6": 200})
+        self.conn.sadd(f"{REDIS_PREFIX}:{ACTIVE}", "q1", "q2", "q3", "q4")
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q1", {"t1": 500})
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q1", {"t2": 1000})
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q1", {"t3": 1500})
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q2", {"t4": 1200})
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q3", {"t5": 1800})
+        self.conn.zadd(f"{REDIS_PREFIX}:{ACTIVE}:q4", {"t6": 200})
 
         expired_task_set = {("q1", "t1"), ("q1", "t2"), ("q4", "t6")}
 

@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from .constants import EXECUTIONS, TASK
 from .utils import redis_glob_escape
 
 if TYPE_CHECKING:
@@ -22,7 +23,8 @@ def migrate_executions_count(tiger: "TaskTiger") -> None:
     )
 
     match = (
-        redis_glob_escape(tiger.config["REDIS_PREFIX"]) + ":task:*:executions"
+        redis_glob_escape(tiger.config["REDIS_PREFIX"])
+        + f":{TASK}:*:{EXECUTIONS}"
     )
 
     for key in tiger.connection.scan_iter(count=100, match=match):
