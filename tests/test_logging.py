@@ -4,7 +4,6 @@ import pytest
 import structlog
 
 from tasktiger import TaskTiger, Worker
-from tasktiger.constants import REDIS_PREFIX, TASK
 from tasktiger.logging import tasktiger_processor
 
 from .test_base import BaseTestCase
@@ -56,7 +55,7 @@ class TestLogging(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"foo_qux": 0})
-        assert not self.conn.exists(f"{REDIS_PREFIX}:{TASK}:%s" % task["id"])
+        assert not self.conn.exists("t:task:%s" % task["id"])
 
 
 class TestSetupStructlog(BaseTestCase):

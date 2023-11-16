@@ -30,6 +30,7 @@ from ._internal import (
     serialize_func_name,
     serialize_retry_method,
 )
+from .constants import EXECUTIONS, EXECUTIONS_COUNT, TASK
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import BaseRunner, get_runner_class
 from .types import RetryStrategy
@@ -393,7 +394,7 @@ class Task:
 
         pipeline = tiger.connection.pipeline()
         pipeline.sadd(tiger._key(state), self.queue)
-        pipeline.set(tiger._key("task", self.id), serialized_task)
+        pipeline.set(tiger._key(TASK, self.id), serialized_task)
         # In case of unique tasks, don't update the score.
         tiger.scripts.zadd(
             tiger._key(state, self.queue),
@@ -454,11 +455,11 @@ class Task:
         latest). If the task doesn't exist, None is returned.
         """
         pipeline = tiger.connection.pipeline()
-        pipeline.get(tiger._key("task", task_id))
+        pipeline.get(tiger._key(TASK, task_id))
         pipeline.zscore(tiger._key(state, queue), task_id)
         if load_executions:
             pipeline.lrange(
-                tiger._key("task", task_id, "executions"), -load_executions, -1
+                tiger._key(TASK, task_id, EXECUTIONS), -load_executions, -1
             )
             (
                 serialized_data,
@@ -526,10 +527,10 @@ class Task:
             ]
             if load_executions:
                 pipeline = tiger.connection.pipeline()
-                pipeline.mget([tiger._key("task", item[0]) for item in items])
+                pipeline.mget([tiger._key(TASK, item[0]) for item in items])
                 for item in items:
                     pipeline.lrange(
-                        tiger._key("task", item[0], "executions"),
+                        tiger._key(TASK, item[0], EXECUTIONS),
                         -load_executions,
                         -1,
                     )
@@ -586,8 +587,8 @@ class Task:
         Queries and returns the number of past task executions.
         """
         pipeline = self.tiger.connection.pipeline()
-        pipeline.exists(self.tiger._key("task", self.id))
-        pipeline.get(self.tiger._key("task", self.id, "executions_count"))
+        pipeline.exists(self.tiger._key(TASK, self.id))
+        pipeline.get(self.tiger._key(TASK, self.id, EXECUTIONS_COUNT))
 
         exists, executions_count = pipeline.execute()
         if not exists:

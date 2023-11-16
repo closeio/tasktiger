@@ -21,16 +21,6 @@ from tasktiger import (
     linear,
 )
 from tasktiger._internal import serialize_func_name
-from tasktiger.constants import (
-    ACTIVE,
-    ERROR,
-    EXECUTIONS,
-    EXECUTIONS_COUNT,
-    QUEUED,
-    REDIS_PREFIX,
-    SCHEDULED,
-    TASK,
-)
 
 from .config import DELAY
 from .tasks import (
@@ -79,6 +69,7 @@ class BaseTestCase:
     def _ensure_queues(
         self, queued=None, active=None, error=None, scheduled=None
     ):
+
         expected_queues = {
             "queued": {name for name, n in (queued or {}).items() if n},
             "active": {name for name, n in (active or {}).items() if n},
@@ -98,9 +89,7 @@ class BaseTestCase:
                 task_ids = self.conn.zrange("t:%s:%s" % (typ, name), 0, -1)
                 assert len(task_ids) == n
                 ret[name] = [
-                    json.loads(
-                        self.conn.get(f"{REDIS_PREFIX}:{TASK}:%s" % task_id)
-                    )
+                    json.loads(self.conn.get("t:task:%s" % task_id))
                     for task_id in task_ids
                 ]
                 assert [task["id"] for task in ret[name]] == task_ids
@@ -138,7 +127,7 @@ class TestCase(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"default": 0})
-        assert not self.conn.exists(f"{REDIS_PREFIX}:{TASK}:%s" % task["id"])
+        assert not self.conn.exists("t:task:%s" % task["id"])
 
     @pytest.mark.skipif(
         sys.version_info < (3, 3), reason="__qualname__ unavailable"
@@ -151,7 +140,7 @@ class TestCase(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"default": 0})
-        assert not self.conn.exists(f"{REDIS_PREFIX}:{TASK}:%s" % task["id"])
+        assert not self.conn.exists("t:task:%s" % task["id"])
 
     def test_task_delay(self):
         decorated_task.delay(1, 2, a=3, b=4)
@@ -269,7 +258,7 @@ class TestCase(BaseTestCase):
         assert task["func"] == "tests.tasks:exception_task"
 
         executions = self.conn.lrange(
-            f"{REDIS_PREFIX}:{TASK}:%s:{EXECUTIONS}" % task["id"], 0, -1
+            "t:task:%s:executions" % task["id"], 0, -1
         )
         assert len(executions) == 1
         execution = json.loads(executions[0])
@@ -285,9 +274,7 @@ class TestCase(BaseTestCase):
     @pytest.mark.parametrize("max_stored_executions", [2, 3, 6, 11, None])
     def test_max_stored_executions(self, max_stored_executions):
         def _get_stored_executions():
-            return self.conn.llen(
-                f"{REDIS_PREFIX}:{TASK}:{task.id}:{EXECUTIONS}"
-            )
+            return self.conn.llen(f"t:task:{task.id}:executions")
 
         task = self.tiger.delay(
             exception_task,
@@ -322,7 +309,7 @@ class TestCase(BaseTestCase):
         assert task["func"] == "tests.tasks:long_task_killed"
 
         executions = self.conn.lrange(
-            f"{REDIS_PREFIX}:{TASK}:%s:{EXECUTIONS}" % task["id"], 0, -1
+            "t:task:%s:executions" % task["id"], 0, -1
         )
         assert len(executions) == 1
         execution = json.loads(executions[0])
@@ -677,17 +664,9 @@ class TestCase(BaseTestCase):
             Worker(self.tiger).run(once=True)
 
         assert (
-            int(
-                self.conn.get(
-                    f"{REDIS_PREFIX}:{TASK}:{task.id}:{EXECUTIONS_COUNT}"
-                )
-            )
-            == count
+            int(self.conn.get(f"t:task:{task.id}:executions_count")) == count
         )
-        assert (
-            self.conn.llen(f"{REDIS_PREFIX}:{TASK}:{task.id}:{EXECUTIONS}")
-            == count
-        )
+        assert self.conn.llen(f"t:task:{task.id}:executions") == count
 
     def test_batch_1(self):
         self.tiger.delay(batch_task, args=[1])
@@ -1080,15 +1059,11 @@ class TestTasks(BaseTestCase):
         task = Task(self.tiger, simple_task, unique=True)
         task.delay(when=datetime.timedelta(minutes=5))
         self._ensure_queues(scheduled={"default": 1})
-        old_score = self.conn.zscore(
-            f"{REDIS_PREFIX}:{SCHEDULED}:default", task.id
-        )
+        old_score = self.conn.zscore("t:scheduled:default", task.id)
 
         task.update_scheduled_time(when=datetime.timedelta(minutes=6))
         self._ensure_queues(scheduled={"default": 1})
-        new_score = self.conn.zscore(
-            f"{REDIS_PREFIX}:{SCHEDULED}:default", task.id
-        )
+        new_score = self.conn.zscore("t:scheduled:default", task.id)
 
         # The difference can be slightly over 60 due to processing time, but
         # shouldn't be much higher.
@@ -1356,16 +1331,16 @@ class TestReliability(BaseTestCase):
         time.sleep(DELAY)
 
         # Remove the task object while the task is processing.
-        assert self.conn.delete(f"{REDIS_PREFIX}:{TASK}:{task.id}") == 1
+        assert self.conn.delete("t:task:{}".format(task.id)) == 1
 
         # Kill the worker while it's still processing the task.
         os.kill(worker.pid, signal.SIGKILL)
 
         # _ensure_queues() breaks here because it can't find the task
-        assert self.conn.scard(f"{REDIS_PREFIX}:{QUEUED}") == 0
-        assert self.conn.scard(f"{REDIS_PREFIX}:{ACTIVE}") == 1
-        assert self.conn.scard(f"{REDIS_PREFIX}:{ERROR}") == 0
-        assert self.conn.scard(f"{REDIS_PREFIX}:{SCHEDULED}") == 0
+        assert self.conn.scard("t:queued") == 0
+        assert self.conn.scard("t:active") == 1
+        assert self.conn.scard("t:error") == 0
+        assert self.conn.scard("t:scheduled") == 0
 
         # Capture logger
         errors = []
@@ -1381,10 +1356,10 @@ class TestReliability(BaseTestCase):
             Worker(self.tiger).run(once=True)
 
             assert len(errors) == 0
-            assert self.conn.scard(f"{REDIS_PREFIX}:{QUEUED}") == 0
-            assert self.conn.scard(f"{REDIS_PREFIX}:{ACTIVE}") == 1
-            assert self.conn.scard(f"{REDIS_PREFIX}:{ERROR}") == 0
-            assert self.conn.scard(f"{REDIS_PREFIX}:{SCHEDULED}") == 0
+            assert self.conn.scard("t:queued") == 0
+            assert self.conn.scard("t:active") == 1
+            assert self.conn.scard("t:error") == 0
+            assert self.conn.scard("t:scheduled") == 0
 
             # After waiting and re-running the worker, queues will clear.
             time.sleep(2 * DELAY)
@@ -1432,7 +1407,7 @@ class TestReliability(BaseTestCase):
         assert task["func"] == "tests.tasks:sleep_task"
 
         executions = self.conn.lrange(
-            f"{REDIS_PREFIX}:{TASK}:%s:{EXECUTIONS}" % task["id"], 0, -1
+            "t:task:%s:executions" % task["id"], 0, -1
         )
         assert len(executions) == 1
         execution = json.loads(executions[0])
@@ -1489,7 +1464,7 @@ class TestReliability(BaseTestCase):
         assert task["func"] == "tests.tasks:decorated_task_sleep_timeout"
 
         executions = self.conn.lrange(
-            f"{REDIS_PREFIX}:{TASK}:%s:{EXECUTIONS}" % task["id"], 0, -1
+            "t:task:%s:executions" % task["id"], 0, -1
         )
         assert len(executions) == 1
         execution = json.loads(executions[0])
