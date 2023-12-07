@@ -492,14 +492,24 @@ class Task:
         skip: int = 0,
         limit: int = 1000,
         load_executions: int = 0,
+        include_not_found: bool = False,
     ) -> Tuple[int, List["Task"]]:
         """
-        Returns a tuple with the following information:
-        * total items in the queue
-        * tasks from the given queue in the given state, latest first.
+        Return tasks from a queue.
 
-        An integer may be passed in the load_executions parameter to indicate
-        how many executions should be loaded (starting from the latest).
+        Args:
+            tiger: TaskTiger instance.
+            queue: Name of the queue.
+            state: State of the task (QUEUED, ACTIVE, SCHEDULED, ERROR).
+            limit: Maximum number of tasks to return.
+            load_executions: Maximum number of executions to load for each task
+                (starting from the latest).
+            include_not_found: Whether to include tasks that cannot be loaded.
+
+        Returns:
+            Tuple with the following information:
+            * total items in the queue
+            * tasks from the given queue in the given state, latest first.
         """
 
         key = tiger._key(state, queue)
@@ -525,10 +535,14 @@ class Task:
                     )
                 results = pipeline.execute()
 
-                for serialized_data, serialized_executions, ts in zip(
-                    results[0], results[1:], tss
+                for idx, serialized_data, serialized_executions, ts in zip(
+                    range(len(items)), results[0], results[1:], tss
                 ):
-                    data = json.loads(serialized_data)
+                    if serialized_data is None and include_not_found:
+                        data = {"id": items[idx][0]}
+                    else:
+                        data = json.loads(serialized_data)
+
                     executions = [
                         json.loads(e) for e in serialized_executions if e
                     ]
@@ -544,11 +558,17 @@ class Task:
 
                     tasks.append(task)
             else:
-                data = tiger.connection.mget(
+                result = tiger.connection.mget(
                     [tiger._key("task", item[0]) for item in items]
                 )
-                for serialized_data, ts in zip(data, tss):
-                    data = json.loads(serialized_data)
+                for idx, serialized_data, ts in zip(
+                    range(len(items)), result, tss
+                ):
+                    if serialized_data is None and include_not_found:
+                        data = {"id": items[idx][0]}
+                    else:
+                        data = json.loads(serialized_data)
+
                     task = Task(
                         tiger, queue=queue, _data=data, _state=state, _ts=ts
                     )

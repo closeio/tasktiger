@@ -965,6 +965,17 @@ class TestCase(BaseTestCase):
         assert 1 == self.tiger.purge_errored_tasks()
         self._ensure_queues(queued={"default": 1}, error={"default": 0})
 
+    def test_purge_errored_tasks_if_task_not_found(self):
+        task = self.tiger.delay(exception_task)
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(error={"default": 1})
+
+        self.tiger.connection.delete(self.tiger._key("task", task.id))
+
+        self.tiger.purge_errored_tasks()
+        self._ensure_queues(error={"default": 0})
+
 
 class TestTasks(BaseTestCase):
     """
