@@ -36,8 +36,11 @@ from structlog.stdlib import BoundLogger
 from ._internal import (
     ACTIVE,
     ERROR,
+    EXECUTIONS,
+    EXECUTIONS_COUNT,
     QUEUED,
     SCHEDULED,
+    TASK,
     dotted_parts,
     g,
     g_fork_lock,
@@ -47,7 +50,6 @@ from ._internal import (
     serialize_func_name,
     serialize_retry_method,
 )
-from .constants import EXECUTIONS, EXECUTIONS_COUNT, TASK
 from .exceptions import (
     RetryException,
     StopRetry,

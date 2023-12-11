@@ -3,8 +3,15 @@ from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
 
-from ._internal import ACTIVE, ERROR, QUEUED, SCHEDULED
-from .constants import EXECUTIONS, EXECUTIONS_COUNT, TASK
+from ._internal import (
+    ACTIVE,
+    ERROR,
+    EXECUTIONS,
+    EXECUTIONS_COUNT,
+    QUEUED,
+    SCHEDULED,
+    TASK,
+)
 
 try:
     from redis.commands.core import Script

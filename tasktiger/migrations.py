@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from .constants import EXECUTIONS, TASK
+from ._internal import EXECUTIONS, TASK
 from .utils import redis_glob_escape
 
 if TYPE_CHECKING:

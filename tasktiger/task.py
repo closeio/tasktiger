@@ -20,8 +20,11 @@ from structlog.stdlib import BoundLogger
 
 from ._internal import (
     ERROR,
+    EXECUTIONS,
+    EXECUTIONS_COUNT,
     QUEUED,
     SCHEDULED,
+    TASK,
     g,
     gen_id,
     gen_unique_id,
@@ -30,7 +33,6 @@ from ._internal import (
     serialize_func_name,
     serialize_retry_method,
 )
-from .constants import EXECUTIONS, EXECUTIONS_COUNT, TASK
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import BaseRunner, get_runner_class
 from .types import RetryStrategy
