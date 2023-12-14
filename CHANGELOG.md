@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.18.2
+
+* Purge errored tasks even if task object is not found ([310](https://github.com/closeio/tasktiger/pull/310))
+
 ## Version 0.18.1
 
 * Added `current_serialized_func` property to `TaskTiger` object ([296](https://github.com/closeio/tasktiger/pull/296))
