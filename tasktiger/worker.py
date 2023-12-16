@@ -55,7 +55,7 @@ from .exceptions import (
 )
 from .redis_semaphore import Semaphore
 from .runner import get_runner_class
-from .stats import StatsThread
+from .stats import Stats
 from .task import Task
 from .timeouts import JobTimeoutException
 from .utils import redis_glob_escape
@@ -107,7 +107,7 @@ class Worker:
         self._key = tiger._key
         self._did_work = True
         self._last_task_check = 0.0
-        self.stats_thread: Optional[StatsThread] = None
+        self.stats = Stats(self.tiger)
         self.id = str(uuid.uuid4())
 
         if queues:
@@ -1008,13 +1008,11 @@ class Worker:
         if not ready_tasks:
             return True, []
 
-        if self.stats_thread:
-            self.stats_thread.report_task_start()
+        self.stats.report_task_start()
         success = self._execute(
             queue, ready_tasks, log, locks, queue_lock, all_task_ids
         )
-        if self.stats_thread:
-            self.stats_thread.report_task_end()
+        self.stats.report_task_end()
 
         for lock in locks:
             try:
@@ -1280,9 +1278,7 @@ class Worker:
             self.log.warn("using old Redis version")
 
         if self.config["STATS_INTERVAL"]:
-            stats_thread = StatsThread(self)
-            self.stats_thread = stats_thread
-            stats_thread.start()
+            self.stats.start_logging_thread()
 
         # Queue any periodic tasks that are not queued yet.
         self._queue_periodic_tasks()
@@ -1328,9 +1324,7 @@ class Worker:
             raise
 
         finally:
-            if self.stats_thread:
-                self.stats_thread.stop()
-                self.stats_thread = None
+            self.stats.stop_logging_thread()
 
             # Free up Redis connection
             if self._pubsub:
