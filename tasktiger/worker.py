@@ -34,11 +34,7 @@ from ._internal import (
     queue_matches,
     serialize_retry_method,
 )
-from .exceptions import (
-    StopRetry,
-    TaskImportError,
-    TaskNotFound,
-)
+from .exceptions import StopRetry, TaskImportError, TaskNotFound
 from .executor import ForkExecutor
 from .redis_semaphore import Semaphore
 from .runner import get_runner_class
@@ -618,7 +614,7 @@ class Worker:
 
         return task_ids, processed_count
 
-    def _prepare_execution(self, tasks: List[Task]):
+    def _prepare_execution(self, tasks: List[Task]) -> None:
         # The tasks must use the same function.
         assert len(tasks)
         serialized_task_func = tasks[0].serialized_func

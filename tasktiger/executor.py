@@ -1,3 +1,15 @@
+import errno
+import fcntl
+import os
+import random
+import select
+import signal
+import socket
+import sys
+import threading
+import time
+import traceback
+from contextlib import ExitStack
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -7,18 +19,6 @@ from typing import (
     List,
     Optional,
 )
-from contextlib import ExitStack
-import errno
-import fcntl
-import signal
-import random
-import os
-import select
-import socket
-import sys
-import time
-import threading
-import traceback
 
 from redis.exceptions import LockError
 from redis.lock import Lock
