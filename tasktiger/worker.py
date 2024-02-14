@@ -554,12 +554,12 @@ class Worker:
         log: BoundLogger,
         locks: Collection[Lock],
         queue_lock: Optional[Semaphore],
-        all_task_ids: Set[str],
     ) -> bool:
         """
         Executes the given tasks. Returns a boolean indicating whether
         the tasks were executed successfully.
         """
+        all_task_ids = {task.id for task in tasks}
 
         # The tasks must use the same function.
         assert len(tasks)
@@ -847,9 +847,6 @@ class Worker:
             else:
                 tasks.append(task)
 
-        # List of task IDs that exist and we will update the heartbeat on.
-        valid_task_ids = {task.id for task in tasks}
-
         # Group by task func
         tasks_by_func: Dict[str, List[Task]] = OrderedDict()
         for task in tasks:
@@ -862,7 +859,7 @@ class Worker:
         # Execute tasks for each task func
         for tasks in tasks_by_func.values():
             success, processed_tasks = self._execute_task_group(
-                queue, tasks, valid_task_ids, queue_lock
+                queue, tasks, queue_lock
             )
             processed_count = processed_count + len(processed_tasks)
             log.debug(
@@ -946,12 +943,11 @@ class Worker:
         self,
         queue: str,
         tasks: List[Task],
-        all_task_ids: Set[str],
         queue_lock: Optional[Semaphore],
     ) -> Tuple[bool, List[Task]]:
         """
-        Executes the given tasks in the queue. Updates the heartbeat for task
-        IDs passed in all_task_ids. This internal method is only meant to be
+        Executes the given tasks in the queue as long as they are not locked,
+        and updates their heartbeats. This internal method is only meant to be
         called from within _process_from_queue.
         """
         log: BoundLogger = self.log.bind(queue=queue)
@@ -995,9 +991,6 @@ class Worker:
                             when=when,
                             mode="min",
                         )
-                        # Make sure to remove it from this list so we don't
-                        # re-add to the ACTIVE queue by updating the heartbeat.
-                        all_task_ids.remove(task.id)
                         continue
 
                     lock_ids.add(lock_id)
@@ -1010,9 +1003,8 @@ class Worker:
 
         if self.stats_thread:
             self.stats_thread.report_task_start()
-        success = self._execute(
-            queue, ready_tasks, log, locks, queue_lock, all_task_ids
-        )
+
+        success = self._execute(queue, ready_tasks, log, locks, queue_lock)
         if self.stats_thread:
             self.stats_thread.report_task_end()
 
