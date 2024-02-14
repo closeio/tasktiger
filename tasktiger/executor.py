@@ -54,7 +54,7 @@ class WorkerContextManagerStack(ExitStack):
             self.enter_context(mgr)
 
 
-class ForkExecutor:
+class Executor:
     def __init__(self, worker: "Worker"):
         self.tiger = worker.tiger
         self.worker = worker
@@ -81,6 +81,18 @@ class ForkExecutor:
             queue_lock: Optional queue lock to renew periodically for max
                 workers per queue.
         """
+        raise NotImplementedError
+
+
+class ForkExecutor(Executor):
+    def execute(
+        self,
+        queue: str,
+        tasks: List[Task],
+        log: BoundLogger,
+        locks: Collection[Lock],
+        queue_lock: Optional[Semaphore],
+    ) -> bool:
         all_task_ids = {task.id for task in tasks}
 
         # The tasks must use the same function.
