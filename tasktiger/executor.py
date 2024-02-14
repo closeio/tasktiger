@@ -93,23 +93,10 @@ class ForkExecutor(Executor):
         locks: Collection[Lock],
         queue_lock: Optional[Semaphore],
     ) -> bool:
-        all_task_ids = {task.id for task in tasks}
-
-        # The tasks must use the same function.
-        assert len(tasks)
-        serialized_task_func = tasks[0].serialized_func
         task_func = tasks[0].func
-        assert all(
-            [
-                serialized_task_func == task.serialized_func
-                for task in tasks[1:]
-            ]
-        )
+        serialized_task_func = tasks[0].serialized_func
 
-        # Before executing periodic tasks, queue them for the next period.
-        if serialized_task_func in self.tiger.periodic_task_funcs:
-            tasks[0]._queue_for_next_period()
-
+        all_task_ids = {task.id for task in tasks}
         with g_fork_lock:
             child_pid = os.fork()
 

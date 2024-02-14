@@ -618,6 +618,21 @@ class Worker:
 
         return task_ids, processed_count
 
+    def _prepare_execution(self, tasks: List[Task]):
+        # The tasks must use the same function.
+        assert len(tasks)
+        serialized_task_func = tasks[0].serialized_func
+        assert all(
+            [
+                serialized_task_func == task.serialized_func
+                for task in tasks[1:]
+            ]
+        )
+
+        # Before executing periodic tasks, queue them for the next period.
+        if serialized_task_func in self.tiger.periodic_task_funcs:
+            tasks[0]._queue_for_next_period()
+
     def _execute_task_group(
         self,
         queue: str,
@@ -682,6 +697,8 @@ class Worker:
 
         if self.stats_thread:
             self.stats_thread.report_task_start()
+
+        self._prepare_execution(ready_tasks)
 
         success = self.executor.execute(
             queue, ready_tasks, log, locks, queue_lock
