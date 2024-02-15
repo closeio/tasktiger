@@ -51,56 +51,20 @@ from .tasks import (
     verify_current_tasks,
     verify_tasktiger_instance,
 )
-from .utils import Patch, external_worker, get_tiger
+from .utils import Patch, external_worker
 
 
 class BaseTestCase:
-    def setup_method(self, method):
-        self.tiger = get_tiger()
-        self.conn = self.tiger.connection
-        self.conn.flushdb()
+    """
+    This base class is deprecated and here for compatibility with existing
+    tests only.
+    """
 
-    def teardown_method(self, method):
-        self.conn.flushdb()
-        self.conn.close()
-        # Force disconnect so we don't get Too many open files
-        self.conn.connection_pool.disconnect()
-
-    def _ensure_queues(
-        self, queued=None, active=None, error=None, scheduled=None
-    ):
-
-        expected_queues = {
-            "queued": {name for name, n in (queued or {}).items() if n},
-            "active": {name for name, n in (active or {}).items() if n},
-            "error": {name for name, n in (error or {}).items() if n},
-            "scheduled": {name for name, n in (scheduled or {}).items() if n},
-        }
-        actual_queues = {
-            i: self.conn.smembers("t:{}".format(i))
-            for i in ("queued", "active", "error", "scheduled")
-        }
-        assert expected_queues == actual_queues
-
-        def _ensure_queue(typ, data):
-            data = data or {}
-            ret = {}
-            for name, n in data.items():
-                task_ids = self.conn.zrange("t:%s:%s" % (typ, name), 0, -1)
-                assert len(task_ids) == n
-                ret[name] = [
-                    json.loads(self.conn.get("t:task:%s" % task_id))
-                    for task_id in task_ids
-                ]
-                assert [task["id"] for task in ret[name]] == task_ids
-            return ret
-
-        return {
-            "queued": _ensure_queue("queued", queued),
-            "active": _ensure_queue("active", active),
-            "error": _ensure_queue("error", error),
-            "scheduled": _ensure_queue("scheduled", scheduled),
-        }
+    @pytest.fixture(autouse=True)
+    def setup(self, tiger, ensure_queues):
+        self.tiger = tiger
+        self.conn = tiger.connection
+        self._ensure_queues = ensure_queues
 
 
 class TestCase(BaseTestCase):
