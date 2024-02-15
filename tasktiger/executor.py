@@ -80,11 +80,88 @@ class Executor:
             locks: List of task locks to renew periodically.
             queue_lock: Optional queue lock to renew periodically for max
                 workers per queue.
+
+        Returns:
+            Whether task execution was successful.
         """
         raise NotImplementedError
 
+    def execute_tasks(self, tasks: List[Task], log: BoundLogger) -> bool:
+        """
+        Executes the tasks in the current process. Multiple tasks can be passed
+        for batch processing. However, they must all use the same function and
+        will share the execution entry.
+        """
+        success = False
+
+        execution: Dict[str, Any] = {}
+
+        assert len(tasks)
+        task_func = tasks[0].serialized_func
+        assert all([task_func == task.serialized_func for task in tasks[1:]])
+
+        execution["time_started"] = time.time()
+
+        try:
+            func = tasks[0].func
+
+            runner_class = get_runner_class(log, tasks)
+            runner = runner_class(self.tiger)
+
+            is_batch_func = getattr(func, "_task_batch", False)
+            g["tiger"] = self.tiger
+            g["current_task_is_batch"] = is_batch_func
+
+            hard_timeouts = self.worker.get_hard_timeouts(func, tasks)
+
+            with WorkerContextManagerStack(
+                self.config["CHILD_CONTEXT_MANAGERS"]
+            ):
+                if is_batch_func:
+                    # Batch process if the task supports it.
+                    g["current_tasks"] = tasks
+                    runner.run_batch_tasks(tasks, hard_timeouts[0])
+                else:
+                    # Process sequentially.
+                    for task, hard_timeout in zip(tasks, hard_timeouts):
+                        g["current_tasks"] = [task]
+                        runner.run_single_task(task, hard_timeout)
+
+        except RetryException as exc:
+            execution["retry"] = True
+            if exc.method:
+                execution["retry_method"] = serialize_retry_method(exc.method)
+            execution["log_error"] = exc.log_error
+            execution["exception_name"] = serialize_func_name(exc.__class__)
+            exc_info = exc.exc_info or sys.exc_info()
+        except (JobTimeoutException, Exception) as exc:
+            execution["exception_name"] = serialize_func_name(exc.__class__)
+            exc_info = sys.exc_info()
+        else:
+            success = True
+
+        if not success:
+            execution["time_failed"] = time.time()
+            if self.worker.store_tracebacks:
+                # Currently we only log failed task executions to Redis.
+                execution["traceback"] = "".join(
+                    traceback.format_exception(*exc_info)
+                )
+            execution["success"] = success
+            execution["host"] = socket.gethostname()
+
+            self.worker.store_task_execution(tasks, execution)
+
+        return success
+
 
 class ForkExecutor(Executor):
+    """
+    Executor that runs tasks in a forked process.
+
+    Child process is killed after a hard timeout + margin.
+    """
+
     def execute(
         self,
         queue: str,
@@ -116,7 +193,7 @@ class ForkExecutor(Executor):
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
             # Run the tasks.
-            success = self._execute_forked(tasks, log)
+            success = self.execute_tasks(tasks, log)
 
             # Wait for any threads that might be running in the child, just
             # like sys.exit() would. Note we don't call sys.exit() directly
@@ -295,70 +372,4 @@ class ForkExecutor(Executor):
             success = return_code == 0
             return success
 
-    def _execute_forked(self, tasks: List[Task], log: BoundLogger) -> bool:
-        """
-        Executes the tasks in the forked process. Multiple tasks can be passed
-        for batch processing. However, they must all use the same function and
-        will share the execution entry.
-        """
-        success = False
 
-        execution: Dict[str, Any] = {}
-
-        assert len(tasks)
-        task_func = tasks[0].serialized_func
-        assert all([task_func == task.serialized_func for task in tasks[1:]])
-
-        execution["time_started"] = time.time()
-
-        try:
-            func = tasks[0].func
-
-            runner_class = get_runner_class(log, tasks)
-            runner = runner_class(self.tiger)
-
-            is_batch_func = getattr(func, "_task_batch", False)
-            g["tiger"] = self.tiger
-            g["current_task_is_batch"] = is_batch_func
-
-            hard_timeouts = self.worker.get_hard_timeouts(func, tasks)
-
-            with WorkerContextManagerStack(
-                self.config["CHILD_CONTEXT_MANAGERS"]
-            ):
-                if is_batch_func:
-                    # Batch process if the task supports it.
-                    g["current_tasks"] = tasks
-                    runner.run_batch_tasks(tasks, hard_timeouts[0])
-                else:
-                    # Process sequentially.
-                    for task, hard_timeout in zip(tasks, hard_timeouts):
-                        g["current_tasks"] = [task]
-                        runner.run_single_task(task, hard_timeout)
-
-        except RetryException as exc:
-            execution["retry"] = True
-            if exc.method:
-                execution["retry_method"] = serialize_retry_method(exc.method)
-            execution["log_error"] = exc.log_error
-            execution["exception_name"] = serialize_func_name(exc.__class__)
-            exc_info = exc.exc_info or sys.exc_info()
-        except (JobTimeoutException, Exception) as exc:
-            execution["exception_name"] = serialize_func_name(exc.__class__)
-            exc_info = sys.exc_info()
-        else:
-            success = True
-
-        if not success:
-            execution["time_failed"] = time.time()
-            if self.worker.store_tracebacks:
-                # Currently we only log failed task executions to Redis.
-                execution["traceback"] = "".join(
-                    traceback.format_exception(*exc_info)
-                )
-            execution["success"] = success
-            execution["host"] = socket.gethostname()
-
-            self.worker.store_task_execution(tasks, execution)
-
-        return success
