@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Type,
     Union,
 )
 
@@ -35,7 +36,7 @@ from ._internal import (
     serialize_retry_method,
 )
 from .exceptions import StopRetry, TaskImportError, TaskNotFound
-from .executor import ForkExecutor
+from .executor import Executor, ForkExecutor
 from .redis_semaphore import Semaphore
 from .runner import get_runner_class
 from .stats import StatsThread
@@ -60,6 +61,7 @@ class Worker:
         single_worker_queues: Optional[List[str]] = None,
         max_workers_per_queue: Optional[int] = None,
         store_tracebacks: Optional[bool] = None,
+        executor_class: Optional[Type[Executor]] = None,
     ) -> None:
         """
         Internal method to initialize a worker.
@@ -78,7 +80,10 @@ class Worker:
         self._last_task_check = 0.0
         self.stats_thread: Optional[StatsThread] = None
         self.id = str(uuid.uuid4())
-        self.executor = ForkExecutor(self)
+
+        if executor_class is None:
+            executor_class = ForkExecutor
+        self.executor = executor_class(self)
 
         if queues:
             self.only_queues = set(queues)
@@ -956,6 +961,7 @@ class Worker:
             exclude_queues=sorted(self.exclude_queues),
             single_worker_queues=sorted(self.single_worker_queues),
             max_workers=self.max_workers_per_queue,
+            executor=self.executor.__class__.__name__,
         )
 
         if not self.scripts.can_replicate_commands:
