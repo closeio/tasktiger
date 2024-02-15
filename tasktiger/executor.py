@@ -373,3 +373,18 @@ class ForkExecutor(Executor):
             return success
 
 
+class SyncExecutor(Executor):
+    """
+    Executor that runs tasks in the current thread/process.
+    """
+
+    def execute(
+        self,
+        queue: str,
+        tasks: List[Task],
+        log: BoundLogger,
+        locks: Collection[Lock],
+        queue_lock: Optional[Semaphore],
+    ) -> bool:
+        # Run the tasks.
+        return self.execute_tasks(tasks, log)
