@@ -4,11 +4,19 @@ import datetime
 import time
 from multiprocessing import Process
 
+import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
+from tasktiger.executor import SyncExecutor
 
-from .tasks import long_task_ok, wait_for_long_task
+from .tasks import (
+    exception_task,
+    long_task_killed,
+    long_task_ok,
+    simple_task,
+    wait_for_long_task,
+)
 from .test_base import BaseTestCase
 from .utils import external_worker
 
@@ -144,3 +152,32 @@ class TestMaxWorkers(BaseTestCase):
             worker.max_workers_per_queue = 2
             worker.run(once=True, force_once=True)
             self._ensure_queues(queued={"a": 1})
+
+
+class TestSyncExecutorWorker:
+    def test_success(self, tiger, ensure_queues):
+        worker = Worker(tiger, executor_class=SyncExecutor)
+        worker.run(once=True, force_once=True)
+
+        task = Task(tiger, simple_task)
+        task.delay()
+        task = Task(tiger, simple_task)
+        task.delay()
+        ensure_queues(queued={"default": 2})
+
+        worker.run(once=True)
+        ensure_queues()
+
+    def test_handles_exception(self, tiger, ensure_queues):
+        Task(tiger, exception_task).delay()
+        worker = Worker(tiger, executor_class=SyncExecutor)
+        worker.run(once=True, force_once=True)
+        ensure_queues(error={"default": 1})
+
+    def test_handles_timeout(self, tiger, ensure_queues):
+        Task(tiger, long_task_killed).delay()
+        worker = Worker(tiger, executor_class=SyncExecutor)
+        # Worker should exit to avoid any inconsistencies.
+        with pytest.raises(SystemExit):
+            worker.run(once=True, force_once=True)
+        ensure_queues(error={"default": 1})

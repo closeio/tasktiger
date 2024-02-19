@@ -32,6 +32,7 @@ from ._internal import (
     queue_matches,
     serialize_func_name,
 )
+from .executor import Executor, ForkExecutor, SyncExecutor
 from .redis_scripts import RedisScripts
 from .redis_semaphore import Semaphore
 from .retry import fixed
@@ -397,6 +398,7 @@ class TaskTiger:
         exclude_queues: Optional[str] = None,
         max_workers_per_queue: Optional[int] = None,
         store_tracebacks: Optional[bool] = None,
+        executor_class: Optional[Type[Executor]] = None,
     ) -> None:
         """
         Main worker entry point method.
@@ -419,6 +421,7 @@ class TaskTiger:
                 exclude_queues.split(",") if exclude_queues else None,
                 max_workers_per_queue=max_workers_per_queue,
                 store_tracebacks=store_tracebacks,
+                executor_class=executor_class,
             )
             worker.run()
         except Exception:
@@ -691,6 +694,10 @@ class TaskTiger:
 @click.option("-p", "--port", help="Redis server port")
 @click.option("-a", "--password", help="Redis password")
 @click.option("-n", "--db", help="Redis database number")
+@click.option(
+    "--executor",
+    help="Task executor. Possible values are sync or fork (default).",
+)
 @click.pass_context
 def run_worker(
     context: Any,
@@ -703,15 +710,24 @@ def run_worker(
     exclude_queues: Optional[str] = None,
     max_workers_per_queue: Optional[int] = None,
     store_tracebacks: Optional[bool] = None,
+    executor: Optional[str] = "fork",
 ) -> None:
     conn = redis.Redis(
         host, int(port or 6379), int(db or 0), password, decode_responses=True
     )
     tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
+    executor_class: Type[Executor]
+    if not executor or executor == "fork":
+        executor_class = ForkExecutor
+    elif executor == "sync":
+        executor_class = SyncExecutor
+    else:
+        raise click.ClickException("Invalid executor.")
     tiger.run_worker(
         queues=queues,
         module=module,
         exclude_queues=exclude_queues,
         max_workers_per_queue=max_workers_per_queue,
         store_tracebacks=store_tracebacks,
+        executor_class=executor_class,
     )
