@@ -3,6 +3,7 @@ import json
 import os
 import random
 import signal
+import sys
 import time
 import uuid
 from collections import OrderedDict
@@ -731,6 +732,7 @@ class Worker:
 
         now = time.time()
         processing_duration = now - start_time
+        has_job_timeout = False
 
         def _mark_done() -> None:
             # Remove the task from active queue
@@ -749,6 +751,13 @@ class Worker:
 
             if execution:
                 execution = json.loads(execution)
+
+            if (
+                execution
+                and execution["exception_name"]
+                == "tasktiger.exceptions:JobTimeoutException"
+            ):
+                has_job_timeout = True
 
             if execution and execution.get("retry"):
                 if "retry_method" in execution:
@@ -841,6 +850,11 @@ class Worker:
                     runner_class = get_runner_class(log, [task])
                     runner = runner_class(self.tiger)
                     runner.on_permanent_error(task, execution)
+
+            # Exit the process with an error code if a task timed out to
+            # prevent any inconsistent state in case the runner requires it.
+            if self.executor.exit_worker_on_job_timeout and has_job_timeout:
+                sys.exit("exiting worker due to job timeout error")
 
     def _worker_run(self) -> None:
         """

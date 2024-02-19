@@ -55,6 +55,8 @@ class WorkerContextManagerStack(ExitStack):
 
 
 class Executor:
+    exit_worker_on_job_timeout = False
+
     def __init__(self, worker: "Worker"):
         self.tiger = worker.tiger
         self.worker = worker
@@ -381,6 +383,8 @@ class SyncExecutor(Executor):
     """
     Executor that runs tasks in the current thread/process.
     """
+
+    exit_worker_on_job_timeout = True
 
     def execute(
         self,

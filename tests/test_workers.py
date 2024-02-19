@@ -4,6 +4,7 @@ import datetime
 import time
 from multiprocessing import Process
 
+import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
@@ -176,5 +177,7 @@ class TestSyncExecutorWorker:
     def test_handles_timeout(self, tiger, ensure_queues):
         Task(tiger, long_task_killed).delay()
         worker = Worker(tiger, executor_class=SyncExecutor)
-        worker.run(once=True, force_once=True)
+        # Worker should exit to avoid any inconsistencies.
+        with pytest.raises(SystemExit):
+            worker.run(once=True, force_once=True)
         ensure_queues(error={"default": 1})
