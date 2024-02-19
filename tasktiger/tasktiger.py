@@ -695,7 +695,6 @@ class TaskTiger:
 @click.option("-a", "--password", help="Redis password")
 @click.option("-n", "--db", help="Redis database number")
 @click.option(
-    "-x",
     "--executor",
     help="Task executor. Possible values are sync or fork (default).",
 )
