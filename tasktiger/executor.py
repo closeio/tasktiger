@@ -152,6 +152,10 @@ class Executor:
 
             self.worker.store_task_execution(tasks, execution)
 
+        g["current_task_is_batch"] = None
+        g["current_tasks"] = None
+        g["tiger"] = None
+
         return success
 
 
