@@ -1246,10 +1246,11 @@ class TestReliability(BaseTestCase):
         task = Task(self.tiger, sleep_task, retry_on=[JobTimeoutException])
         self._test_expired_task(task, "queued")
 
-    def test_killed_child_process(self):
+    def test_killed_child_process_no_retry(self):
         """
         Ensure that TaskTiger completes gracefully if the child process
-        disappears and there is no execution object.
+        disappears and there is no execution object. We do not retry the task
+        if it isn't retriable.
         """
         import psutil
 
@@ -1275,6 +1276,38 @@ class TestReliability(BaseTestCase):
 
         # Make sure the task is in the error queue.
         self._ensure_queues(error={"default": 1})
+
+    def test_killed_child_process_with_retry(self):
+        """
+        Ensure that TaskTiger completes gracefully if the child process
+        disappears and there is no execution object. We retry the task since
+        it's retriable.
+        """
+        import psutil
+
+        task = Task(self.tiger, sleep_task, retry_on=[JobTimeoutException])
+        task.delay()
+        self._ensure_queues(queued={"default": 1})
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(target=external_worker)
+        worker.start()
+        time.sleep(DELAY)
+
+        # Get the PID of the worker subprocess actually executing the task
+        current_process = psutil.Process(pid=worker.pid)
+        current_children = current_process.children()
+        assert len(current_children) == 1
+
+        # Kill the worker subprocess that is executing the task.
+        current_children[0].kill()
+
+        # Make sure the worker still terminates gracefully.
+        worker.join()
+        assert worker.exitcode == 0
+
+        # Make sure the task is in the scheduled queue.
+        self._ensure_queues(scheduled={"default": 1})
 
     def test_task_disappears(self):
         """
