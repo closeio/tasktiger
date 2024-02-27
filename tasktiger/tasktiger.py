@@ -399,6 +399,7 @@ class TaskTiger:
         max_workers_per_queue: Optional[int] = None,
         store_tracebacks: Optional[bool] = None,
         executor_class: Optional[Type[Executor]] = None,
+        exit_after: Optional[datetime.timedelta] = None,
     ) -> None:
         """
         Main worker entry point method.
@@ -423,7 +424,7 @@ class TaskTiger:
                 store_tracebacks=store_tracebacks,
                 executor_class=executor_class,
             )
-            worker.run()
+            worker.run(exit_after=exit_after)
         except Exception:
             self.log.exception("Unhandled exception")
             raise
@@ -698,6 +699,11 @@ class TaskTiger:
     "--executor",
     help="Task executor. Possible values are sync or fork (default).",
 )
+@click.option(
+    "--exit-after",
+    type=click.INT,
+    help="Exit TaskTiger after the time in minutes has elapsed.",
+)
 @click.pass_context
 def run_worker(
     context: Any,
@@ -711,11 +717,13 @@ def run_worker(
     max_workers_per_queue: Optional[int] = None,
     store_tracebacks: Optional[bool] = None,
     executor: Optional[str] = "fork",
+    exit_after: Optional[int] = None,
 ) -> None:
     conn = redis.Redis(
         host, int(port or 6379), int(db or 0), password, decode_responses=True
     )
     tiger = context.obj or TaskTiger(setup_structlog=True, connection=conn)
+
     executor_class: Type[Executor]
     if not executor or executor == "fork":
         executor_class = ForkExecutor
@@ -723,6 +731,12 @@ def run_worker(
         executor_class = SyncExecutor
     else:
         raise click.ClickException("Invalid executor.")
+
+    if exit_after:
+        exit_after_td = datetime.timedelta(minutes=exit_after)
+    else:
+        exit_after_td = None
+
     tiger.run_worker(
         queues=queues,
         module=module,
@@ -730,4 +744,5 @@ def run_worker(
         max_workers_per_queue=max_workers_per_queue,
         store_tracebacks=store_tracebacks,
         executor_class=executor_class,
+        exit_after=exit_after_td,
     )

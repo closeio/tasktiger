@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import json
 import os
@@ -959,13 +960,21 @@ class Worker:
 
             pipeline.execute()
 
-    def run(self, once: bool = False, force_once: bool = False) -> None:
+    def run(
+        self,
+        once: bool = False,
+        force_once: bool = False,
+        exit_after: Optional[datetime.timedelta] = None,
+    ) -> None:
         """
         Main loop of the worker.
 
-        Use once=True to execute any queued tasks and then exit.
-        Use force_once=True with once=True to always exit after one processing
-        loop even if tasks remain queued.
+        Args:
+            once: If True, execute any queued tasks and then exit.
+            force_once: If set to True together with once, always exit after
+                one processing loop even if tasks remain queued.
+            exit_after: If set, exit the worker after the given duration
+                elapses.
         """
 
         self.log.info(
@@ -976,7 +985,15 @@ class Worker:
             single_worker_queues=sorted(self.single_worker_queues),
             max_workers=self.max_workers_per_queue,
             executor=self.executor.__class__.__name__,
+            exit_after=str(exit_after) if exit_after else None,
         )
+
+        if exit_after:
+            exit_after_dt = (
+                datetime.datetime.now(datetime.timezone.utc) + exit_after
+            )
+        else:
+            exit_after_dt = None
 
         if not self.scripts.can_replicate_commands:
             # Older Redis versions may create additional overhead when
@@ -1021,6 +1038,12 @@ class Worker:
                 self._worker_run()
                 self._uninstall_signal_handlers()
                 if once and (not self._queue_set or force_once):
+                    break
+                if (
+                    exit_after_dt
+                    and datetime.datetime.now(datetime.timezone.utc)
+                    > exit_after_dt
+                ):
                     break
                 if self._stop_requested:
                     raise KeyboardInterrupt()
