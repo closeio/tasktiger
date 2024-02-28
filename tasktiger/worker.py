@@ -734,10 +734,15 @@ class Worker:
         processing_duration = now - start_time
         has_job_timeout = False
 
+        log_context = {
+            "func": task.serialized_func,
+            "processing_duration": processing_duration,
+        }
+
         def _mark_done() -> None:
             # Remove the task from active queue
             task._move(from_state=ACTIVE)
-            log.info("done", processing_duration=processing_duration)
+            log.info("done", **log_context)
 
         if success:
             _mark_done()
@@ -751,6 +756,9 @@ class Worker:
 
             if execution:
                 execution = json.loads(execution)
+            else:
+                # This can happen if the child process dies unexpectedly.
+                log.warn("execution not found", **log_context)
 
             if (
                 execution
@@ -787,6 +795,15 @@ class Worker:
                                 exception_class, logger=log
                             ):
                                 should_retry = True
+                    else:
+                        # If the task retries on JobTimeoutException, it should
+                        # be idempotent and we can retry. Note that this will
+                        # not increase the retry counter since we have no
+                        # execution stored on the task.
+                        if task.should_retry_on(
+                            JobTimeoutException, logger=log
+                        ):
+                            should_retry = True
                 else:
                     should_retry = True
 
@@ -794,13 +811,10 @@ class Worker:
 
             when = now
 
-            log_context = {
-                "func": task.serialized_func,
-                "processing_duration": processing_duration,
-            }
-
             if should_retry:
-                retry_num = task.n_executions()
+                # If we have no executions due to an unexpected child process
+                # exit, pretend we have 1.
+                retry_num = task.n_executions() or 1
                 log_context["retry_func"] = retry_func
                 log_context["retry_num"] = retry_num
 
@@ -837,8 +851,6 @@ class Worker:
                 )
 
                 log_func("task error", **log_context)
-            else:
-                log.error("execution not found", **log_context)
 
             # Move task to the scheduled queue for retry, or move to error
             # queue if we don't want to retry.
