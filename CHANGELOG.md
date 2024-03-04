@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 0.19
+
+* Adding synchronous (non-forking) executor ([319](https://github.com/closeio/tasktiger/pull/319), [320](https://github.com/closeio/tasktiger/pull/320))
+* If possible, retry tasks that fail with "execution not found" ([323](https://github.com/closeio/tasktiger/pull/323))
+* Option to exit TaskTiger after a certain amount of time ([324](https://github.com/closeio/tasktiger/pull/324))
+
 ## Version 0.18.2
 
 * Purge errored tasks even if task object is not found ([310](https://github.com/closeio/tasktiger/pull/310))
