@@ -70,7 +70,7 @@ def get_tiger():
     return tiger
 
 
-def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
+def external_worker(n=None, patch_config=None, worker_kwargs=None):
     """
     Runs a worker. To be used with multiprocessing.Pool.map.
     """
@@ -79,12 +79,11 @@ def external_worker(n=None, patch_config=None, max_workers_per_queue=None):
     if patch_config:
         tiger.config.update(patch_config)
 
-    worker = Worker(tiger)
+    if worker_kwargs is None:
+        worker_kwargs = {}
 
-    if max_workers_per_queue is not None:
-        worker.max_workers_per_queue = max_workers_per_queue
+    Worker(tiger, **worker_kwargs).run(once=True, force_once=True)
 
-    worker.run(once=True, force_once=True)
     tiger.connection.close()
 
 

@@ -63,6 +63,25 @@ class Executor:
         self.connection = worker.connection
         self.config = worker.config
 
+    def heartbeat(
+        self,
+        queue: str,
+        task_ids: Collection[str],
+        log: BoundLogger,
+        locks: Collection[Lock],
+        queue_lock: Optional[Semaphore],
+    ) -> None:
+        self.worker.heartbeat(queue, task_ids)
+        for lock in locks:
+            try:
+                lock.reacquire()
+            except LockError:
+                log.warning("could not reacquire lock", lock=lock.name)
+        if queue_lock:
+            acquired, current_locks = queue_lock.renew()
+            if not acquired:
+                log.debug("queue lock renew failure")
+
     def execute(
         self,
         queue: str,
@@ -351,18 +370,7 @@ class ForkExecutor(Executor):
                     break
 
                 try:
-                    self.worker.heartbeat(queue, all_task_ids)
-                    for lock in locks:
-                        try:
-                            lock.reacquire()
-                        except LockError:
-                            log.warning(
-                                "could not reacquire lock", lock=lock.name
-                            )
-                    if queue_lock:
-                        acquired, current_locks = queue_lock.renew()
-                        if not acquired:
-                            log.debug("queue lock renew failure")
+                    self.heartbeat(queue, all_task_ids, log, locks, queue_lock)
                 except OSError as e:
                     # EINTR happens if the task completed. Since we're just
                     # renewing locks/heartbeat it's okay if we get interrupted.
@@ -386,6 +394,19 @@ class SyncExecutor(Executor):
 
     exit_worker_on_job_timeout = True
 
+    def _periodic_heartbeat(
+        self,
+        queue: str,
+        task_ids: Collection[str],
+        log: BoundLogger,
+        locks: Collection[Lock],
+        queue_lock: Optional[Semaphore],
+        stop_event: threading.Event,
+    ) -> None:
+        while not stop_event.is_set():
+            stop_event.wait(self.config["ACTIVE_TASK_UPDATE_TIMER"])
+            self.heartbeat(queue, task_ids, log, locks, queue_lock)
+
     def execute(
         self,
         queue: str,
@@ -394,5 +415,27 @@ class SyncExecutor(Executor):
         locks: Collection[Lock],
         queue_lock: Optional[Semaphore],
     ) -> bool:
+        # Run heartbeat thread.
+        all_task_ids = {task.id for task in tasks}
+        stop_event = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=self._periodic_heartbeat,
+            kwargs={
+                "queue": queue,
+                "task_ids": all_task_ids,
+                "log": log,
+                "locks": locks,
+                "queue_lock": queue_lock,
+                "stop_event": stop_event,
+            },
+        )
+        heartbeat_thread.start()
+
         # Run the tasks.
-        return self.execute_tasks(tasks, log)
+        result = self.execute_tasks(tasks, log)
+
+        # Stop the heartbeat thread.
+        stop_event.set()
+        heartbeat_thread.join()
+
+        return result
