@@ -18,13 +18,21 @@ TaskTiger
 Features
 --------
 
-- Per-task fork
+- Per-task fork or synchronous worker
 
-  TaskTiger forks a subprocess for each task, This comes with several benefits:
-  Memory leaks caused by tasks are avoided since the subprocess is terminated
-  when the task is finished. A hard time limit can be set for each task, after
-  which the task is killed if it hasn't completed. To ensure performance, any
-  necessary Python modules can be preloaded in the parent process.
+  By default, TaskTiger forks a subprocess for each task, This comes with
+  several benefits: Memory leaks caused by tasks are avoided since the
+  subprocess is terminated when the task is finished. A hard time limit can be
+  set for each task, after which the task is killed if it hasn't completed. To
+  ensure performance, any necessary Python modules can be preloaded in the
+  parent process.
+
+  TaskTiger also supports synchronous workers, which allows for better
+  performance due to no forking overhead, and tasks have the ability to reuse
+  network connections. To prevent memory leaks from accumulating, workers can
+  be set to shutdown after a certain amount of time, at which point a
+  supervisor can restart them. Workers also automatically exit on on hard
+  timeouts to prevent an inconsistent process state.
 
 - Unique queues
 
@@ -551,6 +559,18 @@ Workers support the following options:
 - ``--store-tracebacks/--no-store-tracebacks``
 
   Store tracebacks with execution history (config defaults to ``True``).
+
+- ``--executor``
+
+  Can be ``fork`` (default) or ``sync``. Whether to execute tasks in a separate
+  process via fork, or execute them synchronously in the same proces. See
+  "Features" section for the benefits of either approach.
+
+- ``--exit-after``
+
+  Exit the worker after the time in minutes has elapsed. This is mainly useful
+  with the synchronous executor to prevent memory leaks from accumulating.
+
 
 In some cases it is convenient to have a custom TaskTiger launch script. For
 example, your application may have a ``manage.py`` command that sets up the

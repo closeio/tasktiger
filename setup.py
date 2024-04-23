@@ -9,7 +9,7 @@ tests_require = install_requires + ["freezefrog", "pytest", "psutil"]
 
 setup(
     name="tasktiger",
-    version="0.19",
+    version="0.19.1",
     url="http://github.com/closeio/tasktiger",
     license="MIT",
     description="Python task queue",

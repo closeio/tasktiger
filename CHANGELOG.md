@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.19.1
+
+* Implement heartbeat with synchronous TaskTiger worker ([331](https://github.com/closeio/tasktiger/pull/331))
+
 ## Version 0.19
 
 * Adding synchronous (non-forking) executor ([319](https://github.com/closeio/tasktiger/pull/319), [320](https://github.com/closeio/tasktiger/pull/320))
