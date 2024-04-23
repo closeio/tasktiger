@@ -8,13 +8,16 @@ import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
+from tasktiger._internal import ACTIVE
 from tasktiger.executor import SyncExecutor
 
+from .config import DELAY
 from .tasks import (
     exception_task,
     long_task_killed,
     long_task_ok,
     simple_task,
+    sleep_task,
     wait_for_long_task,
 )
 from .test_base import BaseTestCase
@@ -35,10 +38,12 @@ class TestMaxWorkers(BaseTestCase):
 
         # Start two workers and wait until they start processing.
         worker1 = Process(
-            target=external_worker, kwargs={"max_workers_per_queue": 2}
+            target=external_worker,
+            kwargs={"worker_kwargs": {"max_workers_per_queue": 2}},
         )
         worker2 = Process(
-            target=external_worker, kwargs={"max_workers_per_queue": 2}
+            target=external_worker,
+            kwargs={"worker_kwargs": {"max_workers_per_queue": 2}},
         )
         worker1.start()
         worker2.start()
@@ -181,3 +186,28 @@ class TestSyncExecutorWorker:
         with pytest.raises(SystemExit):
             worker.run(once=True, force_once=True)
         ensure_queues(error={"default": 1})
+
+    def test_heartbeat(self, tiger):
+        task = Task(tiger, sleep_task)
+        task.delay()
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(
+            target=external_worker,
+            kwargs={
+                "patch_config": {"ACTIVE_TASK_UPDATE_TIMER": DELAY / 2},
+                "worker_kwargs": {"executor_class": SyncExecutor},
+            },
+        )
+        worker.start()
+
+        time.sleep(DELAY / 2)
+
+        key = tiger._key(ACTIVE, "default")
+        conn = tiger.connection
+        heartbeat_1 = conn.zscore(key, task.id)
+        time.sleep(DELAY / 2)
+        heartbeat_2 = conn.zscore(key, task.id)
+        assert heartbeat_2 > heartbeat_1 > 0
+
+        worker.kill()
