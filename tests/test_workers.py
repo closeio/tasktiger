@@ -188,7 +188,8 @@ class TestSyncExecutorWorker:
         ensure_queues(error={"default": 1})
 
     def test_heartbeat(self, tiger):
-        task = Task(tiger, sleep_task)
+        # Test both task heartbeat and lock renewal.
+        task = Task(tiger, sleep_task, lock=True)
         task.delay()
 
         # Start a worker and wait until it starts processing.
@@ -196,7 +197,11 @@ class TestSyncExecutorWorker:
             target=external_worker,
             kwargs={
                 "patch_config": {"ACTIVE_TASK_UPDATE_TIMER": DELAY / 2},
-                "worker_kwargs": {"executor_class": SyncExecutor},
+                "worker_kwargs": {
+                    # Test queue lock.
+                    "max_workers_per_queue": 1,
+                    "executor_class": SyncExecutor,
+                },
             },
         )
         worker.start()
