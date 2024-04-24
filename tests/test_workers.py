@@ -206,7 +206,7 @@ class TestSyncExecutorWorker:
         )
         worker.start()
 
-        time.sleep(DELAY / 2)
+        time.sleep(DELAY)
 
         key = tiger._key(ACTIVE, "default")
         conn = tiger.connection
