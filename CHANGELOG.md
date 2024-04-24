@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.19.2
+
+* Heartbeat threading-related fixes with synchronous worker ([333](https://github.com/closeio/tasktiger/pull/333))
+
 ## Version 0.19.1
 
 * Implement heartbeat with synchronous TaskTiger worker ([331](https://github.com/closeio/tasktiger/pull/331))
