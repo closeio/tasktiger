@@ -403,9 +403,11 @@ class SyncExecutor(Executor):
         queue_lock: Optional[Semaphore],
         stop_event: threading.Event,
     ) -> None:
-        while not stop_event.is_set():
-            stop_event.wait(self.config["ACTIVE_TASK_UPDATE_TIMER"])
-            self.heartbeat(queue, task_ids, log, locks, queue_lock)
+        while not stop_event.wait(self.config["ACTIVE_TASK_UPDATE_TIMER"]):
+            try:
+                self.heartbeat(queue, task_ids, log, locks, queue_lock)
+            except Exception:
+                log.exception("task heartbeat failed")
 
     def execute(
         self,
