@@ -674,6 +674,8 @@ class Worker:
                     lock = self.connection.lock(
                         self._key("lockv2", lock_id),
                         timeout=self.config["ACTIVE_TASK_UPDATE_TIMEOUT"],
+                        # Sync worker uses a thread to renew the lock.
+                        thread_local=False,
                     )
                     if not lock.acquire(blocking=False):
                         log.info("could not acquire lock", task_id=task.id)
