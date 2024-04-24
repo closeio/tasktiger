@@ -10,6 +10,7 @@ from freezefrog import FreezeTime
 from tasktiger import Task, Worker
 from tasktiger._internal import ACTIVE
 from tasktiger.executor import SyncExecutor
+from tasktiger.worker import LOCK_REDIS_KEY
 
 from .config import DELAY
 from .tasks import (
@@ -189,7 +190,8 @@ class TestSyncExecutorWorker:
 
     def test_heartbeat(self, tiger):
         # Test both task heartbeat and lock renewal.
-        task = Task(tiger, sleep_task, lock=True)
+        # We set unique=True so the task ID matches the lock key.
+        task = Task(tiger, sleep_task, lock=True, unique=True)
         task.delay()
 
         # Start a worker and wait until it starts processing.
@@ -208,11 +210,31 @@ class TestSyncExecutorWorker:
 
         time.sleep(DELAY)
 
-        key = tiger._key(ACTIVE, "default")
+        queue_key = tiger._key(ACTIVE, "default")
+        queue_lock_key = tiger._key(LOCK_REDIS_KEY, "default")
+        task_lock_key = tiger._key("lockv2", task.id)
+
         conn = tiger.connection
-        heartbeat_1 = conn.zscore(key, task.id)
+
+        heartbeat_1 = conn.zscore(queue_key, task.id)
+        queue_lock_1 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][
+            1
+        ]
+        task_lock_1 = conn.pttl(task_lock_key)
+
         time.sleep(DELAY / 2)
-        heartbeat_2 = conn.zscore(key, task.id)
+
+        heartbeat_2 = conn.zscore(queue_key, task.id)
+        queue_lock_2 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][
+            1
+        ]
+        task_lock_2 = conn.pttl(task_lock_key)
+
         assert heartbeat_2 > heartbeat_1 > 0
+        assert queue_lock_2 > queue_lock_1 > 0
+
+        # Active task update timeout is 2 * DELAY and we renew every DELAY / 2.
+        assert task_lock_1 > DELAY
+        assert task_lock_2 > DELAY
 
         worker.kill()
