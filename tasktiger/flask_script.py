@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import argparse
 from typing import TYPE_CHECKING, Any, List
 
