@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.19.3
+
+* Stop heartbeat thread in case of unhandled exceptions ([335](https://github.com/closeio/tasktiger/pull/335))
+
 ## Version 0.19.2
 
 * Heartbeat threading-related fixes with synchronous worker ([333](https://github.com/closeio/tasktiger/pull/333))
