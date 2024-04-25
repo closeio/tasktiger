@@ -1,6 +1,3 @@
-# Make "import rollbar" import rollbar, and not the current module.
-from __future__ import absolute_import
-
 import json
 from typing import Any
 
