@@ -434,10 +434,13 @@ class SyncExecutor(Executor):
         heartbeat_thread.start()
 
         # Run the tasks.
-        result = self.execute_tasks(tasks, log)
-
-        # Stop the heartbeat thread.
-        stop_event.set()
-        heartbeat_thread.join()
+        try:
+            result = self.execute_tasks(tasks, log)
+        # Always stop the heartbeat thread -- even in case of an unhandled
+        # exception after running the task code, or when an unhandled
+        # BaseException is raised from within the task.
+        finally:
+            stop_event.set()
+            heartbeat_thread.join()
 
         return result
