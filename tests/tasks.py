@@ -35,6 +35,10 @@ def exception_task():
     raise Exception("this failed")
 
 
+def system_exit_task():
+    raise SystemExit()
+
+
 @tiger.task(queue="other")
 def task_on_other_queue():
     pass
