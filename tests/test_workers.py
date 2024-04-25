@@ -19,6 +19,7 @@ from .tasks import (
     long_task_ok,
     simple_task,
     sleep_task,
+    system_exit_task,
     wait_for_long_task,
 )
 from .test_base import BaseTestCase
@@ -238,3 +239,28 @@ class TestSyncExecutorWorker:
         assert task_lock_2 > DELAY
 
         worker.kill()
+
+    def test_stop_heartbeat_thread_on_unhandled_exception(
+        self, tiger, ensure_queues
+    ):
+        task = Task(tiger, system_exit_task)
+        task.delay()
+
+        # Start a worker and wait until it starts processing.
+        worker = Process(
+            target=external_worker,
+            kwargs={
+                "worker_kwargs": {
+                    "executor_class": SyncExecutor,
+                },
+            },
+        )
+        worker.start()
+
+        # Ensure process exits and does not hang here.
+        worker.join()
+
+        # Since SystemExit derives from BaseException and is therefore not
+        # handled by the executor, the task is still active until it times out
+        # and gets requeued by another worker.
+        ensure_queues(active={"default": 1})
