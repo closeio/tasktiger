@@ -1,4 +1,4 @@
 click==8.1.7
-redis==4.5.2
+redis==5.0.5
 structlog==24.1.0
 croniter
