@@ -31,20 +31,26 @@ class StopRetry(Exception):
 
 class RetryException(BaseException):
     """
-    Alternative to retry_on for retrying a task. If raised within a task, the
-    task will be retried as long as the retry method permits. The default retry
-    method (specified in the task or in DEFAULT_RETRY_METHOD) may be overridden
-    using the method argument. If original_traceback is True and RetryException
-    is raised from within an except block, the original traceback will be
-    logged. If log_error is set to False and the task fails permanently, a
-    warning will be logged instead of an error, and the task will be removed
-    from Redis when it completes.
+    Alternative to the `retry_on` parameter for retrying a task.
+
+    If this exception is raised within a task, the task will be retried as long
+    as the retry method permits.
+
+    The default retry method (specified in the task or in DEFAULT_RETRY_METHOD)
+    may be overridden using the method argument.
+
+    If original_traceback is True and RetryException is raised from within an
+    `except` block, the original traceback will be logged.
+
+    If `log_error` is set to False and the task fails permanently, a warning
+    will be logged instead of an error, and the task will be removed from Redis
+    when it completes.
     """
 
     def __init__(
         self,
         method: Any = None,
-        original_traceback: Any = False,
+        original_traceback: bool = False,
         log_error: bool = True,
     ):
         self.method = method
