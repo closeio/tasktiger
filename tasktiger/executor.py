@@ -417,6 +417,8 @@ class SyncExecutor(Executor):
         locks: Collection[Lock],
         queue_lock: Optional[Semaphore],
     ) -> bool:
+        assert tasks
+
         # Run heartbeat thread.
         all_task_ids = {task.id for task in tasks}
         stop_event = threading.Event()
@@ -432,6 +434,15 @@ class SyncExecutor(Executor):
             },
         )
         heartbeat_thread.start()
+
+        serialized_task_func = tasks[0].serialized_func
+        for task in tasks:
+            log.info(
+                "processing",
+                func=serialized_task_func,
+                task_id=task.id,
+                params={"args": task.args, "kwargs": task.kwargs},
+            )
 
         # Run the tasks.
         try:
