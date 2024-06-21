@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.19.4
+
+* Log task processing in sync executor ([347](https://github.com/closeio/tasktiger/pull/347))
+* Test and Docstring improvements ([338](https://github.com/closeio/tasktiger/pull/338), [343](https://github.com/closeio/tasktiger/pull/343))
+
 ## Version 0.19.3
 
 * Stop heartbeat thread in case of unhandled exceptions ([335](https://github.com/closeio/tasktiger/pull/335))
