@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.19.5
+
+* First version using the automated-release process
+
 ## Version 0.19.4
 
 * Log task processing in sync executor ([347](https://github.com/closeio/tasktiger/pull/347))
