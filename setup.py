@@ -9,7 +9,7 @@ with open(VERSION_FILE, encoding="utf8") as fd:
 with open("README.rst", encoding="utf-8") as file:
     long_description = file.read()
 
-install_requires = ["click", "redis>=3.3.0,<5", "structlog"]
+install_requires = ["click", "redis>=5.0.7,<6", "structlog"]
 
 tests_require = install_requires + ["freezefrog", "pytest", "psutil"]
 
