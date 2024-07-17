@@ -88,3 +88,38 @@ class TestMaxQueue(BaseTestCase):
                 max_queue_size=3,
                 when=datetime.timedelta(seconds=10),
             )
+
+
+class TestQueueSizes:
+    @pytest.fixture
+    def queue_sample_tasks(self, tiger):
+        tiger.delay(simple_task)
+        tiger.delay(simple_task)
+        tiger.delay(simple_task, queue="other")
+        tiger.delay(simple_task, when=datetime.timedelta(seconds=60))
+
+    def test_get_total_queue_size(self, tiger, queue_sample_tasks):
+        assert tiger.get_total_queue_size("other") == 1
+        assert tiger.get_total_queue_size("default") == 3
+
+    def test_get_queue_sizes(self, tiger, queue_sample_tasks):
+        assert tiger.get_queue_sizes("default") == {
+            "active": 0,
+            "queued": 2,
+            "scheduled": 1,
+        }
+        assert tiger.get_queue_sizes("other") == {
+            "active": 0,
+            "queued": 1,
+            "scheduled": 0,
+        }
+
+    def test_get_sizes_for_queues_and_states(self, tiger, queue_sample_tasks):
+        assert tiger.get_sizes_for_queues_and_states(
+            [
+                ("default", "queued"),
+                ("default", "scheduled"),
+                ("other", "queued"),
+                ("other", "scheduled"),
+            ]
+        ) == [2, 1, 1, 0]

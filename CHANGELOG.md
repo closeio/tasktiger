@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.20
+
+* Add `tiger.get_sizes_for_queues_and_states` ([352](https://github.com/closeio/tasktiger/pull/352))
+
 ## Version 0.19.5
 
 * First version using the automated-release process

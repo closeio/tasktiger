@@ -489,6 +489,23 @@ class TaskTiger:
         results = pipeline.execute()
         return dict(zip(states, results))
 
+    def get_sizes_for_queues_and_states(
+        self, queues_and_states: List[Tuple[str, str]]
+    ) -> List[int]:
+        """
+        Get the sizes for the specific queues and states.
+
+        queues_and_states: List of tuples (queue_name, state).
+
+        Returns a list of queue sizes in the order of the passed
+        queues_and_states.
+        """
+        pipeline = self.connection.pipeline()
+        for queue, state in queues_and_states:
+            pipeline.zcard(self._key(state, queue))
+        results = pipeline.execute()
+        return results
+
     def get_total_queue_size(self, queue: str) -> int:
         """Get total queue size for QUEUED, SCHEDULED, and ACTIVE states."""
 
