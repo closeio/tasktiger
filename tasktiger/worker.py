@@ -771,8 +771,12 @@ class Worker:
                 has_job_timeout = True
 
             if execution and execution.get("retry"):
+                # Prefer retry method from the execution, then the task, then
+                # default.
                 if "retry_method" in execution:
                     retry_func, retry_args = execution["retry_method"]
+                elif task.retry_method:
+                    retry_func, retry_args = task.retry_method
                 else:
                     # We expect the serialized method here.
                     retry_func, retry_args = serialize_retry_method(

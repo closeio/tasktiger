@@ -135,6 +135,11 @@ def retry_task_2():
     raise RetryException(method=fixed(DELAY, 1), log_error=False)
 
 
+@tiger.task(retry_method=fixed(DELAY, 1))
+def retry_task_3():
+    raise RetryException(log_error=False)
+
+
 def verify_current_task():
     with redis.Redis(
         host=REDIS_HOST, db=TEST_DB, decode_responses=True
