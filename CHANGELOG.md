@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.21.0
+
+* When raising `RetryException` with no `method`, use task decorator retry method if set ([356](https://github.com/closeio/tasktiger/pull/356))
+
 ## Version 0.20.0
 
 * Add `tiger.get_sizes_for_queues_and_states` ([352](https://github.com/closeio/tasktiger/pull/352))

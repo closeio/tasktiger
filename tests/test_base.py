@@ -39,6 +39,7 @@ from .tasks import (
     non_batch_task,
     retry_task,
     retry_task_2,
+    retry_task_3,
     simple_task,
     sleep_task,
     task_on_other_queue,
@@ -602,6 +603,23 @@ class TestCase(BaseTestCase):
 
     def test_retry_exception_2(self):
         task = self.tiger.delay(retry_task_2)
+        self._ensure_queues(queued={"default": 1})
+        assert task.n_executions() == 0
+
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues(scheduled={"default": 1})
+        assert task.n_executions() == 1
+
+        time.sleep(DELAY)
+
+        Worker(self.tiger).run(once=True)
+        Worker(self.tiger).run(once=True)
+        self._ensure_queues()
+
+        pytest.raises(TaskNotFound, task.n_executions)
+
+    def test_retry_exception_3(self):
+        task = self.tiger.delay(retry_task_3)
         self._ensure_queues(queued={"default": 1})
         assert task.n_executions() == 0
 
