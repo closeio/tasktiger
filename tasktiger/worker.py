@@ -761,7 +761,7 @@ class Worker:
                 execution = json.loads(execution)
             else:
                 # This can happen if the child process dies unexpectedly.
-                log.warn("execution not found", **log_context)
+                log.warning("execution not found", **log_context)
 
             if (
                 execution
@@ -1016,7 +1016,7 @@ class Worker:
         if not self.scripts.can_replicate_commands:
             # Older Redis versions may create additional overhead when
             # executing pipelines.
-            self.log.warn("using old Redis version")
+            self.log.warning("using old Redis version")
 
         if self.config["STATS_INTERVAL"]:
             stats_thread = StatsThread(self)
