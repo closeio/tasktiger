@@ -334,16 +334,16 @@ class ForkExecutor(Executor):
                         try:
                             # Behavior of a would be blocking read()
                             # Linux:
-                            #   Python 2.7 Raises IOError
+                            #   Python 2.7 Raises OSError
                             #   Python 3.x returns empty string
                             #
                             # macOS:
                             #   Returns empty string
                             opened_fd.read(1)
-                        except IOError:
+                        except OSError:
                             pass
 
-                except select.error as e:
+                except OSError as e:
                     if e.args[0] != errno.EINTR:
                         raise
 
