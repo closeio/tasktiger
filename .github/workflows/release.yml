@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       requested_release_tag:
-        description: 'The tag to use for this release (e.g., `v2.3.0`)'
+        description: "The tag to use for this release (e.g., `v2.3.0`)"
         required: true
 
 jobs:
   build_and_upload:
-    runs-on: 'ubuntu-20.04'
+    runs-on: "ubuntu-24.04"
     environment: production
     permissions:
       # id-token for the trusted publisher setup
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v2
         name: Install Python
         with:
-          python-version: 3.8
+          python-version: 3.12
 
       - run: |
           pip install packaging
@@ -80,4 +80,4 @@ jobs:
         run: |
           python setup.py sdist
       - name: Upload to PyPI
-        uses: closeio/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0  # v1.9
+        uses: closeio/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9
