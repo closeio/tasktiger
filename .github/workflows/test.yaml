@@ -22,7 +22,7 @@ jobs:
       - name: Lint code
         run: |
           pip install -c requirements.txt -r requirements-lint.txt
-          lintlizard --ci
+          ruff check tasktiger tests
 
   # Run tests
   test:
