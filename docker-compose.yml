@@ -1,9 +1,8 @@
-version: "3.7"
 services:
   redis:
     image: redis:7.0.9
-    expose:
-      - 6379
+    ports:
+      - 127.0.0.1:6379:6379
   tasktiger:
     build:
       context: .
