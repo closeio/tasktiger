@@ -1,4 +1,5 @@
 import datetime
+import functools
 import importlib
 import logging
 from collections import defaultdict
@@ -7,11 +8,13 @@ from typing import (
     Callable,
     Collection,
     Dict,
+    Generic,
     Iterable,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -19,6 +22,7 @@ import click
 import redis
 import structlog
 from structlog.stdlib import BoundLogger
+from typing_extensions import ParamSpec
 
 from ._internal import (
     ACTIVE,
@@ -88,6 +92,38 @@ Queue locks scored by timeout
 ZSET <prefix>:qslock:<queue>
 STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 """
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+class TaskCallable(Generic[P, R]):
+    def __init__(self, func: Callable[P, R], tiger: "TaskTiger"):
+        functools.update_wrapper(self, func)
+        self._func = func
+        self._tiger = tiger
+
+        # Default values for attributes
+        self._task_hard_timeout: float | None = None
+        self._task_queue: str | None = None
+        self._task_unique: bool | None = None
+        self._task_unique_key: Collection[str] | None = None
+        self._task_lock: bool | None = None
+        self._task_lock_key: Collection[str] | None = None
+        self._task_retry: int | None = None
+        self._task_retry_on: Collection[type[BaseException]] | None = None
+        self._task_retry_method: Callable[[int], float] | Tuple[Callable[..., float], Tuple] | None = None
+        self._task_batch: bool | None = None
+        self._task_schedule: Callable | None = None
+        self._task_max_queue_size: int | None = None
+        self._task_max_stored_executions: int | None = None
+        self._task_runner_class: type | None = None
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        return self._func(*args, **kwargs)
+
+    def delay(self, *args: P.args, **kwargs: P.kwargs) -> "Task":
+        """Queues a task. See README.rst for an explanation of the options."""
+        return self._tiger.delay(self._func, args=args, kwargs=kwargs)
 
 
 class TaskTiger:
@@ -303,7 +339,7 @@ class TaskTiger:
 
     def task(
         self,
-        _fn: Optional[Callable] = None,
+        _fn: Optional[Callable[P, R]] = None,
         queue: Optional[str] = None,
         hard_timeout: Optional[float] = None,
         unique: Optional[bool] = None,
@@ -320,7 +356,7 @@ class TaskTiger:
         max_queue_size: Optional[int] = None,
         max_stored_executions: Optional[int] = None,
         runner_class: Optional[Type["BaseRunner"]] = None,
-    ) -> Callable:
+    ) -> Callable[[Callable[P, R]], TaskCallable[P, R]] | TaskCallable[P, R]:
         """
         Function decorator that defines the behavior of the function when it is
         used as a task. To use the default behavior, tasks don't need to be
@@ -329,47 +365,26 @@ class TaskTiger:
         See README.rst for an explanation of the options.
         """
 
-        def _delay(func: Callable) -> Callable:
-            def _delay_inner(*args: Any, **kwargs: Any) -> Task:
-                return self.delay(func, args=args, kwargs=kwargs)
-
-            return _delay_inner
-
         # Periodic tasks are unique.
         if schedule is not None:
             unique = True
 
-        def _wrap(func: Callable) -> Callable:
-            if hard_timeout is not None:
-                func._task_hard_timeout = hard_timeout  # type: ignore[attr-defined]
-            if queue is not None:
-                func._task_queue = queue  # type: ignore[attr-defined]
-            if unique is not None:
-                func._task_unique = unique  # type: ignore[attr-defined]
-            if unique_key is not None:
-                func._task_unique_key = unique_key  # type: ignore[attr-defined]
-            if lock is not None:
-                func._task_lock = lock  # type: ignore[attr-defined]
-            if lock_key is not None:
-                func._task_lock_key = lock_key  # type: ignore[attr-defined]
-            if retry is not None:
-                func._task_retry = retry  # type: ignore[attr-defined]
-            if retry_on is not None:
-                func._task_retry_on = retry_on  # type: ignore[attr-defined]
-            if retry_method is not None:
-                func._task_retry_method = retry_method  # type: ignore[attr-defined]
-            if batch is not None:
-                func._task_batch = batch  # type: ignore[attr-defined]
-            if schedule is not None:
-                func._task_schedule = schedule  # type: ignore[attr-defined]
-            if max_queue_size is not None:
-                func._task_max_queue_size = max_queue_size  # type: ignore[attr-defined]
-            if max_stored_executions is not None:
-                func._task_max_stored_executions = max_stored_executions  # type: ignore[attr-defined]
-            if runner_class is not None:
-                func._task_runner_class = runner_class  # type: ignore[attr-defined]
-
-            func.delay = _delay(func)  # type: ignore[attr-defined]
+        def _wrap(func: Callable[P, R]) -> TaskCallable[P, R]:
+            tc = TaskCallable(func, self)
+            tc._task_hard_timeout = hard_timeout
+            tc._task_queue = queue
+            tc._task_unique = unique
+            tc._task_unique_key = unique_key
+            tc._task_lock = lock
+            tc._task_lock_key = lock_key
+            tc._task_retry = retry
+            tc._task_retry_on = retry_on
+            tc._task_retry_method = retry_method
+            tc._task_batch = batch
+            tc._task_schedule = schedule
+            tc._task_max_queue_size = max_queue_size
+            tc._task_max_stored_executions = max_stored_executions
+            tc._task_runner_class = runner_class
 
             if schedule is not None:
                 serialized_func = serialize_func_name(func)
@@ -378,7 +393,7 @@ class TaskTiger:
                 ), "attempted duplicate registration of periodic task"
                 self.periodic_task_funcs[serialized_func] = func
 
-            return func
+            return tc
 
         return _wrap if _fn is None else _wrap(_fn)  # type: ignore[return-value]
 
