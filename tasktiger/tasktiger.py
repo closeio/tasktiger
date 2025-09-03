@@ -96,6 +96,7 @@ STRING <prefix>:qlock:<queue> (Legacy queue locks that are no longer used)
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 class TaskCallable(Generic[P, R]):
     def __init__(self, func: Callable[P, R], tiger: "TaskTiger"):
         functools.update_wrapper(self, func)
@@ -111,7 +112,9 @@ class TaskCallable(Generic[P, R]):
         self._task_lock_key: Collection[str] | None = None
         self._task_retry: int | None = None
         self._task_retry_on: Collection[type[BaseException]] | None = None
-        self._task_retry_method: Callable[[int], float] | Tuple[Callable[..., float], Tuple] | None = None
+        self._task_retry_method: Callable[[int], float] | Tuple[
+            Callable[..., float], Tuple
+        ] | None = None
         self._task_batch: bool | None = None
         self._task_schedule: Callable | None = None
         self._task_max_queue_size: int | None = None
@@ -399,7 +402,7 @@ class TaskTiger:
 
             return tc
 
-        return _wrap if _fn is None else _wrap(_fn)  # type: ignore[return-value]
+        return _wrap if _fn is None else _wrap(_fn)
 
     def run_worker_with_args(self, args: List[str]) -> None:
         """
