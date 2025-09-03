@@ -375,10 +375,6 @@ class TaskTiger:
         def _wrap(func: Callable[P, R]) -> TaskCallable[P, R]:
             tc = TaskCallable(func, self)
             tc._task_hard_timeout = hard_timeout
-            # if queue is not None:
-            #     tc._task_queue = queue
-            # elif self.config is not None:
-            #     tc._task_queue = self.config["DEFAULT_QUEUE"]
             tc._task_queue = queue
             tc._task_unique = unique
             tc._task_unique_key = unique_key
