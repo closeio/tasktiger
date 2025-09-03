@@ -394,7 +394,7 @@ class TaskTiger:
                 assert (
                     serialized_func not in self.periodic_task_funcs
                 ), "attempted duplicate registration of periodic task"
-                self.periodic_task_funcs[serialized_func] = func
+                self.periodic_task_funcs[serialized_func] = tc
 
             return tc
 
