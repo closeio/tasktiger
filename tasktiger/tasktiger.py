@@ -123,7 +123,7 @@ class TaskCallable(Generic[P, R]):
 
     def delay(self, *args: P.args, **kwargs: P.kwargs) -> "Task":
         """Queues a task. See README.rst for an explanation of the options."""
-        return self._tiger.delay(self._func, args=args, kwargs=kwargs)
+        return self._tiger.delay(self, args=args, kwargs=kwargs)
 
 
 class TaskTiger:
@@ -372,10 +372,11 @@ class TaskTiger:
         def _wrap(func: Callable[P, R]) -> TaskCallable[P, R]:
             tc = TaskCallable(func, self)
             tc._task_hard_timeout = hard_timeout
-            if queue is not None:
-                tc._task_queue = queue
-            elif self.config is not None:
-                tc._task_queue = self.config["DEFAULT_QUEUE"]
+            # if queue is not None:
+            #     tc._task_queue = queue
+            # elif self.config is not None:
+            #     tc._task_queue = self.config["DEFAULT_QUEUE"]
+            tc._task_queue = queue
             tc._task_unique = unique
             tc._task_unique_key = unique_key
             tc._task_lock = lock
