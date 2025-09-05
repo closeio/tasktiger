@@ -127,7 +127,6 @@ class TaskCallable(Generic[P, R]):
         return self._func(*args, **kwargs)
 
     def delay(self, *args: P.args, **kwargs: P.kwargs) -> "Task":
-        """Queues a task. See README.rst for an explanation of the options."""
         return self._tiger.delay(self, args=args, kwargs=kwargs)
 
 
