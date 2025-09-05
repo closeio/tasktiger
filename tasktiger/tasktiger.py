@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import functools
 import importlib
@@ -97,29 +98,31 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-class TaskCallable(Generic[P, R]):
-    def __init__(self, func: Callable[P, R], tiger: "TaskTiger"):
-        functools.update_wrapper(self, func)
-        self._func = func
-        self._tiger = tiger
 
-        # Default values for attributes
-        self._task_hard_timeout: float | None = None
-        self._task_queue: str | None = None
-        self._task_unique: bool | None = None
-        self._task_unique_key: Collection[str] | None = None
-        self._task_lock: bool | None = None
-        self._task_lock_key: Collection[str] | None = None
-        self._task_retry: int | None = None
-        self._task_retry_on: Collection[type[BaseException]] | None = None
-        self._task_retry_method: Callable[[int], float] | Tuple[
-            Callable[..., float], Tuple
-        ] | None = None
-        self._task_batch: bool | None = None
-        self._task_schedule: Callable | None = None
-        self._task_max_queue_size: int | None = None
-        self._task_max_stored_executions: int | None = None
-        self._task_runner_class: type | None = None
+@dataclass
+class TaskCallable(Generic[P, R]):
+    _func: Callable[P, R]
+    _tiger: "TaskTiger"
+
+    _task_hard_timeout: float | None = None
+    _task_queue: str | None = None
+    _task_unique: bool | None = None
+    _task_unique_key: Collection[str] | None = None
+    _task_lock: bool | None = None
+    _task_lock_key: Collection[str] | None = None
+    _task_retry: int | None = None
+    _task_retry_on: Collection[type[BaseException]] | None = None
+    _task_retry_method: Callable[[int], float] | Tuple[
+        Callable[..., float], Tuple
+    ] | None = None
+    _task_batch: bool | None = None
+    _task_schedule: Callable | None = None
+    _task_max_queue_size: int | None = None
+    _task_max_stored_executions: int | None = None
+    _task_runner_class: type | None = None
+
+    def __post_init__(self):
+        functools.update_wrapper(self, self._func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self._func(*args, **kwargs)
