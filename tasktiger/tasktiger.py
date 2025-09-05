@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 import datetime
 import functools
 import importlib
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -98,7 +98,6 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-
 @dataclass
 class TaskCallable(Generic[P, R]):
     _func: Callable[P, R]
@@ -112,16 +111,16 @@ class TaskCallable(Generic[P, R]):
     _task_lock_key: Collection[str] | None = None
     _task_retry: int | None = None
     _task_retry_on: Collection[type[BaseException]] | None = None
-    _task_retry_method: Callable[[int], float] | Tuple[
-        Callable[..., float], Tuple
-    ] | None = None
+    _task_retry_method: (
+        Callable[[int], float] | Tuple[Callable[..., float], Tuple] | None
+    ) = None
     _task_batch: bool | None = None
     _task_schedule: Callable | None = None
     _task_max_queue_size: int | None = None
     _task_max_stored_executions: int | None = None
     _task_runner_class: type | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         functools.update_wrapper(self, self._func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -376,21 +375,24 @@ class TaskTiger:
             unique = True
 
         def _wrap(func: Callable[P, R]) -> TaskCallable[P, R]:
-            tc = TaskCallable(func, self)
-            tc._task_hard_timeout = hard_timeout
-            tc._task_queue = queue
-            tc._task_unique = unique
-            tc._task_unique_key = unique_key
-            tc._task_lock = lock
-            tc._task_lock_key = lock_key
-            tc._task_retry = retry
-            tc._task_retry_on = retry_on
-            tc._task_retry_method = retry_method
-            tc._task_batch = batch
-            tc._task_schedule = schedule
-            tc._task_max_queue_size = max_queue_size
-            tc._task_max_stored_executions = max_stored_executions
-            tc._task_runner_class = runner_class
+            tc = TaskCallable(
+                _func=func,
+                _tiger=self,
+                _task_hard_timeout=hard_timeout,
+                _task_queue=queue,
+                _task_unique=unique,
+                _task_unique_key=unique_key,
+                _task_lock=lock,
+                _task_lock_key=lock_key,
+                _task_retry=retry,
+                _task_retry_on=retry_on,
+                _task_retry_method=retry_method,
+                _task_batch=batch,
+                _task_schedule=schedule,
+                _task_max_queue_size=max_queue_size,
+                _task_max_stored_executions=max_stored_executions,
+                _task_runner_class=runner_class,
+            )
 
             if schedule is not None:
                 serialized_func = serialize_func_name(func)
