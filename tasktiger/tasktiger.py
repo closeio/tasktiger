@@ -17,6 +17,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    overload,
 )
 
 import click
@@ -341,9 +342,58 @@ class TaskTiger:
         """
         return ":".join([self.config["REDIS_PREFIX"]] + list(parts))
 
+    @overload
+    def task(
+        self,
+        _fn: Callable[P, R],
+        *,
+        queue: Optional[str] = ...,
+        hard_timeout: Optional[float] = ...,
+        unique: Optional[bool] = ...,
+        unique_key: Optional[Collection[str]] = ...,
+        lock: Optional[bool] = ...,
+        lock_key: Optional[Collection[str]] = ...,
+        retry: Optional[bool] = ...,
+        retry_on: Optional[Collection[Type[BaseException]]] = ...,
+        retry_method: Optional[
+            Union[Callable[[int], float], Tuple[Callable[..., float], Tuple]]
+        ] = ...,
+        schedule: Optional[Callable] = ...,
+        batch: bool = ...,
+        max_queue_size: Optional[int] = ...,
+        max_stored_executions: Optional[int] = ...,
+        runner_class: Optional[Type["BaseRunner"]] = ...,
+    ) -> TaskCallable[P, R]:
+        ...
+
+    @overload
+    def task(
+        self,
+        _fn: None = None,
+        *,
+        queue: Optional[str] = ...,
+        hard_timeout: Optional[float] = ...,
+        unique: Optional[bool] = ...,
+        unique_key: Optional[Collection[str]] = ...,
+        lock: Optional[bool] = ...,
+        lock_key: Optional[Collection[str]] = ...,
+        retry: Optional[bool] = ...,
+        retry_on: Optional[Collection[Type[BaseException]]] = ...,
+        retry_method: Optional[
+            Union[Callable[[int], float], Tuple[Callable[..., float], Tuple]]
+        ] = ...,
+        schedule: Optional[Callable] = ...,
+        batch: bool = ...,
+        max_queue_size: Optional[int] = ...,
+        max_stored_executions: Optional[int] = ...,
+        runner_class: Optional[Type["BaseRunner"]] = ...,
+    ) -> Callable[[Callable[P, R]], TaskCallable[P, R]]:
+        ...
+
     def task(
         self,
         _fn: Optional[Callable[P, R]] = None,
+        *,
         queue: Optional[str] = None,
         hard_timeout: Optional[float] = None,
         unique: Optional[bool] = None,
