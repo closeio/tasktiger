@@ -7,3 +7,4 @@ dist/
 .tox/
 .idea/
 venv/
+.python-version
