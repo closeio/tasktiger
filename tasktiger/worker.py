@@ -29,8 +29,11 @@ from structlog.stdlib import BoundLogger
 from ._internal import (
     ACTIVE,
     ERROR,
+    EXECUTIONS,
+    EXECUTIONS_COUNT,
     QUEUED,
     SCHEDULED,
+    TASK,
     dotted_parts,
     gen_unique_id,
     import_attribute,
@@ -322,7 +325,7 @@ class Worker:
             self.config["REQUEUE_EXPIRED_TASKS_BATCH_SIZE"],
         )
 
-        for (queue, task_id) in task_data:
+        for queue, task_id in task_data:
             self.log.debug("expiring task", queue=queue, task_id=task_id)
             self._did_work = True
             try:
@@ -351,7 +354,7 @@ class Worker:
                 # have a task without a task object.
 
                 # XXX: Ideally, the following block should be atomic.
-                if not self.connection.get(self._key("task", task_id)):
+                if not self.connection.get(self._key(TASK, task_id)):
                     self.log.error("not found", queue=queue, task_id=task_id)
                     task = Task(
                         self.tiger,
@@ -494,7 +497,7 @@ class Worker:
 
         # Get all tasks
         serialized_tasks = self.connection.mget(
-            [self._key("task", task_id) for task_id in task_ids]
+            [self._key(TASK, task_id) for task_id in task_ids]
         )
 
         # Parse tasks
@@ -754,7 +757,7 @@ class Worker:
             should_log_error = True
             # Get execution info (for logging and retry purposes)
             execution = self.connection.lindex(
-                self._key("task", task.id, "executions"), -1
+                self._key(TASK, task.id, EXECUTIONS), -1
             )
 
             if execution:
@@ -964,10 +967,8 @@ class Worker:
         serialized_execution = json.dumps(execution)
 
         for task in tasks:
-            executions_key = self._key("task", task.id, "executions")
-            executions_count_key = self._key(
-                "task", task.id, "executions_count"
-            )
+            executions_key = self._key(TASK, task.id, EXECUTIONS)
+            executions_count_key = self._key(TASK, task.id, EXECUTIONS_COUNT)
 
             pipeline = self.connection.pipeline()
             pipeline.incr(executions_count_key)

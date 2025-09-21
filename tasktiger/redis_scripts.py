@@ -3,7 +3,15 @@ from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 from redis import Redis
 
-from ._internal import ACTIVE, ERROR, QUEUED, SCHEDULED
+from ._internal import (
+    ACTIVE,
+    ERROR,
+    EXECUTIONS,
+    EXECUTIONS_COUNT,
+    QUEUED,
+    SCHEDULED,
+    TASK,
+)
 
 try:
     from redis.commands.core import Script
@@ -595,9 +603,9 @@ class RedisScripts:
         def _none_to_empty_str(v: Optional[str]) -> str:
             return v or ""
 
-        key_task_id = key_func("task", id)
-        key_task_id_executions = key_func("task", id, "executions")
-        key_task_id_executions_count = key_func("task", id, "executions_count")
+        key_task_id = key_func(TASK, id)
+        key_task_id_executions = key_func(TASK, id, EXECUTIONS)
+        key_task_id_executions_count = key_func(TASK, id, EXECUTIONS_COUNT)
         key_from_state = key_func(from_state)
         key_to_state = key_func(to_state) if to_state else ""
         key_active_queue = key_func(ACTIVE, queue)

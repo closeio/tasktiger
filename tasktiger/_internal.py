@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from .task import Task
     from .tasktiger import TaskTiger
 
+# Constants pertaining to Redis keys
+TASK = "task"
+EXECUTIONS = "executions"
+EXECUTIONS_COUNT = "executions_count"
+
 # Task states (represented by different queues)
 # Note some client code may rely on the string values (e.g. get_queue_stats).
 QUEUED = "queued"
