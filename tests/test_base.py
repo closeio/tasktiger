@@ -49,6 +49,8 @@ from .tasks import (
     verify_current_serialized_func,
     verify_current_serialized_func_batch,
     verify_current_task,
+    verify_current_task_is_batch,
+    verify_current_task_is_batch_batch,
     verify_current_tasks,
     verify_tasktiger_instance,
 )
@@ -1170,6 +1172,31 @@ class TestCurrentSerializedFunc(BaseTestCase):
             self.conn.get("serialized_func")
             == "tests.tasks:verify_current_serialized_func_batch"
         )
+
+
+class TestCurrentTaskIsBatch(BaseTestCase):
+    """
+    Ensure current_task_is_batch is set.
+    """
+
+    @pytest.mark.parametrize("always_eager", [False, True])
+    def test_current_task_is_batch(self, always_eager):
+        self.tiger.config["ALWAYS_EAGER"] = always_eager
+        task = Task(self.tiger, verify_current_task_is_batch)
+        task.delay()
+        Worker(self.tiger).run(once=True)
+        assert not self.conn.exists("runtime_error")
+        assert self.conn.get("current_task_is_batch") == "False"
+
+    @pytest.mark.parametrize("always_eager", [False, True])
+    def test_current_task_is_batch_batch(self, always_eager):
+        self.tiger.config["ALWAYS_EAGER"] = always_eager
+        task1 = Task(self.tiger, verify_current_task_is_batch_batch)
+        task1.delay()
+        task2 = Task(self.tiger, verify_current_task_is_batch_batch)
+        task2.delay()
+        Worker(self.tiger).run(once=True)
+        assert self.conn.get("current_task_is_batch") == "True"
 
 
 class TestTaskTigerGlobal(BaseTestCase):

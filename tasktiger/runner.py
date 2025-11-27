@@ -42,7 +42,9 @@ class BaseRunner:
         """
         raise NotImplementedError("Eager tasks are not supported.")
 
-    def on_permanent_error(self, task: "Task", execution: Dict[str, Any] | None) -> None:
+    def on_permanent_error(
+        self, task: "Task", execution: Dict[str, Any] | None
+    ) -> None:
         """
         Called if the task fails permanently.
 
