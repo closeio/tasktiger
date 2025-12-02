@@ -299,16 +299,12 @@ class RedisScripts:
         self.redis = redis
 
         self._zadd_noupdate = redis.register_script(ZADD_NOUPDATE)
-        self._zadd_update_existing = redis.register_script(
-            ZADD_UPDATE_EXISTING
-        )
+        self._zadd_update_existing = redis.register_script(ZADD_UPDATE_EXISTING)
         self._zadd_update_min = redis.register_script(ZADD_UPDATE_MIN)
         self._zadd_update_max = redis.register_script(ZADD_UPDATE_MAX)
 
         self._zpoppush = redis.register_script(ZPOPPUSH)
-        self._zpoppush_update_sets = redis.register_script(
-            ZPOPPUSH_UPDATE_SETS
-        )
+        self._zpoppush_update_sets = redis.register_script(ZPOPPUSH_UPDATE_SETS)
         self._zpoppush_withscores = redis.register_script(ZPOPPUSH_WITHSCORES)
         self._zpoppush_exists_min_update_sets = redis.register_script(
             ZPOPPUSH_EXISTS_MIN_UPDATE_SETS
@@ -319,9 +315,7 @@ class RedisScripts:
 
         self._srem_if_not_exists = redis.register_script(SREM_IF_NOT_EXISTS)
 
-        self._delete_if_not_in_zsets = redis.register_script(
-            DELETE_IF_NOT_IN_ZSETS
-        )
+        self._delete_if_not_in_zsets = redis.register_script(DELETE_IF_NOT_IN_ZSETS)
 
         self._fail_if_not_in_zset = redis.register_script(FAIL_IF_NOT_IN_ZSET)
 

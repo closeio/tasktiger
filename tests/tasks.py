@@ -57,27 +57,21 @@ def long_task_killed():
 @tiger.task(hard_timeout=DELAY * 2)
 def long_task_ok():
     # Signal task has started
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         conn.lpush(LONG_TASK_SIGNAL_KEY, "1")
     time.sleep(DELAY)
 
 
 def wait_for_long_task():
     """Waits for a long task to start."""
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         result = conn.blpop(LONG_TASK_SIGNAL_KEY, int(ceil(DELAY * 3)))
     assert result[1] == "1"
 
 
 @tiger.task(unique=True)
 def unique_task(value=None):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         conn.lpush("unique_task", value)
 
 
@@ -93,9 +87,7 @@ def unique_key_task(a, b):
 
 @tiger.task(lock=True)
 def locked_task(key, other=None):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         data = conn.getset(key, 1)
         if data is not None:
             raise Exception("task failed, key already set")
@@ -105,9 +97,7 @@ def locked_task(key, other=None):
 
 @tiger.task(queue="batch", batch=True)
 def batch_task(params):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         try:
             conn.rpush("batch_task", json.dumps(params))
         except Exception:
@@ -118,9 +108,7 @@ def batch_task(params):
 
 @tiger.task(queue="batch")
 def non_batch_task(arg):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         conn.rpush("batch_task", arg)
 
     if arg == 10:
@@ -141,9 +129,7 @@ def retry_task_3():
 
 
 def verify_current_task():
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         try:
             tiger.current_tasks
         except RuntimeError:
@@ -154,9 +140,7 @@ def verify_current_task():
 
 @tiger.task(batch=True, queue="batch")
 def verify_current_tasks(tasks):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         try:
             tasks = tiger.current_task
         except RuntimeError:
@@ -167,18 +151,14 @@ def verify_current_tasks(tasks):
 
 
 def verify_current_serialized_func():
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         serialized_func = tiger.current_serialized_func
         conn.set("serialized_func", serialized_func)
 
 
 @tiger.task(batch=True, queue="batch")
 def verify_current_serialized_func_batch(tasks):
-    with redis.Redis(
-        host=REDIS_HOST, db=TEST_DB, decode_responses=True
-    ) as conn:
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
         serialized_func = tiger.current_serialized_func
         conn.set("serialized_func", serialized_func)
 
@@ -223,9 +203,7 @@ class MyRunnerClass(BaseRunner):
         assert hard_timeout == 300
         assert task.func is simple_task
 
-        with redis.Redis(
-            host=REDIS_HOST, db=TEST_DB, decode_responses=True
-        ) as conn:
+        with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
             conn.set("task_id", task.id)
 
     def run_batch_tasks(self, tasks, hard_timeout):
@@ -233,9 +211,7 @@ class MyRunnerClass(BaseRunner):
         assert hard_timeout == 300
         assert len(tasks) == 2
 
-        with redis.Redis(
-            host=REDIS_HOST, db=TEST_DB, decode_responses=True
-        ) as conn:
+        with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
             conn.set("task_args", ",".join(str(t.args[0]) for t in tasks))
 
     def run_eager_task(self, task):
@@ -246,7 +222,5 @@ class MyErrorRunnerClass(DefaultRunner):
     def on_permanent_error(self, task, execution):
         assert task.func is exception_task
         assert execution["exception_name"] == "builtins:Exception"
-        with redis.Redis(
-            host=REDIS_HOST, db=TEST_DB, decode_responses=True
-        ) as conn:
+        with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
             conn.set("task_id", task.id)

@@ -21,9 +21,7 @@ def migrate_executions_count(tiger: "TaskTiger") -> None:
         """
     )
 
-    match = (
-        redis_glob_escape(tiger.config["REDIS_PREFIX"]) + ":task:*:executions"
-    )
+    match = redis_glob_escape(tiger.config["REDIS_PREFIX"]) + ":task:*:executions"
 
     for key in tiger.connection.scan_iter(count=100, match=match):
         migrate_task(keys=[key, key + "_count"])
