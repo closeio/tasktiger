@@ -1,2 +1,2 @@
-lintlizard==0.26.0
+ruff==0.14.7
 types-redis
