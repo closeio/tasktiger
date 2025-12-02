@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.23.0
+* Added `Task.current_task_is_batch`
+
+
 ## Version 0.22.0
 * Minimum python version is now 3.10
 * Added type safety to task decorator [302](https://github.com/closeio/tasktiger/issues/302). Wrapped functions retain type information for params and return value, plus capture some config that is added to the function.

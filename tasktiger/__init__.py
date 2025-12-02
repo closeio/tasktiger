@@ -12,7 +12,7 @@ from .task import Task
 from .tasktiger import TaskTiger, run_worker
 from .worker import Worker
 
-__version__ = "0.22.0"
+__version__ = "0.23.0"
 __all__ = [
     "TaskTiger",
     "Worker",
