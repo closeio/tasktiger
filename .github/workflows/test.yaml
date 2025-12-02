@@ -22,7 +22,8 @@ jobs:
       - name: Lint code
         run: |
           pip install -c requirements.txt -r requirements-lint.txt
-          lintlizard --ci
+          ruff check
+          ruff format
 
   # Run tests
   test:
