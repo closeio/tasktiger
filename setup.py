@@ -4,7 +4,7 @@ from setuptools import setup
 
 VERSION_FILE = "tasktiger/__init__.py"
 with open(VERSION_FILE, encoding="utf8") as fd:
-    version = re.search(r'__version__ = ([\'"])(.*?)\1', fd.read()).group(2)
+    version = re.search(r'__version__ = ([\'"])(.*?)\1', fd.read()).group(2)  # type: ignore
 
 with open("README.rst", encoding="utf-8") as file:
     long_description = file.read()
