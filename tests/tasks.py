@@ -163,6 +163,19 @@ def verify_current_serialized_func_batch(tasks):
         conn.set("serialized_func", serialized_func)
 
 
+def verify_current_task_is_batch():
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
+        is_batch = tiger.current_task_is_batch
+        conn.set("current_task_is_batch", str(is_batch))
+
+
+@tiger.task(batch=True, queue="batch")
+def verify_current_task_is_batch_batch(tasks):
+    with redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True) as conn:
+        is_batch = tiger.current_task_is_batch
+        conn.set("current_task_is_batch", str(is_batch))
+
+
 @tiger.task()
 def verify_tasktiger_instance():
     # Not necessarily the same object, but the same configuration.

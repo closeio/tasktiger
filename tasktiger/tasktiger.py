@@ -311,6 +311,11 @@ class TaskTiger:
             raise RuntimeError("Must be accessed from within a task.")
         return g["current_tasks"][0].serialized_func
 
+    def _get_current_task_is_batch(self) -> bool:
+        if g["current_task_is_batch"] is None:
+            raise RuntimeError("Must be accessed from within a task.")
+        return g["current_task_is_batch"]
+
     """
     Properties to access the currently processing task (or tasks, in case of a
     batch task) from within the task. They must be invoked from within a task.
@@ -318,6 +323,7 @@ class TaskTiger:
     current_task = property(_get_current_task)
     current_tasks = property(_get_current_tasks)
     current_serialized_func = property(_get_current_serialized_func)
+    current_task_is_batch = property(_get_current_task_is_batch)
 
     @classproperty
     def current_instance(self) -> "TaskTiger":
