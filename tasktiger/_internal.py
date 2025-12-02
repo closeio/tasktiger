@@ -202,5 +202,5 @@ class classproperty(property):
     Works like @property but on classes.
     """
 
-    def __get__(desc, self, cls):  # type:ignore[no-untyped-def]
+    def __get__(desc, self, cls):  # type:ignore[no-untyped-def,override]
         return desc.fget(cls)  # type:ignore[misc]
