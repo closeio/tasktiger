@@ -26,9 +26,7 @@ class StructlogRollbarHandler(RollbarHandler):
 
         return "%s: %s" % (
             self.prefix,
-            " ".join(
-                format_field(key, data[key]) for key in KEYS if key in data
-            ),
+            " ".join(format_field(key, data[key]) for key in KEYS if key in data),
         )
 
     def emit(self, record: Any) -> Any:

@@ -72,9 +72,7 @@ class TestMaxQueue(BaseTestCase):
         # Queued
         self.tiger.delay(simple_task, queue="a", max_queue_size=3)
 
-        self._ensure_queues(
-            active={"a": 1}, queued={"a": 1}, scheduled={"a": 1}
-        )
+        self._ensure_queues(active={"a": 1}, queued={"a": 1}, scheduled={"a": 1})
 
         # Should fail to queue task to run immediately
         with pytest.raises(QueueFullException):

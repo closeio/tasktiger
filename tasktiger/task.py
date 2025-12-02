@@ -115,9 +115,7 @@ class Task:
             max_queue_size = getattr(func, "_task_max_queue_size", None)
 
         if max_stored_executions is None:
-            max_stored_executions = getattr(
-                func, "_task_max_stored_executions", None
-            )
+            max_stored_executions = getattr(func, "_task_max_stored_executions", None)
 
         if runner_class is None:
             runner_class = getattr(func, "_task_runner_class", None)
@@ -158,9 +156,7 @@ class Task:
 
             task["retry_method"] = serialize_retry_method(retry_method)
             if retry_on:
-                task["retry_on"] = [
-                    serialize_func_name(cls) for cls in retry_on
-                ]
+                task["retry_on"] = [serialize_func_name(cls) for cls in retry_on]
         if max_queue_size:
             task["max_queue_size"] = max_queue_size
         if max_stored_executions is not None:
@@ -521,9 +517,7 @@ class Task:
         tasks = []
 
         if items:
-            tss = [
-                datetime.datetime.utcfromtimestamp(item[1]) for item in items
-            ]
+            tss = [datetime.datetime.utcfromtimestamp(item[1]) for item in items]
             if load_executions:
                 pipeline = tiger.connection.pipeline()
                 pipeline.mget([tiger._key("task", item[0]) for item in items])
@@ -544,9 +538,7 @@ class Task:
                     else:
                         data = json.loads(serialized_data)
 
-                    executions = [
-                        json.loads(e) for e in serialized_executions if e
-                    ]
+                    executions = [json.loads(e) for e in serialized_executions if e]
 
                     task = Task(
                         tiger,
@@ -569,9 +561,7 @@ class Task:
                     else:
                         data = json.loads(serialized_data)
 
-                    task = Task(
-                        tiger, queue=queue, _data=data, _state=state, _ts=ts
-                    )
+                    task = Task(tiger, queue=queue, _data=data, _state=state, _ts=ts)
                     tasks.append(task)
 
         return n, tasks

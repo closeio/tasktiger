@@ -46,8 +46,7 @@ def ensure_queues(redis):
                 task_ids = redis.zrange("t:%s:%s" % (typ, name), 0, -1)
                 assert len(task_ids) == n
                 ret[name] = [
-                    json.loads(redis.get("t:task:%s" % task_id))
-                    for task_id in task_ids
+                    json.loads(redis.get("t:task:%s" % task_id)) for task_id in task_ids
                 ]
                 assert [task["id"] for task in ret[name]] == task_ids
             return ret

@@ -1,4 +1,5 @@
 """Child context manager tests."""
+
 import redis
 
 from tasktiger import Worker
@@ -17,9 +18,7 @@ class ContextManagerTester:
 
     def __init__(self, name):
         self.name = name
-        self.conn = redis.Redis(
-            host=REDIS_HOST, db=TEST_DB, decode_responses=True
-        )
+        self.conn = redis.Redis(host=REDIS_HOST, db=TEST_DB, decode_responses=True)
         self.conn.set("cm:{}:enter".format(self.name), 0)
         self.conn.set("cm:{}:exit".format(self.name), 0)
         self.conn.set("cm:{}:exit_with_error".format(self.name), 0)
@@ -51,15 +50,9 @@ class TestChildContextManagers(BaseTestCase):
             assert self.conn.get("cm:{}:enter".format(cms[i].name)) == "1"
             assert self.conn.get("cm:{}:exit".format(cms[i].name)) == "1"
             if should_fail:
-                assert (
-                    self.conn.get("cm:{}:exit_with_error".format(cms[i].name))
-                    == "1"
-                )
+                assert self.conn.get("cm:{}:exit_with_error".format(cms[i].name)) == "1"
             else:
-                assert (
-                    self.conn.get("cm:{}:exit_with_error".format(cms[i].name))
-                    == "0"
-                )
+                assert self.conn.get("cm:{}:exit_with_error".format(cms[i].name)) == "0"
 
     def test_fixture(self):
         cms = self._get_context_managers(1).pop()

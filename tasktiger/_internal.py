@@ -97,8 +97,7 @@ def serialize_func_name(func: Union[Callable, Type]) -> str:
     """
     if func.__module__ == "__main__":
         raise ValueError(
-            "Functions from the __main__ module cannot be processed by "
-            "workers."
+            "Functions from the __main__ module cannot be processed by workers."
         )
     try:
         # This will only work on Python 3.3 or above, but it will allow us to use static/classmethods
@@ -143,7 +142,7 @@ def serialize_retry_method(retry_method: Any) -> Tuple[str, Tuple]:
 
 
 def get_timestamp(
-    when: Optional[Union[datetime.timedelta, datetime.datetime]]
+    when: Optional[Union[datetime.timedelta, datetime.datetime]],
 ) -> Optional[float]:
     # convert timedelta to datetime
     if isinstance(when, datetime.timedelta):

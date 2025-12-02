@@ -50,9 +50,7 @@ def periodic(
 
     For more details, see README.
     """
-    period = (
-        seconds + minutes * 60 + hours * 3600 + days * 86400 + weeks * 604800
-    )
+    period = seconds + minutes * 60 + hours * 3600 + days * 86400 + weeks * 604800
     assert period > 0, "Must specify a positive period."
     if not start_date:
         # Saturday at midnight

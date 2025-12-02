@@ -20,9 +20,7 @@ class TaskTigerCommand(Command):
         super(TaskTigerCommand, self).__init__()
         self.tiger = tiger
 
-    def create_parser(
-        self, *args: Any, **kwargs: Any
-    ) -> argparse.ArgumentParser:
+    def create_parser(self, *args: Any, **kwargs: Any) -> argparse.ArgumentParser:
         # Override the default parser so we can pass all arguments to the
         # TaskTiger parser.
         func_stack = kwargs.pop("func_stack", ())
