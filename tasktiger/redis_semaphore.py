@@ -80,9 +80,7 @@ class Semaphore:
 
         pipeline = redis.pipeline()
         pipeline.zadd(name, {SYSTEM_LOCK_ID: time.time() + timeout})
-        pipeline.expire(
-            name, timeout + 10
-        )  # timeout plus buffer for troubleshooting
+        pipeline.expire(name, timeout + 10)  # timeout plus buffer for troubleshooting
         pipeline.execute()
 
     def release(self) -> None:

@@ -135,9 +135,7 @@ class Executor:
 
             hard_timeouts = self.worker.get_hard_timeouts(func, tasks)
 
-            with WorkerContextManagerStack(
-                self.config["CHILD_CONTEXT_MANAGERS"]
-            ):
+            with WorkerContextManagerStack(self.config["CHILD_CONTEXT_MANAGERS"]):
                 if is_batch_func:
                     # Batch process if the task supports it.
                     g["current_tasks"] = tasks
@@ -165,9 +163,7 @@ class Executor:
             execution["time_failed"] = time.time()
             if self.worker.store_tracebacks:
                 # Currently we only log failed task executions to Redis.
-                execution["traceback"] = "".join(
-                    traceback.format_exception(*exc_info)
-                )
+                execution["traceback"] = "".join(traceback.format_exception(*exc_info))
             execution["success"] = success
             execution["host"] = socket.gethostname()
 
@@ -360,9 +356,7 @@ class ForkExecutor(Executor):
                     execution = {
                         "time_started": time_started,
                         "time_failed": now,
-                        "exception_name": serialize_func_name(
-                            JobTimeoutException
-                        ),
+                        "exception_name": serialize_func_name(JobTimeoutException),
                         "success": False,
                         "host": socket.gethostname(),
                     }

@@ -218,17 +218,13 @@ class TestSyncExecutorWorker:
         conn = tiger.connection
 
         heartbeat_1 = conn.zscore(queue_key, task.id)
-        queue_lock_1 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][
-            1
-        ]
+        queue_lock_1 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][1]
         task_lock_1 = conn.pttl(task_lock_key)
 
         time.sleep(DELAY / 2)
 
         heartbeat_2 = conn.zscore(queue_key, task.id)
-        queue_lock_2 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][
-            1
-        ]
+        queue_lock_2 = conn.zrange(queue_lock_key, 0, -1, withscores=True)[0][1]
         task_lock_2 = conn.pttl(task_lock_key)
 
         assert heartbeat_2 > heartbeat_1 > 0
@@ -240,9 +236,7 @@ class TestSyncExecutorWorker:
 
         worker.kill()
 
-    def test_stop_heartbeat_thread_on_unhandled_exception(
-        self, tiger, ensure_queues
-    ):
+    def test_stop_heartbeat_thread_on_unhandled_exception(self, tiger, ensure_queues):
         task = Task(tiger, system_exit_task)
         task.delay()
 

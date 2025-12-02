@@ -94,9 +94,7 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={"default": 0})
         assert not self.conn.exists("t:task:%s" % task["id"])
 
-    @pytest.mark.skipif(
-        sys.version_info < (3, 3), reason="__qualname__ unavailable"
-    )
+    @pytest.mark.skipif(sys.version_info < (3, 3), reason="__qualname__ unavailable")
     def test_staticmethod_task(self):
         self.tiger.delay(StaticTask.task)
         queues = self._ensure_queues(queued={"default": 1})
@@ -215,16 +213,12 @@ class TestCase(BaseTestCase):
         self.tiger.delay(exception_task)
 
         Worker(self.tiger).run(once=True)
-        queues = self._ensure_queues(
-            queued={"default": 0}, error={"default": 1}
-        )
+        queues = self._ensure_queues(queued={"default": 0}, error={"default": 1})
 
         task = queues["error"]["default"][0]
         assert task["func"] == "tests.tasks:exception_task"
 
-        executions = self.conn.lrange(
-            "t:task:%s:executions" % task["id"], 0, -1
-        )
+        executions = self.conn.lrange("t:task:%s:executions" % task["id"], 0, -1)
         assert len(executions) == 1
         execution = json.loads(executions[0])
         assert execution["exception_name"] == serialize_func_name(Exception)
@@ -266,16 +260,12 @@ class TestCase(BaseTestCase):
     def test_long_task_killed(self):
         self.tiger.delay(long_task_killed)
         Worker(self.tiger).run(once=True)
-        queues = self._ensure_queues(
-            queued={"default": 0}, error={"default": 1}
-        )
+        queues = self._ensure_queues(queued={"default": 0}, error={"default": 1})
 
         task = queues["error"]["default"][0]
         assert task["func"] == "tests.tasks:long_task_killed"
 
-        executions = self.conn.lrange(
-            "t:task:%s:executions" % task["id"], 0, -1
-        )
+        executions = self.conn.lrange("t:task:%s:executions" % task["id"], 0, -1)
         assert len(executions) == 1
         execution = json.loads(executions[0])
         exception_name = execution["exception_name"]
@@ -287,9 +277,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(unique_task, kwargs={"value": 2})
         self.tiger.delay(unique_task, kwargs={"value": 2})
 
-        queues = self._ensure_queues(
-            queued={"default": 2}, error={"default": 0}
-        )
+        queues = self._ensure_queues(queued={"default": 2}, error={"default": 0})
 
         task_1, task_2 = queues["queued"]["default"]
 
@@ -320,9 +308,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(unique_key_task)
         self.tiger.delay(unique_key_task, kwargs={"b": 1})
 
-        queues = self._ensure_queues(
-            queued={"default": 3}, error={"default": 0}
-        )
+        queues = self._ensure_queues(queued={"default": 3}, error={"default": 0})
 
         task_1, task_2, task_3 = queues["queued"]["default"]
 
@@ -529,9 +515,7 @@ class TestCase(BaseTestCase):
         )
 
     def test_retry_method(self):
-        task = self.tiger.delay(
-            exception_task, retry_method=linear(DELAY, DELAY, 3)
-        )
+        task = self.tiger.delay(exception_task, retry_method=linear(DELAY, DELAY, 3))
 
         def _run(n_executions):
             Worker(self.tiger).run(once=True)
@@ -645,9 +629,7 @@ class TestCase(BaseTestCase):
 
             Worker(self.tiger).run(once=True)
 
-        assert (
-            int(self.conn.get(f"t:task:{task.id}:executions_count")) == count
-        )
+        assert int(self.conn.get(f"t:task:{task.id}:executions_count")) == count
         assert self.conn.llen(f"t:task:{task.id}:executions") == count
 
     def test_batch_1(self):
@@ -751,15 +733,9 @@ class TestCase(BaseTestCase):
         self._ensure_queues(queued={"batch": 0}, error={"batch": 2})
 
     def test_batch_lock_key(self):
-        self.tiger.delay(
-            batch_task, kwargs={"key": "1", "other": 1}, lock_key=("key,")
-        )
-        self.tiger.delay(
-            batch_task, kwargs={"key": "2", "other": 2}, lock_key=("key,")
-        )
-        self.tiger.delay(
-            batch_task, kwargs={"key": "2", "other": 3}, lock_key=("key,")
-        )
+        self.tiger.delay(batch_task, kwargs={"key": "1", "other": 1}, lock_key=("key,"))
+        self.tiger.delay(batch_task, kwargs={"key": "2", "other": 2}, lock_key=("key,"))
+        self.tiger.delay(batch_task, kwargs={"key": "2", "other": 3}, lock_key=("key,"))
 
         self._ensure_queues(queued={"batch": 3})
         Worker(self.tiger).run(once=True)
@@ -788,9 +764,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(simple_task, queue="[ab\\c]*?")
         self.tiger.delay(simple_task, queue="[ab\\c]*?")
 
-        self._ensure_queues(
-            queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1, "[ab\\c]*?": 2}
-        )
+        self._ensure_queues(queued={"a": 1, "a.a": 1, "b": 1, "b.a": 1, "[ab\\c]*?": 2})
 
         self.tiger.config["ONLY_QUEUES"] = only_queues
 
@@ -828,9 +802,7 @@ class TestCase(BaseTestCase):
         self.tiger.delay(exception_task)
 
         Worker(self.tiger).run(once=True)
-        queues = self._ensure_queues(
-            queued={"default": 0}, error={"default": 1}
-        )
+        queues = self._ensure_queues(queued={"default": 0}, error={"default": 1})
 
         task = queues["error"]["default"][0]
         assert task["func"] == "tests.tasks:exception_task"
@@ -1421,14 +1393,10 @@ class TestReliability(BaseTestCase):
         task = queues["error"]["default"][0]
         assert task["func"] == "tests.tasks:sleep_task"
 
-        executions = self.conn.lrange(
-            "t:task:%s:executions" % task["id"], 0, -1
-        )
+        executions = self.conn.lrange("t:task:%s:executions" % task["id"], 0, -1)
         assert len(executions) == 1
         execution = json.loads(executions[0])
-        assert execution["exception_name"] == serialize_func_name(
-            JobTimeoutException
-        )
+        assert execution["exception_name"] == serialize_func_name(JobTimeoutException)
         assert not execution["success"]
 
     def test_decorated_child_hard_timeout_precedence(self):
@@ -1478,19 +1446,14 @@ class TestReliability(BaseTestCase):
         task = queues["error"]["default"][0]
         assert task["func"] == "tests.tasks:decorated_task_sleep_timeout"
 
-        executions = self.conn.lrange(
-            "t:task:%s:executions" % task["id"], 0, -1
-        )
+        executions = self.conn.lrange("t:task:%s:executions" % task["id"], 0, -1)
         assert len(executions) == 1
         execution = json.loads(executions[0])
-        assert execution["exception_name"] == serialize_func_name(
-            JobTimeoutException
-        )
+        assert execution["exception_name"] == serialize_func_name(JobTimeoutException)
         assert not execution["success"]
         # Ensure that task duration is lower than DEFAULT_HARD_TIMEOUT
         assert (
-            execution["time_failed"] - execution["time_started"]
-            < DEFAULT_HARD_TIMEOUT
+            execution["time_failed"] - execution["time_started"] < DEFAULT_HARD_TIMEOUT
         )
 
 
@@ -1519,9 +1482,7 @@ class TestRunnerClass(BaseTestCase):
         self._ensure_queues(error={"batch": 2})
 
     def test_permanent_error(self):
-        task = self.tiger.delay(
-            exception_task, runner_class=MyErrorRunnerClass
-        )
+        task = self.tiger.delay(exception_task, runner_class=MyErrorRunnerClass)
         Worker(self.tiger).run(once=True)
         assert self.conn.get("task_id") == task.id
         self.conn.delete("task_id")

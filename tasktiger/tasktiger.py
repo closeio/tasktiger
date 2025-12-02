@@ -13,6 +13,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    ParamSpec,
     Tuple,
     Type,
     TypeVar,
@@ -24,7 +25,6 @@ import click
 import redis
 import structlog
 from structlog.stdlib import BoundLogger
-from typing_extensions import ParamSpec
 
 from ._internal import (
     ACTIVE,
@@ -159,11 +159,7 @@ class TaskTiger:
         self.periodic_task_funcs: Dict[str, Callable] = {}
 
         if lazy_init:
-            assert (
-                connection is None
-                and config is None
-                and setup_structlog is False
-            )
+            assert connection is None and config is None and setup_structlog is False
         else:
             self.init(
                 connection=connection,
@@ -293,9 +289,7 @@ class TaskTiger:
             self.log.setLevel(logging.DEBUG)
             logging.basicConfig(format="%(message)s")
 
-        self.connection: redis.Redis = connection or redis.Redis(
-            decode_responses=True
-        )
+        self.connection: redis.Redis = connection or redis.Redis(decode_responses=True)
         self.scripts: RedisScripts = RedisScripts(self.connection)
 
     def _get_current_task(self) -> Task:
@@ -363,8 +357,7 @@ class TaskTiger:
         max_queue_size: Optional[int] = ...,
         max_stored_executions: Optional[int] = ...,
         runner_class: Optional[Type["BaseRunner"]] = ...,
-    ) -> TaskCallable[P, R]:
-        ...
+    ) -> TaskCallable[P, R]: ...
 
     @overload
     def task(
@@ -387,8 +380,7 @@ class TaskTiger:
         max_queue_size: Optional[int] = ...,
         max_stored_executions: Optional[int] = ...,
         runner_class: Optional[Type["BaseRunner"]] = ...,
-    ) -> Callable[[Callable[P, R]], TaskCallable[P, R]]:
-        ...
+    ) -> Callable[[Callable[P, R]], TaskCallable[P, R]]: ...
 
     def task(
         self,
@@ -445,9 +437,9 @@ class TaskTiger:
 
             if schedule is not None:
                 serialized_func = serialize_func_name(func)
-                assert (
-                    serialized_func not in self.periodic_task_funcs
-                ), "attempted duplicate registration of periodic task"
+                assert serialized_func not in self.periodic_task_funcs, (
+                    "attempted duplicate registration of periodic task"
+                )
                 self.periodic_task_funcs[serialized_func] = tc
 
             return tc
@@ -683,9 +675,7 @@ class TaskTiger:
             assert limit > 0, "If specified, limit must be greater than zero"
 
         only_queues = set(queues or self.config["ONLY_QUEUES"] or [])
-        exclude_queues_ = set(
-            exclude_queues or self.config["EXCLUDE_QUEUES"] or []
-        )
+        exclude_queues_ = set(exclude_queues or self.config["EXCLUDE_QUEUES"] or [])
 
         def errored_tasks() -> Iterable[Task]:
             queues_with_errors = self.connection.smembers(self._key(ERROR))

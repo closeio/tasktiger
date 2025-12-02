@@ -74,9 +74,7 @@ class TestRedisScripts:
 
     def test_zpoppush_withscores_1(self):
         self.conn.zadd("src", {"a": 1, "b": 2, "c": 3, "d": 4})
-        result = self.scripts.zpoppush(
-            "src", "dst", 3, None, 10, withscores=True
-        )
+        result = self.scripts.zpoppush("src", "dst", 3, None, 10, withscores=True)
         assert result == ["a", "1", "b", "2", "c", "3"]
 
         src = self.conn.zrange("src", 0, -1, withscores=True)
@@ -87,9 +85,7 @@ class TestRedisScripts:
 
     def test_zpoppush_withscores_2(self):
         self.conn.zadd("src", {"a": 1, "b": 2, "c": 3, "d": 4})
-        result = self.scripts.zpoppush(
-            "src", "dst", 100, None, 10, withscores=True
-        )
+        result = self.scripts.zpoppush("src", "dst", 100, None, 10, withscores=True)
         assert result == ["a", "1", "b", "2", "c", "3", "d", "4"]
 
         src = self.conn.zrange("src", 0, -1, withscores=True)
@@ -125,7 +121,7 @@ class TestRedisScripts:
             score=None,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == ["a", "b"]
 
@@ -151,7 +147,7 @@ class TestRedisScripts:
             score=0,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == []
 
@@ -177,7 +173,7 @@ class TestRedisScripts:
             score=None,
             new_score=10,
             on_success=("update_sets", "val", "remove_set", "add_set"),
-            **kwargs
+            **kwargs,
         )
         assert result == ["a", "b", "c", "d"]
 

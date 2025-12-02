@@ -185,9 +185,7 @@ class TestPeriodicTasks(BaseTestCase):
         self._ensure_queues(queued={"periodic": 1})
 
         # generate the expected unique id
-        expected_unique_id = gen_unique_id(
-            serialize_func_name(periodic_task), [], {}
-        )
+        expected_unique_id = gen_unique_id(serialize_func_name(periodic_task), [], {})
 
         # pull task out of the queue by id. If found, then the id is correct
         task = Task.from_id(tiger, "periodic", QUEUED, expected_unique_id)
@@ -244,9 +242,7 @@ class TestPeriodicTasks(BaseTestCase):
         sleep_until_next_second()
 
         # generate the ids
-        correct_unique_id = gen_unique_id(
-            serialize_func_name(periodic_task), [], {}
-        )
+        correct_unique_id = gen_unique_id(serialize_func_name(periodic_task), [], {})
         malformed_unique_id = gen_unique_id(
             serialize_func_name(periodic_task), None, None
         )
@@ -298,9 +294,7 @@ class TestPeriodicTasks(BaseTestCase):
         self._ensure_queues(queued={"periodic": 1})
         Worker(tiger).run(once=True)
 
-        task = Task.from_id(
-            tiger, "periodic", SCHEDULED, task_id, load_executions=10
-        )
+        task = Task.from_id(tiger, "periodic", SCHEDULED, task_id, load_executions=10)
         assert len(task.executions) == 1
 
         tiger.connection.delete("fail-periodic-task")
@@ -315,9 +309,7 @@ class TestPeriodicTasks(BaseTestCase):
         Worker(tiger).run(once=True)
 
         # Ensure we cleared any previous executions.
-        task = Task.from_id(
-            tiger, "periodic", SCHEDULED, task_id, load_executions=10
-        )
+        task = Task.from_id(tiger, "periodic", SCHEDULED, task_id, load_executions=10)
         assert len(task.executions) == 0
 
     def test_successful_execution_doesnt_clear_previous_errors(self):
@@ -345,9 +337,7 @@ class TestPeriodicTasks(BaseTestCase):
         self._ensure_queues(queued={"periodic": 1})
         Worker(tiger).run(once=True)
 
-        task = Task.from_id(
-            tiger, "periodic", SCHEDULED, task_id, load_executions=10
-        )
+        task = Task.from_id(tiger, "periodic", SCHEDULED, task_id, load_executions=10)
         assert len(task.executions) == 1
 
         tiger.connection.delete("fail-periodic-task")
@@ -362,7 +352,5 @@ class TestPeriodicTasks(BaseTestCase):
         Worker(tiger).run(once=True)
 
         # Ensure we didn't clear previous executions.
-        task = Task.from_id(
-            tiger, "periodic", SCHEDULED, task_id, load_executions=10
-        )
+        task = Task.from_id(tiger, "periodic", SCHEDULED, task_id, load_executions=10)
         assert len(task.executions) == 1

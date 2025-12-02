@@ -26,9 +26,7 @@ class BaseRunner:
         """
         raise NotImplementedError("Single tasks are not supported.")
 
-    def run_batch_tasks(
-        self, tasks: List["Task"], hard_timeout: float
-    ) -> None:
+    def run_batch_tasks(self, tasks: List["Task"], hard_timeout: float) -> None:
         """
         Run the given tasks using the hard timeout in seconds.
 
@@ -44,9 +42,7 @@ class BaseRunner:
         """
         raise NotImplementedError("Eager tasks are not supported.")
 
-    def on_permanent_error(
-        self, task: "Task", execution: Dict[str, Any]
-    ) -> None:
+    def on_permanent_error(self, task: "Task", execution: Dict[str, Any] | None) -> None:
         """
         Called if the task fails permanently.
 
@@ -66,9 +62,7 @@ class DefaultRunner(BaseRunner):
         with UnixSignalDeathPenalty(hard_timeout):
             task.func(*task.args, **task.kwargs)
 
-    def run_batch_tasks(
-        self, tasks: List["Task"], hard_timeout: float
-    ) -> None:
+    def run_batch_tasks(self, tasks: List["Task"], hard_timeout: float) -> None:
         params = [{"args": task.args, "kwargs": task.kwargs} for task in tasks]
         func = tasks[0].func
         with UnixSignalDeathPenalty(hard_timeout):
@@ -84,9 +78,7 @@ class DefaultRunner(BaseRunner):
             return func(*task.args, **task.kwargs)
 
 
-def get_runner_class(
-    log: BoundLogger, tasks: List["Task"]
-) -> Type[BaseRunner]:
+def get_runner_class(log: BoundLogger, tasks: List["Task"]) -> Type[BaseRunner]:
     runner_class_paths = {task.serialized_runner_class for task in tasks}
     if len(runner_class_paths) > 1:
         log.error(

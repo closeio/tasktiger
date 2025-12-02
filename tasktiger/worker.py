@@ -104,9 +104,7 @@ class Worker:
         if single_worker_queues:
             self.single_worker_queues = set(single_worker_queues)
         elif self.config["SINGLE_WORKER_QUEUES"]:
-            self.single_worker_queues = set(
-                self.config["SINGLE_WORKER_QUEUES"]
-            )
+            self.single_worker_queues = set(self.config["SINGLE_WORKER_QUEUES"])
         else:
             self.single_worker_queues = set()
 
@@ -114,15 +112,10 @@ class Worker:
             self.max_workers_per_queue: Optional[int] = max_workers_per_queue
         else:
             self.max_workers_per_queue = None
-        assert (
-            self.max_workers_per_queue is None
-            or self.max_workers_per_queue >= 1
-        )
+        assert self.max_workers_per_queue is None or self.max_workers_per_queue >= 1
 
         if store_tracebacks is None:
-            self.store_tracebacks = bool(
-                self.config.get("STORE_TRACEBACKS", True)
-            )
+            self.store_tracebacks = bool(self.config.get("STORE_TRACEBACKS", True))
         else:
             self.store_tracebacks = bool(store_tracebacks)
 
@@ -132,9 +125,9 @@ class Worker:
         # queues. This allows us to use worker group-specific locks to reduce
         # Redis load.
         self.worker_group_name = hashlib.sha256(
-            json.dumps(
-                [sorted(self.only_queues), sorted(self.exclude_queues)]
-            ).encode("utf8")
+            json.dumps([sorted(self.only_queues), sorted(self.exclude_queues)]).encode(
+                "utf8"
+            )
         ).hexdigest()
 
     def _install_signal_handlers(self) -> None:
@@ -190,9 +183,7 @@ class Worker:
             if not lock.acquire(blocking=False):
                 return
 
-        queues = set(
-            self._filter_queues(self._retrieve_queues(self._key(SCHEDULED)))
-        )
+        queues = set(self._filter_queues(self._retrieve_queues(self._key(SCHEDULED))))
 
         now = time.time()
         for queue in queues:
@@ -235,9 +226,7 @@ class Worker:
             time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
         self._refresh_queue_set()
 
-    def _pubsub_for_queues(
-        self, timeout: float = 0, batch_timeout: float = 0
-    ) -> None:
+    def _pubsub_for_queues(self, timeout: float = 0, batch_timeout: float = 0) -> None:
         """
         Check activity channel for new queues and wait as necessary.
 
@@ -262,9 +251,7 @@ class Worker:
             else:
                 pubsub_sleep = start_time + timeout - time.time()
             message = self._pubsub.get_message(
-                timeout=0
-                if pubsub_sleep < 0 or self._did_work
-                else pubsub_sleep
+                timeout=0 if pubsub_sleep < 0 or self._did_work else pubsub_sleep
             )
 
             # Pull remaining messages off of channel
@@ -322,26 +309,20 @@ class Worker:
             self.config["REQUEUE_EXPIRED_TASKS_BATCH_SIZE"],
         )
 
-        for (queue, task_id) in task_data:
+        for queue, task_id in task_data:
             self.log.debug("expiring task", queue=queue, task_id=task_id)
             self._did_work = True
             try:
                 task = Task.from_id(self.tiger, queue, ACTIVE, task_id)
                 if task.should_retry_on(JobTimeoutException, logger=self.log):
-                    self.log.info(
-                        "queueing expired task", queue=queue, task_id=task_id
-                    )
+                    self.log.info("queueing expired task", queue=queue, task_id=task_id)
 
                     # Task is idempotent and can be requeued. If the task
                     # already exists in the QUEUED queue, don't change its
                     # time.
-                    task._move(
-                        from_state=ACTIVE, to_state=QUEUED, when=now, mode="nx"
-                    )
+                    task._move(from_state=ACTIVE, to_state=QUEUED, when=now, mode="nx")
                 else:
-                    self.log.error(
-                        "failing expired task", queue=queue, task_id=task_id
-                    )
+                    self.log.error("failing expired task", queue=queue, task_id=task_id)
 
                     # Assume the task can't be retried and move it to the error
                     # queue.
@@ -378,9 +359,7 @@ class Worker:
         is_batch_func = getattr(func, "_task_batch", False)
         if is_batch_func:
             task_timeouts = [
-                task.hard_timeout
-                for task in tasks
-                if task.hard_timeout is not None
+                task.hard_timeout for task in tasks if task.hard_timeout is not None
             ]
             hard_timeout = (
                 (max(task_timeouts) if task_timeouts else None)
@@ -411,9 +390,7 @@ class Worker:
 
     def _get_queue_lock(
         self, queue: str, log: BoundLogger
-    ) -> Union[
-        Tuple[None, Literal[True]], Tuple[Optional[Semaphore], Literal[False]]
-    ]:
+    ) -> Union[Tuple[None, Literal[True]], Tuple[Optional[Semaphore], Literal[False]]]:
         """Get queue lock for max worker queues.
 
         For max worker queues it returns a Lock if acquired and whether
@@ -544,9 +521,7 @@ class Worker:
                 queue, tasks, queue_lock
             )
             processed_count = processed_count + len(processed_tasks)
-            log.debug(
-                "processed", attempted=len(tasks), processed=processed_count
-            )
+            log.debug("processed", attempted=len(tasks), processed=processed_count)
             for task in processed_tasks:
                 self._finish_task_processing(queue, task, success, now)
 
@@ -625,12 +600,7 @@ class Worker:
         # The tasks must use the same function.
         assert len(tasks)
         serialized_task_func = tasks[0].serialized_func
-        assert all(
-            [
-                serialized_task_func == task.serialized_func
-                for task in tasks[1:]
-            ]
-        )
+        assert all([serialized_task_func == task.serialized_func for task in tasks[1:]])
 
         # Before executing periodic tasks, queue them for the next period.
         if serialized_task_func in self.tiger.periodic_task_funcs:
@@ -705,9 +675,7 @@ class Worker:
 
         self._prepare_execution(ready_tasks)
 
-        success = self.executor.execute(
-            queue, ready_tasks, log, locks, queue_lock
-        )
+        success = self.executor.execute(queue, ready_tasks, log, locks, queue_lock)
         if self.stats_thread:
             self.stats_thread.report_task_end()
 
@@ -798,18 +766,14 @@ class Worker:
                                 exception_name=exception_name,
                             )
                         else:
-                            if task.should_retry_on(
-                                exception_class, logger=log
-                            ):
+                            if task.should_retry_on(exception_class, logger=log):
                                 should_retry = True
                     else:
                         # If the task retries on JobTimeoutException, it should
                         # be idempotent and we can retry. Note that this will
                         # not increase the retry counter since we have no
                         # execution stored on the task.
-                        if task.should_retry_on(
-                            JobTimeoutException, logger=log
-                        ):
+                        if task.should_retry_on(JobTimeoutException, logger=log):
                             should_retry = True
                 else:
                     should_retry = True
@@ -828,9 +792,7 @@ class Worker:
                 try:
                     func = import_attribute(retry_func)
                 except TaskImportError:
-                    log.error(
-                        "could not import retry function", func=retry_func
-                    )
+                    log.error("could not import retry function", func=retry_func)
                 else:
                     try:
                         retry_delay = func(retry_num, *retry_args)
@@ -942,9 +904,7 @@ class Worker:
             # We can safely queue the task here since periodic tasks are
             # unique.
             when = task._queue_for_next_period()
-            self.log.info(
-                "queued periodic task", func=task.serialized_func, when=when
-            )
+            self.log.info("queued periodic task", func=task.serialized_func, when=when)
 
     def _refresh_queue_set(self) -> None:
         self._queue_set = set(
@@ -965,9 +925,7 @@ class Worker:
 
         for task in tasks:
             executions_key = self._key("task", task.id, "executions")
-            executions_count_key = self._key(
-                "task", task.id, "executions_count"
-            )
+            executions_count_key = self._key("task", task.id, "executions_count")
 
             pipeline = self.connection.pipeline()
             pipeline.incr(executions_count_key)
@@ -1007,9 +965,7 @@ class Worker:
         )
 
         if exit_after:
-            exit_after_dt = (
-                datetime.datetime.now(datetime.timezone.utc) + exit_after
-            )
+            exit_after_dt = datetime.datetime.now(datetime.timezone.utc) + exit_after
         else:
             exit_after_dt = None
 
@@ -1059,8 +1015,7 @@ class Worker:
                     break
                 if (
                     exit_after_dt
-                    and datetime.datetime.now(datetime.timezone.utc)
-                    > exit_after_dt
+                    and datetime.datetime.now(datetime.timezone.utc) > exit_after_dt
                 ):
                     break
                 if self._stop_requested:
