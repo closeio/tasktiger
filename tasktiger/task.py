@@ -538,8 +538,9 @@ class Task:
                 for idx, serialized_data, serialized_executions, ts in zip(
                     range(len(items)), results[0], results[1:], tss
                 ):
-                    if serialized_data is None and include_not_found:
-                        data = {"id": items[idx][0]}
+                    if serialized_data is None:
+                        if include_not_found:
+                            data = {"id": items[idx][0]}
                     else:
                         data = json.loads(serialized_data)
 
@@ -561,11 +562,10 @@ class Task:
                 result = tiger.connection.mget(
                     [tiger._key("task", item[0]) for item in items]
                 )
-                for idx, serialized_data, ts in zip(
-                    range(len(items)), result, tss
-                ):
-                    if serialized_data is None and include_not_found:
-                        data = {"id": items[idx][0]}
+                for idx, serialized_data, ts in zip(range(len(items)), result, tss):
+                    if serialized_data is None:
+                        if include_not_found:
+                            data = {"id": items[idx][0]}
                     else:
                         data = json.loads(serialized_data)
 

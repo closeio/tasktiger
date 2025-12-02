@@ -1,20 +1,3 @@
-[tool.black]
-line-length = 79
-exclude = '''
-/(
-    \.git
-)/
-'''
-
-[tool.isort]
-skip = ['.git', 'venv']
-known_tests = 'tests'
-sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', 'FIRSTPARTY', 'TESTS', 'LOCALFOLDER']
-default_section = 'THIRDPARTY'
-use_parentheses = true
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-combine_as_imports = true
-line_length = 79
-float_to_top = true
+[tool.mypy]
+ignore_missing_imports = true
+follow_imports = "skip"

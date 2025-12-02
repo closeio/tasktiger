@@ -13,6 +13,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    ParamSpec,
     Tuple,
     Type,
     TypeVar,
@@ -24,7 +25,6 @@ import click
 import redis
 import structlog
 from structlog.stdlib import BoundLogger
-from typing_extensions import ParamSpec
 
 from ._internal import (
     ACTIVE,
