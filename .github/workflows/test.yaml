@@ -22,7 +22,7 @@ jobs:
       - name: Lint code
         run: |
           pip install -c requirements.txt -r requirements-lint.txt
-          mypy .
+          mypy
           ruff check
           ruff format
 
