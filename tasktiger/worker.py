@@ -894,7 +894,7 @@ class Worker:
 
             # Task is already queued, scheduled, or running.
             if any(results):
-                self.log.info(
+                self.log.debug(
                     "periodic task already in queue",
                     func=task.serialized_func,
                     result=results,
