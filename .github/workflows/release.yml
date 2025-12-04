@@ -25,7 +25,7 @@ jobs:
           python-version: 3.12
 
       - run: |
-          pip install packaging
+          pip install packaging setuptools
       - name: Normalize the release version
         run: |
           echo "release_version=`echo '${{ github.event.inputs.requested_release_tag }}' | sed 's/^v//'`" >> $GITHUB_ENV
