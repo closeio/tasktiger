@@ -80,4 +80,4 @@ jobs:
         run: |
           python setup.py sdist
       - name: Upload to PyPI
-        uses: closeio/gh-action-pypi-publish@4e1cbcbad1239984423d90356ff89704f88627db  # v1.13
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13
