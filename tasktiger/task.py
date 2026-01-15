@@ -569,12 +569,7 @@ class Task:
     @classmethod
     def queue_from_function(cls, func: Any, tiger: "TaskTiger") -> str:
         """Get queue from function."""
-        # Can't use the default here because the attribue might exist, but be
-        # None. In that case we would *not* use the default, which is wrong.
-        attr = getattr(func, "_task_queue", None)
-
-        # If the attribute is not set or does not exist, use the default
-        return attr or tiger.config["DEFAULT_QUEUE"]
+        return getattr(func, "_task_queue", tiger.config["DEFAULT_QUEUE"])
 
     def n_executions(self) -> int:
         """
