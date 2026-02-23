@@ -184,6 +184,18 @@ class Task:
             return datetime.datetime.utcfromtimestamp(timestamp)
 
     @property
+    def scheduled_at(self) -> Optional[datetime.datetime]:
+        """
+        The timestamp (datetime) of when the task was intended to run — either
+        the `when` value passed to `delay()`, or the time `delay()` was called
+        if no `when` was given. Returns None if the task has never been queued.
+        """
+        timestamp = self._data.get("scheduled_at")
+        if timestamp is None:
+            return None
+        return datetime.datetime.utcfromtimestamp(timestamp)
+
+    @property
     def state(self) -> str:
         return self._state
 
@@ -372,6 +384,8 @@ class Task:
             state = QUEUED
         else:
             state = SCHEDULED
+
+        self._data["scheduled_at"] = ts
 
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
