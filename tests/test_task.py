@@ -87,3 +87,16 @@ class TestScheduledAt:
     def test_scheduled_at_none_for_unqueued_task(self, tiger):
         task = Task(tiger, simple_task)
         assert task.scheduled_at is None
+
+    def test_update_scheduled_time_updates_scheduled_at(self, tiger):
+        future = datetime.timedelta(minutes=5)
+        later = datetime.timedelta(minutes=10)
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task, when=future)
+        assert task.scheduled_at == self.FROZEN_NOW + future
+
+        new_when = self.FROZEN_NOW + later
+        task.update_scheduled_time(when=new_when)
+
+        reloaded = Task.from_id(tiger, task.queue, "scheduled", task.id)
+        assert reloaded.scheduled_at == new_when

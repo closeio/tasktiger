@@ -443,6 +443,8 @@ class Task:
                 )
             )
 
+        self._data["scheduled_at"] = ts
+        tiger.connection.set(tiger._key("task", self.id), json.dumps(self._data))
         self._ts = ts
 
     def __repr__(self) -> str:
