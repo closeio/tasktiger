@@ -431,13 +431,11 @@ class Task:
         ts = get_timestamp(when)
         assert ts
 
-        new_data = {**self._data, "scheduled_at": ts}
         found = tiger.scripts.update_scheduled_time(
             scheduled_zset_key=tiger._key(SCHEDULED, self.queue),
             task_data_key=tiger._key("task", self.id),
             score=ts,
             member=self.id,
-            serialized_task_data=json.dumps(new_data),
         )
         if not found:
             raise TaskNotFound(
@@ -446,7 +444,7 @@ class Task:
                 )
             )
 
-        self._data = new_data
+        self._data["scheduled_at"] = ts
         self._ts = ts
 
     def __repr__(self) -> str:

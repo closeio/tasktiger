@@ -261,12 +261,15 @@ FAIL_IF_NOT_IN_ZSET = """
 """
 
 # KEYS = { scheduled_zset_key, task_data_key }
-# ARGV = { score, member, serialized_task_data }
+# ARGV = { score, member }
+# score is used both as the new ZSET score and as the new scheduled_at value.
 UPDATE_SCHEDULED_TIME = """
     local score = redis.call('zscore', KEYS[1], ARGV[2])
     if score then
         redis.call('zadd', KEYS[1], ARGV[1], ARGV[2])
-        redis.call('set', KEYS[2], ARGV[3])
+        local data = cjson.decode(redis.call('get', KEYS[2]))
+        data['scheduled_at'] = tonumber(ARGV[1])
+        redis.call('set', KEYS[2], cjson.encode(data))
         return 1
     else
         return 0
@@ -587,16 +590,15 @@ class RedisScripts:
         task_data_key: str,
         score: float,
         member: str,
-        serialized_task_data: str,
     ) -> bool:
         """
-        Atomically updates a task's scheduled time in the ZSET and its _data
-        blob. Returns True if the task was found and updated, False if the task
-        was not present in the ZSET.
+        Atomically updates a task's scheduled time in the ZSET and patches
+        scheduled_at in the _data blob. Returns True if the task was found and
+        updated, False if the task was not present in the ZSET.
         """
         result = self._update_scheduled_time(
             keys=[scheduled_zset_key, task_data_key],
-            args=[score, member, serialized_task_data],
+            args=[score, member],
         )
         return bool(result)
 
