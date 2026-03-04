@@ -431,20 +431,22 @@ class Task:
         ts = get_timestamp(when)
         assert ts
 
-        pipeline = tiger.connection.pipeline()
-        key = tiger._key(SCHEDULED, self.queue)
-        tiger.scripts.zadd(key, ts, self.id, mode="xx", client=pipeline)
-        pipeline.zscore(key, self.id)
-        _, score = pipeline.execute()
-        if not score:
+        new_data = {**self._data, "scheduled_at": ts}
+        found = tiger.scripts.update_scheduled_time(
+            scheduled_zset_key=tiger._key(SCHEDULED, self.queue),
+            task_data_key=tiger._key("task", self.id),
+            score=ts,
+            member=self.id,
+            serialized_task_data=json.dumps(new_data),
+        )
+        if not found:
             raise TaskNotFound(
                 'Task {} not found in queue "{}" in state "{}".'.format(
                     self.id, self.queue, SCHEDULED
                 )
             )
 
-        self._data["scheduled_at"] = ts
-        tiger.connection.set(tiger._key("task", self.id), json.dumps(self._data))
+        self._data = new_data
         self._ts = ts
 
     def __repr__(self) -> str:
