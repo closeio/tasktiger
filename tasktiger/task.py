@@ -184,6 +184,18 @@ class Task:
             return datetime.datetime.utcfromtimestamp(timestamp)
 
     @property
+    def scheduled_at(self) -> Optional[datetime.datetime]:
+        """
+        The timestamp (datetime) of when the task was intended to run — either
+        the `when` value passed to `delay()`, or the time `delay()` was called
+        if no `when` was given. Returns None if the task has never been queued.
+        """
+        timestamp = self._data.get("scheduled_at")
+        if timestamp is None:
+            return None
+        return datetime.datetime.utcfromtimestamp(timestamp)
+
+    @property
     def state(self) -> str:
         return self._state
 
@@ -373,6 +385,8 @@ class Task:
         else:
             state = SCHEDULED
 
+        self._data["scheduled_at"] = ts
+
         # When using ALWAYS_EAGER, make sure we have serialized the task to
         # ensure there are no serialization errors.
         serialized_task = json.dumps(self._data)
@@ -417,18 +431,20 @@ class Task:
         ts = get_timestamp(when)
         assert ts
 
-        pipeline = tiger.connection.pipeline()
-        key = tiger._key(SCHEDULED, self.queue)
-        tiger.scripts.zadd(key, ts, self.id, mode="xx", client=pipeline)
-        pipeline.zscore(key, self.id)
-        _, score = pipeline.execute()
-        if not score:
+        found = tiger.scripts.update_scheduled_time(
+            scheduled_zset_key=tiger._key(SCHEDULED, self.queue),
+            task_data_key=tiger._key("task", self.id),
+            score=ts,
+            member=self.id,
+        )
+        if not found:
             raise TaskNotFound(
                 'Task {} not found in queue "{}" in state "{}".'.format(
                     self.id, self.queue, SCHEDULED
                 )
             )
 
+        self._data["scheduled_at"] = ts
         self._ts = ts
 
     def __repr__(self) -> str:

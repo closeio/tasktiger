@@ -1,4 +1,7 @@
+import datetime
+
 import pytest
+from freezefrog import FreezeTime
 
 from tasktiger import Task, TaskNotFound
 
@@ -49,3 +52,51 @@ class TestTaskMaxTrackedExecutions:
 
         task = tiger.delay(some_task, max_stored_executions=11)
         assert task.max_stored_executions == 11
+
+
+class TestScheduledAt:
+    FROZEN_NOW = datetime.datetime(2024, 1, 1, 12, 0, 0)
+
+    def test_immediate_task_scheduled_at_equals_queue_time(self, tiger):
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task)
+        assert task.scheduled_at == self.FROZEN_NOW
+
+    def test_future_task_scheduled_at_equals_when(self, tiger):
+        future = datetime.timedelta(minutes=5)
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task, when=future)
+        assert task.scheduled_at == self.FROZEN_NOW + future
+
+    def test_scheduled_at_survives_scheduled_to_queued_transition(self, tiger):
+        future = datetime.timedelta(minutes=5)
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task, when=future)
+        expected = self.FROZEN_NOW + future
+
+        task._move(from_state="scheduled", to_state="queued")
+        reloaded = Task.from_id(tiger, task.queue, "queued", task.id)
+        assert reloaded.scheduled_at == expected
+
+    def test_scheduled_at_persists_after_reload(self, tiger):
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task)
+        reloaded = Task.from_id(tiger, task.queue, "queued", task.id)
+        assert reloaded.scheduled_at == self.FROZEN_NOW
+
+    def test_scheduled_at_none_for_unqueued_task(self, tiger):
+        task = Task(tiger, simple_task)
+        assert task.scheduled_at is None
+
+    def test_update_scheduled_time_updates_scheduled_at(self, tiger):
+        future = datetime.timedelta(minutes=5)
+        later = datetime.timedelta(minutes=10)
+        with FreezeTime(self.FROZEN_NOW):
+            task = tiger.delay(simple_task, when=future)
+        assert task.scheduled_at == self.FROZEN_NOW + future
+
+        new_when = self.FROZEN_NOW + later
+        task.update_scheduled_time(when=new_when)
+
+        reloaded = Task.from_id(tiger, task.queue, "scheduled", task.id)
+        assert reloaded.scheduled_at == new_when

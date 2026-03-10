@@ -260,6 +260,22 @@ FAIL_IF_NOT_IN_ZSET = """
     assert(redis.call('zscore', KEYS[1], ARGV[1]), '<FAIL_IF_NOT_IN_ZSET>')
 """
 
+# KEYS = { scheduled_zset_key, task_data_key }
+# ARGV = { score, member }
+# score is used both as the new ZSET score and as the new scheduled_at value.
+UPDATE_SCHEDULED_TIME = """
+    local score = redis.call('zscore', KEYS[1], ARGV[2])
+    if score then
+        redis.call('zadd', KEYS[1], ARGV[1], ARGV[2])
+        local data = cjson.decode(redis.call('get', KEYS[2]))
+        data['scheduled_at'] = tonumber(ARGV[1])
+        redis.call('set', KEYS[2], cjson.encode(data))
+        return 1
+    else
+        return 0
+    end
+"""
+
 # KEYS = { }
 # ARGV = { key_prefix, time, batch_size }
 GET_EXPIRED_TASKS = """
@@ -320,6 +336,8 @@ class RedisScripts:
         self._fail_if_not_in_zset = redis.register_script(FAIL_IF_NOT_IN_ZSET)
 
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
+
+        self._update_scheduled_time = redis.register_script(UPDATE_SCHEDULED_TIME)
 
         self._move_task = self.register_script_from_file(
             "lua/move_task.lua",
@@ -565,6 +583,24 @@ class RedisScripts:
 
         # [queue1, task1, queue2, task2] -> [(queue1, task1), (queue2, task2)]
         return list(zip(result[::2], result[1::2]))
+
+    def update_scheduled_time(
+        self,
+        scheduled_zset_key: str,
+        task_data_key: str,
+        score: float,
+        member: str,
+    ) -> bool:
+        """
+        Atomically updates a task's scheduled time in the ZSET and patches
+        scheduled_at in the _data blob. Returns True if the task was found and
+        updated, False if the task was not present in the ZSET.
+        """
+        result = self._update_scheduled_time(
+            keys=[scheduled_zset_key, task_data_key],
+            args=[score, member],
+        )
+        return bool(result)
 
     def move_task(
         self,
