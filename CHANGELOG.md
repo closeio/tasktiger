@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.25.0
+
+* Added `Task.scheduled_at` property signifying when the task is/was supposed to run.
+
 ## Version 0.24.0
 
 * Reverted "Added type safety to task decorator [302](https://github.com/closeio/tasktiger/issues/302)" due to buggy interaction with scheduled tasks.
