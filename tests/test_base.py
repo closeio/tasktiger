@@ -94,7 +94,7 @@ class TestCase(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"default": 0})
-        assert not self.conn.exists("t:task:%s" % task["id"])
+        assert self.conn.zscore("t:completed:default", task["id"])
 
     @pytest.mark.skipif(sys.version_info < (3, 3), reason="__qualname__ unavailable")
     def test_staticmethod_task(self):
@@ -105,7 +105,7 @@ class TestCase(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"default": 0})
-        assert not self.conn.exists("t:task:%s" % task["id"])
+        assert self.conn.zscore("t:completed:default", task["id"])
 
     def test_task_delay(self):
         decorated_task.delay(1, 2, a=3, b=4)
@@ -602,8 +602,6 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         self._ensure_queues()
 
-        pytest.raises(TaskNotFound, task.n_executions)
-
     def test_retry_exception_3(self):
         task = self.tiger.delay(retry_task_3)
         self._ensure_queues(queued={"default": 1})
@@ -618,8 +616,6 @@ class TestCase(BaseTestCase):
         Worker(self.tiger).run(once=True)
         Worker(self.tiger).run(once=True)
         self._ensure_queues()
-
-        pytest.raises(TaskNotFound, task.n_executions)
 
     @pytest.mark.parametrize("count", [1, 3, 7])
     def test_retry_executions_count(self, count):

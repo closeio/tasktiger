@@ -1,6 +1,10 @@
 import datetime
 import importlib
 import logging
+import sys
+import os
+import signal
+import time
 from collections import defaultdict
 from typing import (
     Any,
@@ -25,6 +29,8 @@ from ._internal import (
     ERROR,
     QUEUED,
     SCHEDULED,
+    WAITING,
+    COMPLETED,
     classproperty,
     g,
     queue_matches,
@@ -395,6 +401,7 @@ class TaskTiger:
         module: Optional[str] = None,
         exclude_queues: Optional[str] = None,
         max_workers_per_queue: Optional[int] = None,
+        max_parallel_workers: Optional[int] = None,
         store_tracebacks: Optional[bool] = None,
         executor_class: Optional[Type[Executor]] = None,
         exit_after: Optional[datetime.timedelta] = None,
@@ -405,7 +412,67 @@ class TaskTiger:
         The arguments are explained in the module-level run_worker() method's
         click options.
         """
+        
+        if max_parallel_workers is None or max_parallel_workers <= 0:
+            max_parallel_workers = 1
 
+        # when run parallel workers we ignore ctrl-c for the main process 
+        # since the children workers will handle the signal and finish gracefully
+        if max_parallel_workers > 0:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+        worker_pids: set[int] = set()
+        for _ in range(max_parallel_workers):
+            pid = os.getpid()
+            if max_parallel_workers > 1:
+                pid = os.fork()
+                if pid != 0:
+                    worker_pids.add(pid)
+                    continue
+
+            self._start_worker(
+                queues,
+                module,
+                exclude_queues,
+                max_workers_per_queue,
+                store_tracebacks,
+                executor_class,
+                exit_after,
+            )
+
+            if pid == 0:
+                # for children we clear the inherited values from the parent
+                worker_pids.clear()
+                max_parallel_workers = 1
+                break
+
+        # wait for children to finish
+        while len(worker_pids) > 0:
+            time.sleep(1)
+            try:
+                pid, _ = os.waitpid(-1, os.WNOHANG)
+                if pid != 0:
+                    worker_pids.remove(pid)
+            except ChildProcessError as ex:
+                if ex.errno == 10:  # no more children
+                    worker_pids.clear()
+            except Exception as ex:
+                print(ex, type(ex), file=sys.stderr)
+
+    def _start_worker(
+        self,
+        queues: Optional[str] = None,
+        module: Optional[str] = None,
+        exclude_queues: Optional[str] = None,
+        max_workers_per_queue: Optional[int] = None,
+        store_tracebacks: Optional[bool] = None,
+        executor_class: Optional[Type[Executor]] = None,
+        exit_after: Optional[datetime.timedelta] = None,
+    ) -> None:
+        """
+        Start worker
+        """
         try:
             module_names = module or ""
             for module_name in module_names.split(","):
@@ -439,6 +506,7 @@ class TaskTiger:
         lock: Optional[bool] = None,
         lock_key: Optional[Collection[str]] = None,
         when: Optional[Union[datetime.datetime, datetime.timedelta]] = None,
+        depends: Optional[Union[str, Collection[str]]] = None,
         retry: Optional[bool] = None,
         retry_on: Optional[Collection[Type[BaseException]]] = None,
         retry_method: Optional[
@@ -463,6 +531,7 @@ class TaskTiger:
             unique_key=unique_key,
             lock=lock,
             lock_key=lock_key,
+            depends=depends,
             retry=retry,
             retry_on=retry_on,
             retry_method=retry_method,
@@ -479,7 +548,7 @@ class TaskTiger:
         Get the queue's number of tasks in each state.
 
         Returns dict with queue size for the QUEUED, SCHEDULED, and ACTIVE
-        states. Does not include size of error queue.
+        states. Does not include size of error queue nor completed queue.
         """
 
         states = [QUEUED, SCHEDULED, ACTIVE]
@@ -541,13 +610,13 @@ class TaskTiger:
         """
         Returns a dict with stats about all the queues. The keys are the queue
         names, the values are dicts representing how many tasks are in a given
-        status ("queued", "active", "error" or "scheduled").
+        status ("queued", "active", "error", "waiting", "completed" or "scheduled").
 
         Example return value:
         { "default": { "queued": 1, "error": 2 } }
         """
 
-        states = (QUEUED, ACTIVE, SCHEDULED, ERROR)
+        states = (QUEUED, ACTIVE, SCHEDULED, ERROR, WAITING, COMPLETED)
 
         pipeline = self.connection.pipeline()
         for state in states:
@@ -700,6 +769,12 @@ class TaskTiger:
     type=int,
 )
 @click.option(
+    "-P",
+    "--max-parallel-workers",
+    help="Maximum parallel workers",
+    type=int,
+)
+@click.option(
     "--store-tracebacks/--no-store-tracebacks",
     help="Store tracebacks with execution history",
     default=None,
@@ -728,6 +803,7 @@ def run_worker(
     module: Optional[str] = None,
     exclude_queues: Optional[str] = None,
     max_workers_per_queue: Optional[int] = None,
+    max_parallel_workers: Optional[int] = None,
     store_tracebacks: Optional[bool] = None,
     executor: Optional[str] = "fork",
     exit_after: Optional[int] = None,
@@ -755,6 +831,7 @@ def run_worker(
         module=module,
         exclude_queues=exclude_queues,
         max_workers_per_queue=max_workers_per_queue,
+        max_parallel_workers=max_parallel_workers,
         store_tracebacks=store_tracebacks,
         executor_class=executor_class,
         exit_after=exit_after_td,
