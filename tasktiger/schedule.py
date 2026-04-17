@@ -64,8 +64,15 @@ def _cron_expr(
     start_date: datetime.datetime,
     end_date: Optional[datetime.datetime] = None,
 ) -> Optional[datetime.datetime]:
-    import croniter  # type: ignore
-    import pytz  # type: ignore
+    try:
+        import croniter  # type: ignore
+        import pytz  # type: ignore
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "tasktiger.schedule.cron_expr requires the 'croniter' and 'pytz' "
+            "packages (missing: {name!r}). Install them with: "
+            "pip install tasktiger[cron]".format(name=exc.name)
+        ) from exc
 
     localize = pytz.utc.localize
 
