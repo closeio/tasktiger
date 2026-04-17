@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.25.1
+
+* Fixed: Widened `redis` dependency from `>=3.3.0,<5` to `>=4.0,<7` to match the CI-tested redis-py matrix (4.6.0, 6.1.0). The previous `<5` cap prevented co-installation with redis-py 5.x and 6.x.
+
 ## Version 0.25.0
 
 * Added `Task.scheduled_at` property signifying when the task is/was supposed to run.
