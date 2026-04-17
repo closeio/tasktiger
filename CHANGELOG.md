@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.25.1
+
+* Fixed: `tasktiger.schedule.cron_expr` now raises a clear `ImportError` directing users to `pip install tasktiger[cron]` when `croniter` or `pytz` is missing, instead of a simple `ModuleNotFoundError`. Added `extras_require={"cron": ["croniter>=2.0", "pytz>=2024.1"]}` in `setup.py`.
+
 ## Version 0.25.0
 
 * Added `Task.scheduled_at` property signifying when the task is/was supposed to run.

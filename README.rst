@@ -419,6 +419,11 @@ The following options can be only specified in the task decorator:
     use ``schedule=cron_expr("0 * * * *")``. To run a task every Sunday at 
     4am UTC, you could use ``schedule=cron_expr("0 4 * * 0")``.
 
+    ``cron_expr`` requires the ``croniter`` and ``pytz`` packages. Install
+    them with ``pip install tasktiger[cron]`` (or add them to your own
+    environment). They are imported lazily, so ``tasktiger`` adds no
+    runtime dependencies for users who do not schedule by cron expression.
+
 
 Custom retrying
 ---------------
