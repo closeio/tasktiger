@@ -330,17 +330,15 @@ class Worker:
             except TaskNotFound:
                 # Either the task was requeued by another worker, or we
                 # have a task without a task object.
-
-                # XXX: Ideally, the following block should be atomic.
-                if not self.connection.get(self._key("task", task_id)):
+                result = self.scripts.handle_expired_task(
+                    key_task=self._key("task", task_id),
+                    key_from_state_queue=self._key(ACTIVE, queue),
+                    key_from_state=self._key(ACTIVE),
+                    id=task_id,
+                    queue=queue,
+                )
+                if result == 1:
                     self.log.error("not found", queue=queue, task_id=task_id)
-                    task = Task(
-                        self.tiger,
-                        queue=queue,
-                        _data={"id": task_id},
-                        _state=ACTIVE,
-                    )
-                    task._move()
 
         # Release the lock immediately if we processed a full batch. This way,
         # another process will be able to pick up another batch immediately

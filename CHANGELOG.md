@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* `Worker._worker_queue_expired_tasks` now cleans up orphaned ACTIVE entries in a single `EVAL` Lua script, instead of a non-atomic `GET` + `_move()`. Removes a rare edge-case race condition in the missing-data-hash flow that the original author flagged with `# XXX: should be atomic`. Possibly related to [#113](https://github.com/closeio/tasktiger/issues/113)
+
 ## Version 0.25.0
 
 * Added `Task.scheduled_at` property signifying when the task is/was supposed to run.
