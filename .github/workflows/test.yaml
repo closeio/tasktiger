@@ -17,7 +17,7 @@ jobs:
     container: python:${{ matrix.python-version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Lint code
         run: |
@@ -50,7 +50,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
