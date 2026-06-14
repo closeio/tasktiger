@@ -31,6 +31,8 @@ from ._internal import (
     ERROR,
     QUEUED,
     SCHEDULED,
+    WAITING,
+    COMPLETED,
     dotted_parts,
     gen_unique_id,
     import_attribute,
@@ -665,6 +667,19 @@ class Worker:
                     lock_ids.add(lock_id)
                     locks.append(lock)
 
+            # if dependent tasks are not completed we move to waiting state
+            if not self.are_deps_completed(task):
+                task._move(
+                    from_state=ACTIVE,
+                    to_state=WAITING,
+                )
+                log.debug(
+                    "dependencies pending",
+                    src_queue=ACTIVE,
+                    dest_queue=WAITING,
+                    task_id=task.id,
+                )
+                continue
             ready_tasks.append(task)
 
         if not ready_tasks:
@@ -686,6 +701,20 @@ class Worker:
                 log.warning("could not release lock", lock=lock.name)
 
         return success, ready_tasks
+
+    def are_deps_completed(self, task: Task) -> bool:
+        """
+        True if all depend tasks are completed
+        """
+
+        if not task.depends:
+            return True
+
+        for dep_task_id in task.depends:
+            exists = self.tiger.connection.zscore(self.tiger._key(COMPLETED, task.queue), dep_task_id)
+            if not exists:
+                return False
+        return True
 
     def _finish_task_processing(
         self, queue: str, task: Task, success: bool, start_time: float
@@ -712,11 +741,39 @@ class Worker:
 
         def _mark_done() -> None:
             # Remove the task from active queue
-            task._move(from_state=ACTIVE)
+            task._move(from_state=ACTIVE, to_state=COMPLETED)
             log.info("done", **log_context)
+
+        def _sched_dependents() -> None:
+            # Schedule tasks that were dependent on this task
+            # TODO: use a reverse lookup instead of this nested loop
+            dependent_tasks_ids = self.connection.zrange(
+                self._key(WAITING, task.queue), 0, -1
+            )
+            for dependent_task_id in dependent_tasks_ids:
+                dependent_task = Task.from_id(
+                    self.tiger,
+                    queue=task.queue,
+                    state=WAITING,
+                    task_id=dependent_task_id,
+                )
+                if not dependent_task.depends:
+                    continue
+                for dep_task_id in dependent_task.depends:
+                    if dep_task_id == task.id:
+                        dependent_task._move(from_state=WAITING, to_state=SCHEDULED)
+                        log.debug(
+                            "dependency completed",
+                            src_queue=WAITING,
+                            dest_queue=SCHEDULED,
+                            task_id=task.id,
+                            dep_task_id=dep_task_id,
+                        )
+                        break
 
         if success:
             _mark_done()
+            _sched_dependents()
         else:
             should_retry = False
             should_log_error = True

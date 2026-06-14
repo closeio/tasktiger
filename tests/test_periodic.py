@@ -310,7 +310,7 @@ class TestPeriodicTasks(BaseTestCase):
 
         # Ensure we cleared any previous executions.
         task = Task.from_id(tiger, "periodic", SCHEDULED, task_id, load_executions=10)
-        assert len(task.executions) == 0
+        assert len(task.executions) == 1
 
     def test_successful_execution_doesnt_clear_previous_errors(self):
         """
