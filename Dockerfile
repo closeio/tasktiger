@@ -1,4 +1,5 @@
 FROM python:3.12
+ENV PATH="/root/.local/bin:${PATH}"
 
 WORKDIR /src
 COPY requirements.txt .
