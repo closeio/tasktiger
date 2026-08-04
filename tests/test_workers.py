@@ -3,6 +3,7 @@
 import datetime
 import time
 from multiprocessing import Process
+from unittest import mock
 
 import pytest
 from freezefrog import FreezeTime
@@ -10,6 +11,7 @@ from freezefrog import FreezeTime
 from tasktiger import Task, Worker
 from tasktiger._internal import ACTIVE
 from tasktiger.executor import SyncExecutor
+from tasktiger.stats import StatsConsumer, StatsThread
 from tasktiger.worker import LOCK_REDIS_KEY
 
 from .config import DELAY
@@ -258,3 +260,86 @@ class TestSyncExecutorWorker:
         # handled by the executor, the task is still active until it times out
         # and gets requeued by another worker.
         ensure_queues(active={"default": 1})
+
+
+def test_worker_runs_without_stats_consumers(tiger):
+    worker = Worker(tiger)
+
+    worker.run(once=True, force_once=True)
+
+    assert worker.stats == []
+
+
+def test_poll_for_queues_measures_idle_time(tiger):
+    tiger.config["POLL_TASK_QUEUES_INTERVAL"] = 0.01
+    worker = Worker(tiger)
+    consumer = mock.create_autospec(StatsConsumer, instance=True)
+    worker.stats = [consumer]
+    worker._did_work = False
+
+    worker._poll_for_queues()
+
+    assert consumer.on_idle_start.mock_calls == [mock.call()]
+    assert consumer.on_idle_end.mock_calls == [mock.call()]
+
+
+def test_poll_for_queues_without_stats_consumers(tiger):
+    tiger.config["POLL_TASK_QUEUES_INTERVAL"] = 0.01
+    worker = Worker(tiger)
+    worker._did_work = False
+    assert worker.stats == []
+
+    worker._poll_for_queues()
+
+
+def test_worker_measures_idle_time(tiger):
+    consumer = mock.create_autospec(StatsConsumer, instance=True)
+    tiger.config["STATS_CONSUMERS"] = [consumer]
+
+    Worker(tiger).run(once=True, force_once=True)
+
+    assert consumer.on_idle_start.mock_calls == [mock.call()]
+    assert consumer.on_idle_end.mock_calls == [mock.call()]
+
+
+def test_worker_reports_to_configured_stats_consumers(tiger):
+    consumer = mock.create_autospec(StatsConsumer, instance=True)
+    tiger.config["STATS_CONSUMERS"] = [consumer]
+    Task(tiger, simple_task).delay()
+
+    Worker(tiger, executor_class=SyncExecutor).run(once=True, force_once=True)
+
+    assert consumer.mock_calls == [
+        mock.call.start(),
+        mock.call.on_idle_start(),
+        mock.call.on_idle_end(),
+        mock.call.on_task_start(),
+        mock.call.on_task_end(),
+        mock.call.stop(),
+    ]
+
+
+def test_measure_task_propagates_exception_and_still_ends(tiger):
+    worker = Worker(tiger)
+    consumer = mock.create_autospec(StatsConsumer, instance=True)
+    worker.stats = [consumer]
+
+    class Boom(Exception):
+        pass
+
+    with pytest.raises(Boom):
+        with worker._measure_task():
+            raise Boom("task blew up")
+
+    assert consumer.on_task_start.mock_calls == [mock.call()]
+    assert consumer.on_task_end.mock_calls == [mock.call()]
+
+
+def test_worker_manages_stats_thread_lifecycle(tiger):
+    stats_thread = StatsThread(mock.Mock(), interval=60)
+    tiger.config["STATS_CONSUMERS"] = [stats_thread]
+
+    Worker(tiger).run(once=True, force_once=True)
+
+    stats_thread.join(timeout=5)
+    assert not stats_thread.is_alive()

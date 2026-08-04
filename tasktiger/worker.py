@@ -8,10 +8,12 @@ import sys
 import time
 import uuid
 from collections import OrderedDict
+from contextlib import ExitStack, contextmanager
 from typing import (
     TYPE_CHECKING,
     Any,
     Collection,
+    Iterator,
     Dict,
     List,
     Literal,
@@ -41,7 +43,7 @@ from .exceptions import StopRetry, TaskImportError, TaskNotFound
 from .executor import Executor, ForkExecutor
 from .redis_semaphore import Semaphore
 from .runner import get_runner_class
-from .stats import StatsThread
+from .stats import StatsConsumer
 from .task import Task
 from .timeouts import JobTimeoutException
 from .utils import redis_glob_escape
@@ -80,7 +82,7 @@ class Worker:
         self._key = tiger._key
         self._did_work = True
         self._last_task_check = 0.0
-        self.stats_thread: Optional[StatsThread] = None
+        self.stats: List[StatsConsumer] = []
         self.id = str(uuid.uuid4())
 
         if executor_class is None:
@@ -214,6 +216,22 @@ class Worker:
                     self.connection.publish(self._key("activity"), queue)
                 self._did_work = True
 
+    @contextmanager
+    def _measure_idle(self) -> Iterator[None]:
+        with ExitStack() as stack:
+            for consumer in self.stats:
+                consumer.on_idle_start()
+                stack.callback(consumer.on_idle_end)
+            yield
+
+    @contextmanager
+    def _measure_task(self) -> Iterator[None]:
+        with ExitStack() as stack:
+            for consumer in self.stats:
+                consumer.on_task_start()
+                stack.callback(consumer.on_task_end)
+            yield
+
     def _poll_for_queues(self) -> None:
         """
         Refresh list of queues.
@@ -223,7 +241,8 @@ class Worker:
         This is only used when using polling to get queues with queued tasks.
         """
         if not self._did_work:
-            time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
+            with self._measure_idle():
+                time.sleep(self.config["POLL_TASK_QUEUES_INTERVAL"])
         self._refresh_queue_set()
 
     def _pubsub_for_queues(self, timeout: float = 0, batch_timeout: float = 0) -> None:
@@ -250,9 +269,10 @@ class Worker:
                 pubsub_sleep = batch_exit - time.time()
             else:
                 pubsub_sleep = start_time + timeout - time.time()
-            message = self._pubsub.get_message(
-                timeout=0 if pubsub_sleep < 0 or self._did_work else pubsub_sleep
-            )
+            with self._measure_idle():
+                message = self._pubsub.get_message(
+                    timeout=0 if pubsub_sleep < 0 or self._did_work else pubsub_sleep
+                )
 
             # Pull remaining messages off of channel
             while message:
@@ -670,14 +690,10 @@ class Worker:
         if not ready_tasks:
             return True, []
 
-        if self.stats_thread:
-            self.stats_thread.report_task_start()
+        with self._measure_task():
+            self._prepare_execution(ready_tasks)
 
-        self._prepare_execution(ready_tasks)
-
-        success = self.executor.execute(queue, ready_tasks, log, locks, queue_lock)
-        if self.stats_thread:
-            self.stats_thread.report_task_end()
+            success = self.executor.execute(queue, ready_tasks, log, locks, queue_lock)
 
         for lock in locks:
             try:
@@ -974,11 +990,6 @@ class Worker:
             # executing pipelines.
             self.log.warning("using old Redis version")
 
-        if self.config["STATS_INTERVAL"]:
-            stats_thread = StatsThread(self)
-            self.stats_thread = stats_thread
-            stats_thread.start()
-
         # Queue any periodic tasks that are not queued yet.
         self._queue_periodic_tasks()
 
@@ -995,7 +1006,11 @@ class Worker:
 
         self._refresh_queue_set()
 
+        self.stats = list(self.config["STATS_CONSUMERS"])
         try:
+            for consumer in self.stats:
+                consumer.start()
+
             while True:
                 # Update the queue set on every iteration so we don't get stuck
                 # on processing a specific queue.
@@ -1028,9 +1043,9 @@ class Worker:
             raise
 
         finally:
-            if self.stats_thread:
-                self.stats_thread.stop()
-                self.stats_thread = None
+            for consumer in self.stats:
+                consumer.stop()
+            self.stats = []
 
             # Free up Redis connection
             if self._pubsub:
