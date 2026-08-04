@@ -108,10 +108,14 @@ class StatsThread(threading.Thread, StatsConsumer):
             # busy: in task code. idle: blocking waits for work.
             # overhead: the rest (dequeue, scan, locks, maintenance).
             time_overhead = time_total - time_busy - time_idle
-            # A worker saturated with short tasks can show low utilization;
-            # for load/autoscaling decisions use occupancy.
+            # occupancy = busy share of busy + idle, ignoring overhead;
+            # unlike utilization it stays ~100 when saturated with short
+            # tasks. 0 with no tasks.
             utilization = 100.0 / time_total * time_busy
-            occupancy = 100.0 * (time_total - time_idle) / time_total
+            time_attributable = time_busy + time_idle
+            occupancy = (
+                100.0 * time_busy / time_attributable if time_attributable else 0.0
+            )
             with g_fork_lock:
                 self.log.info(
                     "stats",
