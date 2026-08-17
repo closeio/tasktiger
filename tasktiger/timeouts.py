@@ -1,5 +1,5 @@
+import os
 import signal
-import sys
 from types import TracebackType
 from typing import Any, Literal, Optional, Type
 
@@ -50,7 +50,7 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
 
     def handle_death_penalty(self, signum: int, frame: Any) -> None:
         if self.retries >= 3:
-            sys.exit(1)
+            os._exit(1)
 
         self.retries += 1
         raise JobTimeoutException(
