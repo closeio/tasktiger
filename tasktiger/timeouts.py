@@ -50,7 +50,15 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
 
     def handle_death_penalty(self, signum: int, frame: Any) -> None:
         if self.retries >= 3:
-            os._exit(1)
+            # Avoid logging locks because this runs in a signal handler.
+            try:
+                os.write(
+                    2,
+                    b"Job timeout did not stop task after 3 attempts; "
+                    b"exiting worker.\n",
+                )
+            finally:
+                os._exit(1)
 
         self.retries += 1
         raise JobTimeoutException(
