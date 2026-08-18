@@ -1,3 +1,4 @@
+import os
 import signal
 from types import TracebackType
 from typing import Any, Literal, Optional, Type
@@ -43,7 +44,23 @@ class BaseDeathPenalty:
 
 
 class UnixSignalDeathPenalty(BaseDeathPenalty):
+    def __init__(self, timeout: float) -> None:
+        super().__init__(timeout)
+        self.retries = 0
+
     def handle_death_penalty(self, signum: int, frame: Any) -> None:
+        if self.retries >= 3:
+            # Avoid logging locks because this runs in a signal handler.
+            try:
+                os.write(
+                    2,
+                    b"Job timeout did not stop task after 3 attempts; "
+                    b"exiting worker.\n",
+                )
+            finally:
+                os._exit(1)
+
+        self.retries += 1
         raise JobTimeoutException(
             "Job exceeded maximum timeout value (%d seconds)." % self._timeout
         )
@@ -54,7 +71,7 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         seconds).
         """
         signal.signal(signal.SIGALRM, self.handle_death_penalty)
-        signal.setitimer(signal.ITIMER_REAL, self._timeout)
+        signal.setitimer(signal.ITIMER_REAL, self._timeout, 5)
 
     def cancel_death_penalty(self) -> None:
         """Removes the death penalty alarm and puts back the system into
