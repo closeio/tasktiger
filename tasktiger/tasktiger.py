@@ -191,8 +191,9 @@ class TaskTiger:
             # subqueues will be automatically treated as batch queues, and the
             # batch value of the most specific subqueue name takes precedence.
             "BATCH_QUEUES": {},
-            # How often to print stats.
-            "STATS_INTERVAL": 60,
+            # StatsConsumer instances receiving worker task/idle
+            # measurements, shared across all workers of this TaskTiger.
+            "STATS_CONSUMERS": [],
             # Single worker queues can reduce redis activity in some use cases
             # by locking at the queue level instead of just at the task or task
             # group level. These queues will only allow a single worker to

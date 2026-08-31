@@ -1,5 +1,36 @@
 # Changelog
 
+## Version 0.26.0
+
+### ⚠️ Breaking changes
+
+#### Worker stats reworked into configurable consumers ([377](https://github.com/closeio/tasktiger/pull/377))
+
+* The worker no longer logs the periodic `stats` event by default, and the
+  `STATS_INTERVAL` config option was removed (a leftover value is silently
+  ignored). To keep the log line:
+
+  ```python
+  from tasktiger.stats import StatsThread
+
+  tiger = TaskTiger(connection=conn, config={
+      "STATS_CONSUMERS": [StatsThread(log, interval=60)],
+  })
+  ```
+* `StatsThread` takes a logger and an interval instead of the worker, and the
+  worker no longer instantiates `worker.StatsThread` — monkey-patching that
+  name silently stops working. Subclass `tasktiger.stats.StatsConsumer` and
+  register instances via `STATS_CONSUMERS` instead.
+* `Worker.stats_thread` was replaced by `Worker.stats`, the list of active
+  consumers.
+
+### Other changes
+
+* The `stats` event now includes `time_idle` (blocking waits for new work),
+  `time_overhead` (everything else), and `occupancy`
+  (`100 * time_busy / (time_busy + time_idle)`), better suited than
+  `utilization` for load/autoscaling decisions.
+
 ## Version 0.25.0
 
 * Added `Task.scheduled_at` property signifying when the task is/was supposed to run.
