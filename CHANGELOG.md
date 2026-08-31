@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.26.0
+
+* Re-deliver Unix hard timeout signals and force-exit workers when timeout exceptions fail to stop the task ([#379](https://github.com/closeio/tasktiger/pull/379)).
+
 ## Version 0.25.0
 
 * Added `Task.scheduled_at` property signifying when the task is/was supposed to run.
