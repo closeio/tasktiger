@@ -276,6 +276,19 @@ UPDATE_SCHEDULED_TIME = """
     end
 """
 
+# KEYS = { task_data_key, from_state_queue_zset, from_state_set }
+# ARGV = { task_id, queue }
+HANDLE_EXPIRED_TASK = """
+    if redis.call('get', KEYS[1]) then
+        return 0
+    end
+    redis.call('zrem', KEYS[2], ARGV[1])
+    if redis.call('zcard', KEYS[2]) == 0 then
+        redis.call('srem', KEYS[3], ARGV[2])
+    end
+    return 1
+"""
+
 # KEYS = { }
 # ARGV = { key_prefix, time, batch_size }
 GET_EXPIRED_TASKS = """
@@ -338,6 +351,8 @@ class RedisScripts:
         self._get_expired_tasks = redis.register_script(GET_EXPIRED_TASKS)
 
         self._update_scheduled_time = redis.register_script(UPDATE_SCHEDULED_TIME)
+
+        self._handle_expired_task = redis.register_script(HANDLE_EXPIRED_TASK)
 
         self._move_task = self.register_script_from_file(
             "lua/move_task.lua",
@@ -601,6 +616,36 @@ class RedisScripts:
             args=[score, member],
         )
         return bool(result)
+
+    def handle_expired_task(
+        self,
+        key_task: str,
+        key_from_state_queue: str,
+        key_from_state: str,
+        id: str,
+        queue: str,
+        client: Optional[Redis] = None,
+    ) -> int:
+        """
+        Cleans up an expired-task ZSET entry whose task-data hash is
+        missing. The check-and-cleanup runs in a single EVAL so the
+        hash check and the ZREM cannot be corrupted with
+        another client's writes. If the hash is re-materialized
+        between the ``get_expired_tasks`` scan and this call, the
+        script does nothing and the next expiry pass re-evaluates.
+
+        Returns 1 if the entry was cleaned up, 0 if the hash came
+        back and no state was modified.
+
+        Replaces the non-atomic ``GET`` + ``_move()`` pair the
+        original author flagged with ``# XXX: should be atomic``; see
+        the discussion on #113.
+        """
+        return self._handle_expired_task(
+            keys=[key_task, key_from_state_queue, key_from_state],
+            args=[id, queue],
+            client=client,
+        )
 
     def move_task(
         self,
