@@ -23,6 +23,9 @@ setup(
     test_suite="tests",
     tests_require=tests_require,
     install_requires=install_requires,
+    extras_require={
+        "cron": ["croniter>=2.0", "pytz>=2024.1"],
+    },
     classifiers=[
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
