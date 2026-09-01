@@ -53,7 +53,7 @@ class TestLogging(BaseTestCase):
 
         Worker(self.tiger).run(once=True)
         self._ensure_queues(queued={"foo_qux": 0})
-        assert not self.conn.exists("t:task:%s" % task["id"])
+        assert self.conn.zscore("t:completed:foo_qux", task["id"])
 
 
 class TestSetupStructlog(BaseTestCase):

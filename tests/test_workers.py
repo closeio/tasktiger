@@ -23,7 +23,7 @@ from .tasks import (
     wait_for_long_task,
 )
 from .test_base import BaseTestCase
-from .utils import external_worker
+from .utils import external_parallel_worker, external_worker
 
 
 class TestMaxWorkers(BaseTestCase):
@@ -258,3 +258,33 @@ class TestSyncExecutorWorker:
         # handled by the executor, the task is still active until it times out
         # and gets requeued by another worker.
         ensure_queues(active={"default": 1})
+
+
+class TestMaxParallelWorkers(BaseTestCase):
+    """Max Parallel Worker Queue tests."""
+
+    def test_max_parallel_workers(self):
+        """Test Parallel Worker Queue."""
+
+        # Queue three tasks
+        for i in range(0, 3):
+            task = Task(self.tiger, long_task_ok, queue="a")
+            task.delay()
+        self._ensure_queues(queued={"a": 3})
+        # self._ensure_queues()
+
+        # # Start two parallel workers and wait until they start processing.
+        worker = Process(
+            target=external_parallel_worker,
+            kwargs={
+                "worker_kwargs": {"queues": "a", "max_parallel_workers": 2},
+            },
+        )
+        worker.start()
+
+        # Wait for both tasks to start
+        wait_for_long_task()
+        wait_for_long_task()
+
+        # Verify that 2 of them are active
+        self._ensure_queues(active={"a": 2}, queued={"a": 1})
