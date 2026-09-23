@@ -113,6 +113,7 @@ class TaskTiger:
         """
 
         self.config: Dict[str, Any] = None  # type: ignore[assignment]
+        self._dispatch: Optional[Callable[[str], Optional[Callable]]] = None
 
         # List of task functions that are executed periodically.
         self.periodic_task_funcs: Dict[str, Callable] = {}
@@ -301,6 +302,22 @@ class TaskTiger:
         """
         return ":".join([self.config["REDIS_PREFIX"]] + list(parts))
 
+    def set_dispatch(
+        self, dispatch: Optional[Callable[[str], Optional[Callable]]]
+    ) -> None:
+        """Set a callback that maps serialized task names to callables.
+
+        Return None for names that should use the legacy import lookup. The
+        callback is consulted before importing a task, including eager tasks.
+        """
+        if dispatch is not None and not callable(dispatch):
+            raise TypeError("dispatch must be callable or None")
+        self._dispatch = dispatch
+
+    def dispatch(self, name: str) -> Optional[Callable]:
+        """Look up a task by its serialized name without invoking it."""
+        return self._dispatch(name) if self._dispatch is not None else None
+
     def task(
         self,
         _fn: Optional[Callable] = None,
@@ -472,6 +489,52 @@ class TaskTiger:
 
         task.delay(when=when, max_queue_size=max_queue_size)
 
+        return task
+
+    def enqueue(
+        self,
+        name: str,
+        args: Any = None,
+        kwargs: Any = None,
+        queue: Optional[str] = None,
+        hard_timeout: Optional[float] = None,
+        unique: Optional[bool] = None,
+        unique_key: Optional[Collection[str]] = None,
+        lock: Optional[bool] = None,
+        lock_key: Optional[Collection[str]] = None,
+        when: Optional[Union[datetime.datetime, datetime.timedelta]] = None,
+        retry: Optional[bool] = None,
+        retry_on: Optional[Collection[Type[BaseException]]] = None,
+        retry_method: Optional[
+            Union[Callable[[int], float], Tuple[Callable[..., float], Tuple]]
+        ] = None,
+        max_queue_size: Optional[int] = None,
+        max_stored_executions: Optional[int] = None,
+        runner_class: Optional[Type["BaseRunner"]] = None,
+    ) -> Task:
+        """Queue a task by serialized name instead of a Python function.
+
+        Arguments and task options use the same storage and execution path as
+        delay(). The name is also used for unique task IDs and locks.
+        """
+        task = Task(
+            self,
+            name=name,
+            args=args,
+            kwargs=kwargs,
+            queue=queue,
+            hard_timeout=hard_timeout,
+            unique=unique,
+            unique_key=unique_key,
+            lock=lock,
+            lock_key=lock_key,
+            retry=retry,
+            retry_on=retry_on,
+            retry_method=retry_method,
+            max_stored_executions=max_stored_executions,
+            runner_class=runner_class,
+        )
+        task.delay(when=when, max_queue_size=max_queue_size)
         return task
 
     def get_queue_sizes(self, queue: str) -> Dict[str, int]:

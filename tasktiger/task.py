@@ -66,16 +66,18 @@ class Task:
         _state: Any = None,
         _ts: Any = None,
         _executions: Optional[List[Dict[str, Any]]] = None,
+        name: Optional[str] = None,
     ):
         """
         Queues a task. See README.rst for an explanation of the options.
         """
 
-        if func and queue is None:
+        if queue is None and (func or name is not None):
             queue = Task.queue_from_function(func, tiger)
 
         self.tiger = tiger
         self._func = func
+        self._func_resolved = False
         self._queue = queue
         self._state = _state
         self._ts = _ts
@@ -86,9 +88,16 @@ class Task:
             self._data = _data
             return
 
-        assert func
+        if (func is None) == (name is None):
+            raise ValueError("Exactly one of func or name is required")
+        if name is not None and (not isinstance(name, str) or not name):
+            raise ValueError("Task name must be a non-empty string")
 
-        serialized_name = serialize_func_name(func)
+        if name is not None:
+            serialized_name = name
+        else:
+            assert func is not None
+            serialized_name = serialize_func_name(func)
 
         if unique is None:
             unique = getattr(func, "_task_unique", False)
@@ -270,8 +279,16 @@ class Task:
 
     @property
     def func(self) -> Callable:
-        if not self._func:
-            self._func = import_attribute(self.serialized_func)
+        if not self._func_resolved:
+            dispatched = self.tiger.dispatch(self.serialized_func)
+            if dispatched is not None:
+                if not callable(dispatched):
+                    raise TypeError("Task dispatcher must return a callable or None")
+                self._func = dispatched
+            elif self._func is None:
+                self._func = import_attribute(self.serialized_func)
+            self._func_resolved = True
+        assert self._func is not None
         return self._func
 
     @property
