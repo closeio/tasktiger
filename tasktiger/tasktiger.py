@@ -30,6 +30,7 @@ from ._internal import (
     queue_matches,
     serialize_func_name,
 )
+from .dispatch import TaskDispatch
 from .executor import Executor, ForkExecutor, SyncExecutor
 from .redis_scripts import RedisScripts
 from .redis_semaphore import Semaphore
@@ -113,7 +114,9 @@ class TaskTiger:
         """
 
         self.config: Dict[str, Any] = None  # type: ignore[assignment]
-        self._dispatch: Optional[Callable[[str], Optional[Callable]]] = None
+        self._dispatch: Optional[
+            Callable[[str], Optional[Union[Callable, TaskDispatch]]]
+        ] = None
 
         # List of task functions that are executed periodically.
         self.periodic_task_funcs: Dict[str, Callable] = {}
@@ -303,7 +306,8 @@ class TaskTiger:
         return ":".join([self.config["REDIS_PREFIX"]] + list(parts))
 
     def set_dispatch(
-        self, dispatch: Optional[Callable[[str], Optional[Callable]]]
+        self,
+        dispatch: Optional[Callable[[str], Optional[Union[Callable, TaskDispatch]]]],
     ) -> None:
         """Set a callback that maps serialized task names to callables.
 
@@ -314,7 +318,7 @@ class TaskTiger:
             raise TypeError("dispatch must be callable or None")
         self._dispatch = dispatch
 
-    def dispatch(self, name: str) -> Optional[Callable]:
+    def dispatch(self, name: str) -> Optional[Union[Callable, TaskDispatch]]:
         """Look up a task by its serialized name without invoking it."""
         return self._dispatch(name) if self._dispatch is not None else None
 

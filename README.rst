@@ -163,13 +163,18 @@ by name. If the dispatch callback returns ``None`` for that name, TaskTiger
 imports ``tasks.my_task`` as usual. A matching route can instead select a
 different callable for either form of queued task.
 
+For batch tasks, the callback can return ``TaskDispatch(handler, batch=True)``
+instead of a plain callable. The handler receives the same list of per-task
+``args`` and ``kwargs`` dictionaries as a function decorated with
+``@tiger.task(batch=True)``. Plain callable results continue to work as before.
+
 ``enqueue`` accepts the same task options as ``delay``. Its ``args`` and
 ``kwargs`` must be JSON-serializable. The name is stored in the existing
 ``func`` field and is used for unique task IDs and locks. Configure the
 dispatch callback in workers before queueing names that cannot be imported.
-The callback only selects a callable; TaskTiger executes it using the normal
-runner, timeout, and retry behavior. If the callback raises an exception, the
-error is not treated as a missing route.
+The callback selects a handler and may declare it as a batch handler; TaskTiger
+executes it using the normal runner, timeout, and retry behavior. If the
+callback raises an exception, the error is not treated as a missing route.
 
 
 Configuration

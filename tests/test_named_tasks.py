@@ -1,7 +1,8 @@
 import pytest
 
-from tasktiger import Task, TaskImportError, Worker
+from tasktiger import Task, TaskDispatch, TaskImportError, TaskTiger, Worker
 from tasktiger.executor import SyncExecutor
+from tasktiger.runner import DefaultRunner
 
 from .tasks import simple_task
 
@@ -43,6 +44,50 @@ def test_named_task_runs_eagerly(tiger):
     tiger.enqueue("example.eager", args=["done"])
 
     assert called == ["done"]
+
+
+def test_named_batch_dispatch(tiger):
+    calls = []
+    tiger.config["BATCH_QUEUES"]["named"] = 2
+
+    def handler(params):
+        calls.append(params)
+
+    tiger.set_dispatch(
+        lambda name: (
+            TaskDispatch(handler, batch=True) if name == "example.batch" else None
+        )
+    )
+    tiger.enqueue("example.batch", kwargs={"value": "one"}, queue="named")
+    tiger.enqueue("example.batch", kwargs={"value": "two"}, queue="named")
+
+    Worker(tiger, executor_class=SyncExecutor).run(once=True)
+
+    assert len(calls) == 1
+    assert sorted(call["kwargs"]["value"] for call in calls[0]) == ["one", "two"]
+
+
+def test_named_batch_runs_eagerly_without_redis():
+    calls = []
+    tiger = TaskTiger(lazy_init=True)
+    tiger.set_dispatch(
+        lambda name: (
+            TaskDispatch(calls.append, batch=True)
+            if name == "example.eager_batch"
+            else None
+        )
+    )
+
+    task = Task(
+        tiger,
+        name="example.eager_batch",
+        kwargs={"value": "one"},
+        queue="named",
+    )
+    assert task.is_batch is True
+    DefaultRunner(tiger).run_eager_task(task)
+
+    assert calls == [[{"args": [], "kwargs": {"value": "one"}}]]
 
 
 def test_dispatch_can_override_legacy_name(tiger):

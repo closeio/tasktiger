@@ -30,6 +30,7 @@ from ._internal import (
     serialize_func_name,
     serialize_retry_method,
 )
+from .dispatch import TaskDispatch
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import BaseRunner, get_runner_class
 from .types import RetryStrategy
@@ -78,6 +79,7 @@ class Task:
         self.tiger = tiger
         self._func = func
         self._func_resolved = False
+        self._dispatch_batch: Optional[bool] = None
         self._queue = queue
         self._state = _state
         self._ts = _ts
@@ -282,6 +284,9 @@ class Task:
         if not self._func_resolved:
             dispatched = self.tiger.dispatch(self.serialized_func)
             if dispatched is not None:
+                if isinstance(dispatched, TaskDispatch):
+                    self._dispatch_batch = dispatched.batch
+                    dispatched = dispatched.handler
                 if not callable(dispatched):
                     raise TypeError("Task dispatcher must return a callable or None")
                 self._func = dispatched
@@ -290,6 +295,13 @@ class Task:
             self._func_resolved = True
         assert self._func is not None
         return self._func
+
+    @property
+    def is_batch(self) -> bool:
+        func = self.func
+        if self._dispatch_batch is not None:
+            return self._dispatch_batch
+        return getattr(func, "_task_batch", False)
 
     @property
     def max_stored_executions(self) -> Optional[int]:
@@ -364,8 +376,7 @@ class Task:
             self._state = to_state
 
     def execute(self) -> None:
-        func = self.func
-        is_batch_func = getattr(func, "_task_batch", False)
+        is_batch_func = self.is_batch
 
         g["current_task_is_batch"] = is_batch_func
         g["current_tasks"] = [self]
