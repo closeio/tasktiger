@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.26.1
+
+* `Task.tasks_from_queue` leaves out tasks without a payload if `include_not_found` is false. Versions 0.23.0 to 0.26.0 raised `UnboundLocalError` or returned the previous task again ([#382](https://github.com/closeio/tasktiger/pull/382)).
+
 ## Version 0.26.0
 
 * Re-deliver Unix hard timeout signals and force-exit workers when timeout exceptions fail to stop the task ([#379](https://github.com/closeio/tasktiger/pull/379)).
