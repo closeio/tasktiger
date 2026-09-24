@@ -513,15 +513,19 @@ class Task:
             tiger: TaskTiger instance.
             queue: Name of the queue.
             state: State of the task (QUEUED, ACTIVE, SCHEDULED, ERROR).
+            skip: Number of latest tasks to pass over.
             limit: Maximum number of tasks to return.
             load_executions: Maximum number of executions to load for each task
                 (starting from the latest).
-            include_not_found: Whether to include tasks that cannot be loaded.
+            include_not_found: Whether to include tasks that have no payload.
 
         Returns:
             Tuple with the following information:
-            * total items in the queue
-            * tasks from the given queue in the given state, latest first.
+            * total items in the queue, including tasks without a payload
+            * the latest `limit` tasks after the latest `skip` tasks, in
+              ascending order of score. If tasks without a payload are left
+              out, this list can be shorter than `limit` before the end of the
+              queue.
         """
 
         key = tiger._key(state, queue)
@@ -549,8 +553,9 @@ class Task:
                     range(len(items)), results[0], results[1:], tss
                 ):
                     if serialized_data is None:
-                        if include_not_found:
-                            data = {"id": items[idx][0]}
+                        if not include_not_found:
+                            continue
+                        data = {"id": items[idx][0]}
                     else:
                         data = json.loads(serialized_data)
 
@@ -572,8 +577,9 @@ class Task:
                 )
                 for idx, serialized_data, ts in zip(range(len(items)), result, tss):
                     if serialized_data is None:
-                        if include_not_found:
-                            data = {"id": items[idx][0]}
+                        if not include_not_found:
+                            continue
+                        data = {"id": items[idx][0]}
                     else:
                         data = json.loads(serialized_data)
 
