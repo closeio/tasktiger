@@ -1072,6 +1072,35 @@ class TestTasks(BaseTestCase):
         assert n == 1
         assert len(tasks[0].executions) == 2
 
+    @pytest.mark.parametrize("load_executions", [0, 1])
+    @pytest.mark.parametrize("missing_index", [0, 1, 2])
+    def test_tasks_from_queue_task_not_found(self, load_executions, missing_index):
+        tasks = [Task(self.tiger, simple_task) for _ in range(3)]
+        # Distinct scheduled times give a fixed order in the zset.
+        for minutes, task in enumerate(tasks, start=1):
+            task.delay(when=datetime.timedelta(minutes=minutes))
+        missing_task = tasks[missing_index]
+        self.conn.delete(self.tiger._key("task", missing_task.id))
+
+        n, found = Task.tasks_from_queue(
+            self.tiger, "default", "scheduled", load_executions=load_executions
+        )
+        assert n == 3
+        assert [task.id for task in found] == [
+            task.id for task in tasks if task is not missing_task
+        ]
+
+        n, found = Task.tasks_from_queue(
+            self.tiger,
+            "default",
+            "scheduled",
+            load_executions=load_executions,
+            include_not_found=True,
+        )
+        assert n == 3
+        assert [task.id for task in found] == [task.id for task in tasks]
+        assert found[missing_index].data == {"id": missing_task.id}
+
     def test_eager(self):
         self.tiger.config["ALWAYS_EAGER"] = True
 
