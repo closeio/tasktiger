@@ -4,7 +4,6 @@ import json
 import os
 import random
 import signal
-import sys
 import time
 import uuid
 from collections import OrderedDict
@@ -832,10 +831,13 @@ class Worker:
                     runner = runner_class(self.tiger)
                     runner.on_permanent_error(task, execution)
 
-            # Exit the process with an error code if a task timed out to
-            # prevent any inconsistent state in case the runner requires it.
+            # Force the process to exit after a task times out. A normal interpreter
+            # shutdown can wait indefinitely for threads started by the task.
             if self.executor.exit_worker_on_job_timeout and has_job_timeout:
-                sys.exit("exiting worker due to job timeout error")
+                try:
+                    os.write(2, b"exiting worker due to job timeout error\n")
+                finally:
+                    os._exit(1)
 
     def _worker_run(self) -> None:
         """
