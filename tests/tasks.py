@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 from math import ceil
 
@@ -51,6 +52,15 @@ def file_args_task(filename, *args, **kwargs):
 
 @tiger.task(hard_timeout=DELAY)
 def long_task_killed():
+    time.sleep(DELAY * 2)
+
+
+@tiger.task(hard_timeout=DELAY)
+def long_task_with_blocked_thread():
+    blocker = threading.Event()
+    # A non-daemon thread makes normal interpreter shutdown wait indefinitely.
+    thread = threading.Thread(target=blocker.wait, daemon=False)
+    thread.start()
     time.sleep(DELAY * 2)
 
 

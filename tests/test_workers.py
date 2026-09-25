@@ -4,7 +4,6 @@ import datetime
 import time
 from multiprocessing import Process
 
-import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
@@ -15,8 +14,8 @@ from tasktiger.worker import LOCK_REDIS_KEY
 from .config import DELAY
 from .tasks import (
     exception_task,
-    long_task_killed,
     long_task_ok,
+    long_task_with_blocked_thread,
     simple_task,
     sleep_task,
     system_exit_task,
@@ -182,11 +181,19 @@ class TestSyncExecutorWorker:
         ensure_queues(error={"default": 1})
 
     def test_handles_timeout(self, tiger, ensure_queues):
-        Task(tiger, long_task_killed).delay()
-        worker = Worker(tiger, executor_class=SyncExecutor)
-        # Worker should exit to avoid any inconsistencies.
-        with pytest.raises(SystemExit):
-            worker.run(once=True, force_once=True)
+        Task(tiger, long_task_with_blocked_thread).delay()
+        worker = Process(
+            target=external_worker,
+            kwargs={"worker_kwargs": {"executor_class": SyncExecutor}},
+        )
+        worker.start()
+        worker.join(timeout=DELAY * 5)
+        try:
+            assert worker.exitcode == 1
+        finally:
+            if worker.is_alive():
+                worker.kill()
+                worker.join()
         ensure_queues(error={"default": 1})
 
     def test_heartbeat(self, tiger):

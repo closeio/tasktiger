@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.26.2
+
+* Force-exit sync workers after hard timeouts so interpreter shutdown cannot leave them waiting for task-created threads ([#384](https://github.com/closeio/tasktiger/pull/384)).
+
 ## Version 0.26.1
 
 * `Task.tasks_from_queue` leaves out tasks without a payload if `include_not_found` is false. Versions 0.23.0 to 0.26.0 raised `UnboundLocalError` or returned the previous task again ([#382](https://github.com/closeio/tasktiger/pull/382)).
