@@ -72,7 +72,7 @@ class DefaultRunner(BaseRunner):
 
     def run_eager_task(self, task: "Task") -> None:
         func = task.func
-        is_batch_func = getattr(func, "_task_batch", False)
+        is_batch_func = task.is_batch
 
         if is_batch_func:
             return func([{"args": task.args, "kwargs": task.kwargs}])

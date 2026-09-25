@@ -356,7 +356,7 @@ class Worker:
                 )
 
     def get_hard_timeouts(self, func: Any, tasks: List[Task]) -> List[float]:
-        is_batch_func = getattr(func, "_task_batch", False)
+        is_batch_func = tasks[0].is_batch
         if is_batch_func:
             task_timeouts = [
                 task.hard_timeout for task in tasks if task.hard_timeout is not None

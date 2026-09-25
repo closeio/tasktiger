@@ -129,7 +129,7 @@ class Executor:
             runner_class = get_runner_class(log, tasks)
             runner = runner_class(self.tiger)
 
-            is_batch_func = getattr(func, "_task_batch", False)
+            is_batch_func = tasks[0].is_batch
             g["tiger"] = self.tiger
             g["current_task_is_batch"] = is_batch_func
 
