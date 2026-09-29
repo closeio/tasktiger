@@ -20,7 +20,9 @@ local key_active_queue = KEYS[6]
 local key_queued_queue = KEYS[7]
 local key_error_queue = KEYS[8]
 local key_scheduled_queue = KEYS[9]
-local key_activity = KEYS[10]
+local key_waiting_queue = KEYS[10]
+local key_completed_queue = KEYS[11]
+local key_activity = KEYS[12]
 
 local id = ARGV[1]
 local queue = ARGV[2]
@@ -36,6 +38,8 @@ local state_queues_keys_by_state = {
     queued = key_queued_queue,
     error = key_error_queue,
     scheduled = key_scheduled_queue,
+    waiting = key_waiting_queue,
+    completed = key_completed_queue,
 }
 local key_from_state_queue = state_queues_keys_by_state[from_state]
 local key_to_state_queue = state_queues_keys_by_state[to_state]

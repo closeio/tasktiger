@@ -87,6 +87,22 @@ def external_worker(n=None, patch_config=None, worker_kwargs=None):
     tiger.connection.close()
 
 
+def external_parallel_worker(n=None, patch_config=None, worker_kwargs=None):
+    """
+    Runs a worker. To be used with multiprocessing.Pool.map.
+    """
+    tiger = get_tiger()
+
+    if patch_config:
+        tiger.config.update(patch_config)
+
+    if worker_kwargs is None:
+        worker_kwargs = {}
+
+    tiger.run_worker(**worker_kwargs)
+
+    tiger.connection.close()
+
 def sleep_until_next_second():
     now = datetime.datetime.utcnow()
     time.sleep(1 - now.microsecond / 10.0**6)
