@@ -1,3 +1,4 @@
+from .dispatch import TaskDispatch
 from .exceptions import (
     JobTimeoutException,
     QueueFullException,
@@ -17,6 +18,7 @@ __all__ = [
     "TaskTiger",
     "Worker",
     "Task",
+    "TaskDispatch",
     # Exceptions
     "JobTimeoutException",
     "RetryException",
