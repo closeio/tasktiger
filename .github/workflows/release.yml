@@ -25,7 +25,7 @@ jobs:
           python-version: 3.12
 
       - run: |
-          pip install packaging setuptools
+          pip install build packaging setuptools
       - name: Normalize the release version
         run: |
           echo "release_version=`echo '${{ github.event.inputs.requested_release_tag }}' | sed 's/^v//'`" >> $GITHUB_ENV
@@ -76,8 +76,8 @@ jobs:
               ref: 'refs/tags/${{ env.release_tag }}',
               sha: context.sha
             })
-      - name: Build Source Distribution
+      - name: Build the source distribution and wheel
         run: |
-          python setup.py sdist
+          python -m build
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13
