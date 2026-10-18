@@ -36,6 +36,7 @@ from .redis_semaphore import Semaphore
 from .retry import fixed
 from .runner import BaseRunner
 from .task import Task
+from .types import ScheduleStrategy
 from .worker import LOCK_REDIS_KEY, Worker
 
 __all__ = ["TaskTiger"]
@@ -315,7 +316,12 @@ class TaskTiger:
         retry_method: Optional[
             Union[Callable[[int], float], Tuple[Callable[..., float], Tuple]]
         ] = None,
-        schedule: Optional[Callable] = None,
+        schedule: Optional[
+            Union[
+                Callable[[datetime.datetime], Optional[datetime.datetime]],
+                ScheduleStrategy,
+            ]
+        ] = None,
         batch: bool = False,
         max_queue_size: Optional[int] = None,
         max_stored_executions: Optional[int] = None,
