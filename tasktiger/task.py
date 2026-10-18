@@ -32,7 +32,7 @@ from ._internal import (
 )
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import BaseRunner, get_runner_class
-from .types import RetryStrategy
+from .types import SerializedRetryStrategy
 
 if TYPE_CHECKING:
     from . import TaskTiger
@@ -237,7 +237,7 @@ class Task:
         return self._data.get("unique_key")
 
     @property
-    def retry_method(self) -> Optional[RetryStrategy]:
+    def retry_method(self) -> Optional[SerializedRetryStrategy]:
         if "retry_method" in self._data:
             retry_func, retry_args = self._data["retry_method"]
             return retry_func, retry_args

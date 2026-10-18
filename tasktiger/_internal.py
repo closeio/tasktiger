@@ -15,13 +15,13 @@ from typing import (
     Iterable,
     List,
     Optional,
-    Tuple,
     Type,
     TypedDict,
     Union,
 )
 
 from .exceptions import TaskImportError
+from .types import SerializedRetryStrategy
 
 if TYPE_CHECKING:
     from .task import Task
@@ -134,7 +134,7 @@ def reversed_dotted_parts(s: str) -> Iterable[str]:
         yield s[:idx]
 
 
-def serialize_retry_method(retry_method: Any) -> Tuple[str, Tuple]:
+def serialize_retry_method(retry_method: Any) -> SerializedRetryStrategy:
     if callable(retry_method):
         return (serialize_func_name(retry_method), ())
     else:
