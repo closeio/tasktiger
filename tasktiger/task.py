@@ -32,7 +32,7 @@ from ._internal import (
 )
 from .exceptions import QueueFullException, TaskImportError, TaskNotFound
 from .runner import BaseRunner, get_runner_class
-from .types import SerializedRetryStrategy
+from .types import RetryStrategy, SerializedRetryStrategy
 
 if TYPE_CHECKING:
     from . import TaskTiger
@@ -55,9 +55,7 @@ class Task:
         lock_key: Optional[Collection[str]] = None,
         retry: Optional[bool] = None,
         retry_on: Optional[Collection[Type[BaseException]]] = None,
-        retry_method: Optional[
-            Union[Callable[[int], float], Tuple[Callable[..., float], Tuple]]
-        ] = None,
+        retry_method: Optional[Union[Callable[[int], float], RetryStrategy]] = None,
         max_queue_size: Optional[int] = None,
         max_stored_executions: Optional[int] = None,
         runner_class: Optional[Type["BaseRunner"]] = None,
