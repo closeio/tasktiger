@@ -141,6 +141,42 @@ Run a worker (make sure the task code can be found, e.g. using ``PYTHONPATH``).
   {"task_id": "6fa07a91642363593cddef7a9e0c70ae3480921231710aa7648b467e637baa79", "level": "debug", "timestamp": "2015-08-27T21:03:56.732457Z", "pid": 69840, "queue": "default", "event": "done"}
 
 
+Named tasks
+-----------
+
+Tasks can be queued by a stable name instead of a Python import path. Install
+a dispatch callback on each TaskTiger instance that processes these tasks. The
+callback returns a callable for a known name and ``None`` for an unknown name.
+Unknown names retain the existing import lookup, so ordinary ``delay`` tasks
+do not need to change.
+
+.. code:: python
+
+  handlers = {"mail.send": send_mail}
+  tiger.set_dispatch(handlers.get)
+  tiger.enqueue("mail.send", kwargs={"email_id": "123"}, queue="mail")
+
+Names passed to ``enqueue`` share the same namespace as the function paths
+stored by ``delay``. For example, ``delay(tasks.my_task)`` stores
+``"tasks:my_task"``; ``enqueue("tasks:my_task")`` queues that existing task
+by name. If the dispatch callback returns ``None`` for that name, TaskTiger
+imports ``tasks.my_task`` as usual. A matching route can instead select a
+different callable for either form of queued task.
+
+For batch tasks, the callback can return ``TaskDispatch(handler, batch=True)``
+instead of a plain callable. The handler receives the same list of per-task
+``args`` and ``kwargs`` dictionaries as a function decorated with
+``@tiger.task(batch=True)``. Plain callable results continue to work as before.
+
+``enqueue`` accepts the same task options as ``delay``. Its ``args`` and
+``kwargs`` must be JSON-serializable. The name is stored in the existing
+``func`` field and is used for unique task IDs and locks. Configure the
+dispatch callback in workers before queueing names that cannot be imported.
+The callback selects a handler and may declare it as a batch handler; TaskTiger
+executes it using the normal runner, timeout, and retry behavior. If the
+callback raises an exception, the error is not treated as a missing route.
+
+
 Configuration
 -------------
 
