@@ -1,5 +1,7 @@
 import datetime
-from typing import Callable, Optional, Tuple
+from typing import Optional
+
+from .types import ScheduleStrategy
 
 __all__ = ["periodic", "cron_expr"]
 
@@ -40,7 +42,7 @@ def periodic(
     weeks: int = 0,
     start_date: Optional[datetime.datetime] = None,
     end_date: Optional[datetime.datetime] = None,
-) -> Tuple[Callable[..., Optional[datetime.datetime]], Tuple]:
+) -> ScheduleStrategy:
     """
     Periodic task schedule: Use to schedule a task to run periodically,
     starting from start_date (or None to be active immediately) until end_date
@@ -94,7 +96,7 @@ def cron_expr(
     expr: str,
     start_date: Optional[datetime.datetime] = None,
     end_date: Optional[datetime.datetime] = None,
-) -> Tuple[Callable[..., Optional[datetime.datetime]], Tuple]:
+) -> ScheduleStrategy:
     """
     Periodic task schedule via cron expression: Use to schedule a task to run periodically,
     starting from start_date (or None to be active immediately) until end_date
