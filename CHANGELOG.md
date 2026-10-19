@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.26.3
+
+* Fixed type annotations that type checkers other than Mypy (for example, Ty) reported as incorrect ([#385](https://github.com/closeio/tasktiger/pull/385)).
+
 ## Version 0.26.2
 
 * Force-exit sync workers after hard timeouts so interpreter shutdown cannot leave them waiting for task-created threads ([#384](https://github.com/closeio/tasktiger/pull/384)).
