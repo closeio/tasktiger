@@ -39,6 +39,18 @@ class StatsThread(threading.Thread):
             self._task_running = False
             self._task_start_time = None
 
+    def report_maintenance_start(self) -> None:
+        """Signal the start of scheduled-task promotion and expired-task recovery.
+
+        The default is a no-op and does not alter task statistics.
+        """
+
+    def report_maintenance_end(self) -> None:
+        """Signal the end of scheduled-task promotion and expired-task recovery.
+
+        The default is a no-op and does not alter task statistics.
+        """
+
     def compute_stats(self) -> None:
         now = time.monotonic()
 

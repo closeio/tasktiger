@@ -867,9 +867,15 @@ class Worker:
             time.time() - self._last_task_check > self.config["SELECT_TIMEOUT"]
             and not self._stop_requested
         ):
-            self._worker_queue_scheduled_tasks()
-            self._worker_queue_expired_tasks()
-            self._last_task_check = time.time()
+            if self.stats_thread:
+                self.stats_thread.report_maintenance_start()
+            try:
+                self._worker_queue_scheduled_tasks()
+                self._worker_queue_expired_tasks()
+                self._last_task_check = time.time()
+            finally:
+                if self.stats_thread:
+                    self.stats_thread.report_maintenance_end()
 
     def _queue_periodic_tasks(self) -> None:
         # Only queue periodic tasks for queues this worker is responsible
