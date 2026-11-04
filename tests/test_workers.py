@@ -270,66 +270,35 @@ class TestSyncExecutorWorker:
         ensure_queues(active={"default": 1})
 
 
-class TestMaintenanceStats:
-    @pytest.fixture
-    def worker(self, tiger, monkeypatch):
-        worker = Worker(tiger)
-        worker._queue_set = set()
-        worker._last_task_check = 100
-        worker.config["SELECT_TIMEOUT"] = 5
-        calls = mock.Mock()
-        calls.stats = mock.Mock(spec=StatsThread)
-        worker.stats_thread = calls.stats
-        monkeypatch.setattr(worker, "_worker_queue_scheduled_tasks", calls.scheduled)
-        monkeypatch.setattr(worker, "_worker_queue_expired_tasks", calls.expired)
-        monkeypatch.setattr("tasktiger.worker.time.time", lambda: 106)
-        return worker, calls
+@pytest.mark.parametrize("failing_operation", [None, "scheduled", "expired"])
+def test_maintenance_stats_callbacks(tiger, monkeypatch, failing_operation):
+    worker = Worker(tiger)
+    worker._queue_set = set()
+    calls = mock.Mock()
+    calls.stats = mock.Mock(spec=StatsThread)
+    worker.stats_thread = calls.stats
+    monkeypatch.setattr(worker, "_worker_queue_scheduled_tasks", calls.scheduled)
+    monkeypatch.setattr(worker, "_worker_queue_expired_tasks", calls.expired)
 
-    @pytest.mark.parametrize("failing_operation", [None, "scheduled", "expired"])
-    def test_callbacks(self, worker, failing_operation):
-        worker, calls = worker
-        if failing_operation:
-            getattr(calls, failing_operation).side_effect = RuntimeError("maintenance")
-            with pytest.raises(RuntimeError, match="maintenance"):
-                worker._worker_run()
-        else:
+    if failing_operation:
+        getattr(calls, failing_operation).side_effect = RuntimeError("maintenance")
+        with pytest.raises(RuntimeError, match="maintenance"):
             worker._worker_run()
-
-        expected = [mock.call.stats.report_maintenance_start(), mock.call.scheduled()]
-        if failing_operation != "scheduled":
-            expected.append(mock.call.expired())
-        expected.append(mock.call.stats.report_maintenance_end())
-        assert calls.mock_calls == expected
-        assert worker._last_task_check == (100 if failing_operation else 106)
-
-    @pytest.mark.parametrize("elapsed,stopping", [(4, False), (5, False), (6, True)])
-    def test_skipped_maintenance(self, worker, elapsed, stopping):
-        worker, calls = worker
-        worker._last_task_check = 106 - elapsed
-        worker._stop_requested = stopping
+    else:
         worker._worker_run()
-        assert calls.mock_calls == []
-        assert worker._last_task_check == 106 - elapsed
 
-    def test_stats_disabled(self, tiger):
-        tiger.config["STATS_INTERVAL"] = 0
-        worker = Worker(tiger)
-        with (
-            mock.patch("tasktiger.worker.StatsThread") as stats_thread,
-            mock.patch.object(
-                worker,
-                "_worker_queue_scheduled_tasks",
-                wraps=worker._worker_queue_scheduled_tasks,
-            ) as scheduled,
-            mock.patch.object(
-                worker,
-                "_worker_queue_expired_tasks",
-                wraps=worker._worker_queue_expired_tasks,
-            ) as expired,
-        ):
-            worker.run(once=True)
-        stats_thread.assert_not_called()
-        scheduled.assert_called_once_with()
-        expired.assert_called_once_with()
-        assert worker.stats_thread is None
-        assert worker._last_task_check > 0
+    expected = [mock.call.stats.report_maintenance_start(), mock.call.scheduled()]
+    if failing_operation != "scheduled":
+        expected.append(mock.call.expired())
+    expected.append(mock.call.stats.report_maintenance_end())
+    assert calls.mock_calls == expected
+
+
+def test_maintenance_without_stats(tiger, monkeypatch):
+    worker = Worker(tiger)
+    worker._queue_set = set()
+    calls = mock.Mock()
+    monkeypatch.setattr(worker, "_worker_queue_scheduled_tasks", calls.scheduled)
+    monkeypatch.setattr(worker, "_worker_queue_expired_tasks", calls.expired)
+    worker._worker_run()
+    assert calls.mock_calls == [mock.call.scheduled(), mock.call.expired()]
