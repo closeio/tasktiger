@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.27.0
+
+* Added no-op stats hooks around scheduled-task promotion and expired-task recovery for custom instrumentation, without changing task runtime statistics.
+
 ## Version 0.26.3
 
 * Fixed type annotations that type checkers other than Mypy (for example, Ty) reported as incorrect ([#385](https://github.com/closeio/tasktiger/pull/385)).

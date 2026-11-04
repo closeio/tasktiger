@@ -182,6 +182,18 @@ decorate and queue tasks. The constructor takes the following arguments:
     given queues (and their subqueues), unless explicit queues are passed to
     the command line.
 
+  - ``STATS_INTERVAL``
+
+    Interval in seconds between worker task runtime statistics (default: 60).
+    Set to 0 to disable the stats thread and its callbacks. Queue maintenance
+    can occupy a worker outside task-execution statistics. When enabled,
+    ``StatsThread.report_maintenance_start()`` and ``report_maintenance_end()``
+    bracket the combined scheduled-task promotion and expired-task recovery
+    pass, with the end callback called even if either operation raises.
+    The hooks allow custom instrumentation; their defaults are no-ops and do
+    not change task runtime or utilization statistics. No maintenance callbacks
+    run when maintenance is not due or the worker is stopping.
+
 - ``setup_structlog``
 
   If set to True, sets up structured logging using ``structlog`` when
