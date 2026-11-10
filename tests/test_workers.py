@@ -3,12 +3,15 @@
 import datetime
 import time
 from multiprocessing import Process
+from unittest import mock
 
+import pytest
 from freezefrog import FreezeTime
 
 from tasktiger import Task, Worker
 from tasktiger._internal import ACTIVE
 from tasktiger.executor import SyncExecutor
+from tasktiger.stats import StatsThread
 from tasktiger.worker import LOCK_REDIS_KEY
 
 from .config import DELAY
@@ -265,3 +268,37 @@ class TestSyncExecutorWorker:
         # handled by the executor, the task is still active until it times out
         # and gets requeued by another worker.
         ensure_queues(active={"default": 1})
+
+
+@pytest.mark.parametrize("failing_operation", [None, "scheduled", "expired"])
+def test_maintenance_stats_callbacks(tiger, monkeypatch, failing_operation):
+    worker = Worker(tiger)
+    worker._queue_set = set()
+    calls = mock.Mock()
+    calls.stats = mock.Mock(spec=StatsThread)
+    worker.stats_thread = calls.stats
+    monkeypatch.setattr(worker, "_worker_queue_scheduled_tasks", calls.scheduled)
+    monkeypatch.setattr(worker, "_worker_queue_expired_tasks", calls.expired)
+
+    if failing_operation:
+        getattr(calls, failing_operation).side_effect = RuntimeError("maintenance")
+        with pytest.raises(RuntimeError, match="maintenance"):
+            worker._worker_run()
+    else:
+        worker._worker_run()
+
+    expected = [mock.call.stats.report_maintenance_start(), mock.call.scheduled()]
+    if failing_operation != "scheduled":
+        expected.append(mock.call.expired())
+    expected.append(mock.call.stats.report_maintenance_end())
+    assert calls.mock_calls == expected
+
+
+def test_maintenance_without_stats(tiger, monkeypatch):
+    worker = Worker(tiger)
+    worker._queue_set = set()
+    calls = mock.Mock()
+    monkeypatch.setattr(worker, "_worker_queue_scheduled_tasks", calls.scheduled)
+    monkeypatch.setattr(worker, "_worker_queue_expired_tasks", calls.expired)
+    worker._worker_run()
+    assert calls.mock_calls == [mock.call.scheduled(), mock.call.expired()]
